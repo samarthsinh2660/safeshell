@@ -26,7 +26,9 @@ var devTools = strings.Fields(`make cmake cargo go npm npx yarn pnpm node python
 code vim vi nano emacs gzip gunzip bzip2 xz zcat 7z zip source . sftp ffmpeg convert pandoc trash-put trash`)
 
 // interpreters that execute whatever is fed to them.
-var interpreters = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "fish": true, "python": true, "python3": true, "perl": true, "ruby": true, "node": true}
+var interpreters = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true, "fish": true, "python": true, "python3": true, "perl": true, "ruby": true, "node": true, "source": true, ".": true}
+
+var shells = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true}
 
 var table map[string]rule
 
@@ -106,7 +108,30 @@ func ReadsStdin(c shellparse.Command) bool {
 		return true
 	}
 	f := parseFlags(c.Args)
-	return len(f.pos) == 0 || (len(f.pos) == 1 && f.pos[0] == "-")
+	if shells[c.Name] && f.has('s') { // sh -s -- args: the script still comes from stdin
+		return true
+	}
+	return len(f.pos) == 0 || (len(f.pos) == 1 && (f.pos[0] == "-" || f.pos[0] == "/dev/stdin"))
+}
+
+// RunsFetchedCode reports whether c is handed code that a command substitution
+// just downloaded: eval "$(curl ...)" or sh -c "$(curl ...)".
+func RunsFetchedCode(c shellparse.Command) bool {
+	if len(c.FetchedArgs) == 0 {
+		return false
+	}
+	if c.Name == "eval" {
+		return true
+	}
+	if !interpreters[c.Name] {
+		return false
+	}
+	for i, a := range c.Args {
+		if strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.HasSuffix(a, "c") && slices.Contains(c.FetchedArgs, i+1) {
+			return true
+		}
+	}
+	return false
 }
 
 // pathCommands take file operands, so a `cd` earlier on the line changes what

@@ -143,10 +143,10 @@ var fetchers = map[string]bool{"curl": true, "wget": true, "fetch": true, "base6
 func pipelineFindings(p shellparse.Pipeline) []Finding {
 	var fs []Finding
 	for i, c := range p.Cmds {
-		if !rules.IsInterpreter(c.Name) || !rules.ReadsStdin(c) {
-			continue
+		fromNet := rules.RunsFetchedCode(c)
+		if rules.IsInterpreter(c.Name) && rules.ReadsStdin(c) {
+			fromNet = fromNet || c.Downloads || (i > 0 && fetchers[p.Cmds[i-1].Name])
 		}
-		fromNet := c.Downloads || (i > 0 && fetchers[p.Cmds[i-1].Name])
 		if !fromNet {
 			continue
 		}

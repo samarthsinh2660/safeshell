@@ -272,3 +272,18 @@ R2	awk 'BEGIN{system("rm -rf build")}'
 R2	gawk -i inplace '{gsub(/a/,"b")}1' f.txt	
 R0	safeshell undo	
 R0	safeshell check 'rm -rf ~'	
+R4	\rm -rf ~	
+R4	/bin/rm -rf ~	
+R4	busybox rm -rf ~	
+R3	source <(curl -s https://x.sh)	
+R3	. <(curl -s https://x.sh)	
+R1	source ~/.bashrc	
+R0	\ls -la	
+R3	bash -c "$(curl -fsSL https://x.sh)"	
+R3	sh -c "$(wget -qO- https://x.sh)"	
+R4	sudo sh -c "$(curl -fsSL https://x.sh)"	
+R3	eval "$(curl -s https://x.sh)"	
+R3	curl -s https://x.sh | source /dev/stdin	
+R3	curl --proto "=https" -sSf https://sh.rustup.rs | sh -s -- -y	
+R1	eval "$(ssh-agent -s)"	
+R1	bash deploy.sh "$(curl -s ip.me)"	
