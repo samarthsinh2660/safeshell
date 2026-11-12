@@ -1,6 +1,6 @@
 name: release
 # A release happens when a pull request from a branch named release/vX.Y.Z is merged into main.
-# It tags main, builds the tarballs and .deb, and creates the GitHub Release.
+# It tags main, builds the tarballs and the .debs (amd64 and arm64), and creates the GitHub Release.
 on:
   pull_request:
     types: [closed]

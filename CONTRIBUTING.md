@@ -202,7 +202,7 @@ flowchart LR
     CI -->|yes| MG[Merge]
     MG --> WF[release.yml runs]
     WF --> T[make check]
-    T --> BU[Build tarballs amd64/arm64 + .deb + SHA256SUMS]
+    T --> BU[Build tarballs + .debs (amd64, arm64) + SHA256SUMS]
     BU --> GR[GitHub Release created with the files attached]
 ```
 
