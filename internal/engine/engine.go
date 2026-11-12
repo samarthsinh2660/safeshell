@@ -103,10 +103,33 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 	if ne, ok := report.NetEffect(res.Net); ok {
 		a.Effects = append(a.Effects, ne)
 	}
+	if why := a.mirrorGap(res.Warnings, cwd); why != "" {
+		a.Effects = append(a.Effects, a.estimated(why))
+	}
 	if res.TimedOut {
 		a.SimNote = "the sandbox run timed out; changes made before then are shown"
 		a.Effects = append(a.Effects, a.estimated(fmt.Sprintf("the run did not finish within %s, so its full effect is unknown", res.Duration.Round(1e8))))
 	}
+}
+
+// mirrorGap explains why an empty or partial diff cannot be trusted, or returns
+// "" when it can. Every sandbox warning is a part of the filesystem the command
+// could not see, so a change there would go unrecorded. That matters when the
+// gap covers the working directory or a path the line names (or may name: when
+// the paths cannot be known from the text), and for any gap when the rules did
+// not recognise the command.
+func (a *Analysis) mirrorGap(ws []sandbox.Warning, cwd string) string {
+	if len(ws) == 0 {
+		return ""
+	}
+	if len(a.Verdict.Unclassified) > 0 {
+		return "part of the filesystem is not visible in the sandbox and this command is not recognised, so a \"no changes\" result cannot be trusted"
+	}
+	touched, uncertain := report.Touched(a.Line, cwd, "", nil)
+	if uncertain || len(report.RelevantWarnings(ws, touched)) > 0 {
+		return "part of the filesystem this command works in is not visible in the sandbox, so a \"no changes\" result cannot be trusted"
+	}
+	return ""
 }
 
 // estimated is an effect with no proof, which keeps the command from running unattended.

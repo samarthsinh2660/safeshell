@@ -160,3 +160,55 @@ func TestUnparsableLineDoesNotCrash(t *testing.T) {
 		t.Errorf("called=%v level=%s", called, a.Verdict.Level)
 	}
 }
+
+func gap(paths ...string) []sandbox.Warning {
+	return []sandbox.Warning{{Paths: paths, Text: "loose files are not visible in the sandbox"}}
+}
+
+func estimatedCount(a Analysis) int {
+	n := 0
+	for _, f := range a.Effects {
+		if f.Evidence == domain.Estimated {
+			n++
+		}
+	}
+	return n
+}
+
+func TestMirrorGap(t *testing.T) {
+	tests := []struct {
+		name, line string
+		ws         []sandbox.Warning
+		wantEst    int
+		want       domain.Decision
+	}{
+		{"unknown command, gap covers cwd", "./t.sh", gap("/home/me"), 1, domain.Confirm},
+		{"unknown command, gap elsewhere", "mystery-tool", gap("/mnt/disk"), 1, domain.Confirm},
+		{"unknown command, no gap", "mystery-tool", nil, 0, domain.Allow},
+		{"known command, gap covers cwd", "rm a.txt", gap("/home/me"), 1, domain.Confirm},
+		{"known command, gap covers a named path", "rm /mnt/disk/a.txt", gap("/mnt/disk"), 1, domain.Confirm},
+		{"known command, gap elsewhere", "rm /home/me/proj/a.txt", gap("/mnt/disk"), 0, domain.Confirm},
+		{"known command, paths unknowable", "rm ~/a.txt", gap("/mnt/disk"), 1, domain.Confirm},
+		{"known command, no gap", "rm a.txt", nil, 0, domain.Confirm},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sim := &fakeSim{res: sandbox.Result{Warnings: tc.ws}}
+			a := (&Engine{Sim: sim}).Analyze(context.Background(), tc.line, "/home/me/proj")
+			if got := estimatedCount(a); got != tc.wantEst || a.Decision != tc.want {
+				t.Errorf("estimated=%d decision=%s, want %d %s", got, a.Decision, tc.wantEst, tc.want)
+			}
+		})
+	}
+}
+
+func TestMirrorGapKeepsTheObservedEffectAndLevel(t *testing.T) {
+	sim := &fakeSim{res: sandbox.Result{Warnings: gap("/home/me")}}
+	a := (&Engine{Sim: sim}).Analyze(context.Background(), "./t.sh", "/home/me/proj")
+	if a.Level != domain.R1 || a.Decision != domain.Confirm {
+		t.Errorf("level %s decision %s", a.Level, a.Decision)
+	}
+	if e := find(a, domain.EffectFS); e == nil || e.Evidence != domain.Observed {
+		t.Errorf("the observed file effect should stay: %+v", e)
+	}
+}
