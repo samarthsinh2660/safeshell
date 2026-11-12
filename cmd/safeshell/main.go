@@ -45,6 +45,7 @@ Usage:
   safeshell ask <what you want in English>
                                             AI proposes a command; it is checked like any other
   safeshell ai setup|status                 download the built-in model (once) / show AI state
+  safeshell voice [setup|status|--text]     speak a request (local speech engine; set up once with  voice setup)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
   safeshell snapshots                       list saved snapshots
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
@@ -98,6 +99,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runHelp(args[1:], stdout)
 	case "ai":
 		return runAI(args[1:], stdout, stderr)
+	case "voice":
+		return runVoice(args[1:], stdout, stderr, color)
 	case "ask":
 		return runAsk(args[1:], stdout, stderr, color)
 	case "undo":
@@ -114,6 +117,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 	case "doctor":
 		code := doctor(stdout, probe())
 		doctorAI(stdout)
+		cards, _ := os.ReadFile("/proc/asound/cards")
+		doctorVoice(stdout, voiceSetup(), realRunner, string(cards))
 		return code
 	default:
 		fmt.Fprintf(stderr, "safeshell: unknown command %q\n\n%s", args[0], usage)
