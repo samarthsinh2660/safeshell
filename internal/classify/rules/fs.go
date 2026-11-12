@@ -92,6 +92,9 @@ func ruleCp(c shellparse.Command, f flags) []Finding {
 	if n := len(f.pos); n > 1 && UnderSystem(Norm(f.pos[n-1])) {
 		return one(fnd(R2, c, "Overwrites a system file with this one. A wrong file here can stop a service from starting."))
 	}
+	if len(f.pos) > 1 && f.pos[0] == "/dev/null" {
+		return one(fnd(R2, c, "Empties the target file."))
+	}
 	if f.has('f', "force") {
 		return one(fnd(R2, c, "Overwrites existing files at the destination without asking.").WithAlt("cp -i "+targets(f), "asks before overwriting"))
 	}
@@ -176,4 +179,31 @@ func ruleTruncate(c shellparse.Command, f flags) []Finding {
 		}
 	}
 	return one(fnd(R2, c, "Cuts a file to a fixed size and can remove its contents."))
+}
+
+func ruleGpg(c shellparse.Command, f flags) []Finding {
+	switch {
+	case f.hasAny("--delete-secret-keys", "--delete-secret-and-public-key"):
+		fd := fnd(R3, c, "Deletes a private key. Without a backup it cannot be recreated.")
+		if id := gpgKeyID(f.all); id != "" {
+			fd = fd.WithAlt("gpg --export-secret-keys -a "+id+" > safeshell-gpg-backup-"+id+".asc", "saves a backup of the private key first")
+		}
+		return one(fd)
+	case f.hasAny("--delete-keys", "--delete-key"):
+		return one(fnd(R2, c, "Deletes a public key from your keyring. It can be imported again."))
+	}
+	return one(fnd(R1, c, "Runs gpg."))
+}
+
+// gpgKeyID returns the first key id operand, skipping options and their values.
+func gpgKeyID(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--homedir" || a == "--keyring" || a == "--keyserver" || a == "-u" || a == "--local-user":
+			i++
+		case !strings.HasPrefix(a, "-"):
+			return a
+		}
+	}
+	return ""
 }

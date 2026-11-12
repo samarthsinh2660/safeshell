@@ -51,10 +51,13 @@ func ruleGit(c shellparse.Command, f flags) []Finding {
 		return one(fnd(R1, c, "Records a commit."))
 	case "branch":
 		if f.hasAny("-D") || (f.has('d', "delete") && f.has('f', "force")) {
-			return one(fnd(R2, c, "Deletes a branch even if it is not merged. Recoverable through the reflog."))
+			return one(fnd(R2, c, "Deletes a branch even if it is not merged. The branch can be recovered from the reflog (git reflog) for a while."))
 		}
 		return one(fnd(R0, c, "Lists or creates branches."))
-	case "rebase", "filter-branch", "filter-repo", "commit-tree":
+	case "filter-branch", "filter-repo":
+		return one(fnd(R3, c, "Rewrites the whole commit history. Other copies of the repository no longer match.").
+			WithAlt("git clone --mirror . ../backup.git", "keeps a full copy first"))
+	case "rebase", "commit-tree":
 		return one(fnd(R2, c, "Rewrites commit history."))
 	case "gc", "reflog", "prune":
 		if f.hasAny("--prune=now", "--expire=now", "--expire-unreachable=now") {
