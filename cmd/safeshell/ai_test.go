@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -181,5 +183,103 @@ func TestAIReviewSkipsCommandsThatNeedNoDecision(t *testing.T) {
 	useAI(t, fakeAI{err: errors.New("must not be called for an R1 command")}, nil)
 	if code, _, errOut := runSS("guard", "--", "mkdir x"); code != 0 || strings.Contains(errOut, "AI review") {
 		t.Errorf("%d %q", code, errOut)
+	}
+}
+
+type seqAI struct {
+	replies []string
+	calls   *[]string
+}
+
+func (s seqAI) Name() string { return "seq" }
+func (s seqAI) Complete(_ context.Context, _, user string) (string, error) {
+	*s.calls = append(*s.calls, user)
+	return s.replies[len(*s.calls)-1], nil
+}
+
+const askWhich = `{"question":"2 files match config*: config.txt, config.yaml. Which one?"}`
+
+// typed makes every read of the prompt input continue from the same text, like one terminal.
+func typed(t *testing.T, s string) {
+	t.Helper()
+	old := guardInput
+	t.Cleanup(func() { guardInput = old })
+	r := strings.NewReader(s)
+	guardInput = func() io.Reader { return r }
+}
+
+func TestAskAsksAQuestionThenProposesAndGuards(t *testing.T) {
+	a := sampleAnalysis()
+	a.Level, a.Decision = domain.R0, domain.Allow
+	fakeAnalyze(t, a)
+	var calls []string
+	useAI(t, seqAI{replies: []string{askWhich, `{"command":"cat config.yaml"}`}, calls: &calls}, nil)
+	typed(t, "the yaml one\n\n")
+	code, out, errOut := runSS("ask", "open", "the", "config")
+	if code != 0 || out != "cat config.yaml\n" || !strings.Contains(errOut, "Which one?") || !strings.Contains(errOut, "Proposed: cat config.yaml") {
+		t.Errorf("%d %q %q", code, out, errOut)
+	}
+	if len(calls) != 2 || !strings.Contains(calls[1], "clarification 1: the yaml one") {
+		t.Errorf("%q", calls)
+	}
+}
+
+func TestAskEmptyAnswerCancels(t *testing.T) {
+	var calls []string
+	useAI(t, seqAI{replies: []string{askWhich}, calls: &calls}, nil)
+	typed(t, "\n")
+	code, out, errOut := runSS("ask", "open the config")
+	if code != 1 || out != "" || !strings.Contains(errOut, "Cancelled. Nothing was run.") || len(calls) != 1 {
+		t.Errorf("%d %q %q %d", code, out, errOut, len(calls))
+	}
+	calls = nil
+	typed(t, "") // end of input
+	if code, _, e := runSS("ask", "open the config"); code != 1 || !strings.Contains(e, "Cancelled") {
+		t.Errorf("%d %q", code, e)
+	}
+}
+
+func TestAskWithoutATerminalPrintsTheQuestion(t *testing.T) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	defer pw.Close()
+	old := guardInput
+	t.Cleanup(func() { guardInput = old })
+	guardInput = func() io.Reader { return pr }
+	var calls []string
+	useAI(t, seqAI{replies: []string{askWhich}, calls: &calls}, nil)
+	code, out, errOut := runSS("ask", "open the config")
+	if code != 1 || out != "" || !strings.Contains(errOut, "Which one?") || len(calls) != 1 {
+		t.Errorf("%d %q %q %d", code, out, errOut, len(calls))
+	}
+}
+
+func TestAskGivesUpAfterTwoQuestions(t *testing.T) {
+	var calls []string
+	useAI(t, seqAI{replies: []string{askWhich, askWhich, askWhich}, calls: &calls}, nil)
+	typed(t, "one\ntwo\nthree\n")
+	code, out, errOut := runSS("ask", "open the config")
+	if code != 1 || out != "" || len(calls) != 3 || strings.Contains(errOut, "Cancelled") {
+		t.Errorf("%d %q %q %d", code, out, errOut, len(calls))
+	}
+}
+
+func TestReadLine(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"lf", "yes\nnext", "yes"},
+		{"crlf", "yes\r\n", "yes"},
+		{"eof without newline", "yes", "yes"},
+		{"empty", "\n", ""},
+		{"capped", strings.Repeat("a", 3*maxReply), strings.Repeat("a", maxReply)},
+	} {
+		if got, err := readLine(strings.NewReader(tc.in)); err != nil || got != tc.want {
+			t.Errorf("%s: %q %v", tc.name, got, err)
+		}
+	}
+	if _, err := readLine(strings.NewReader("")); err == nil {
+		t.Error("EOF with nothing typed must be an error")
 	}
 }
