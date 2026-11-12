@@ -309,3 +309,20 @@ R3	python3 -c 'import glob, os; [os.remove(f) for f in glob.glob("*.tmp")]'
 R3	perl -e 'unlink(<*.log>)'	
 R3	ruby -e 'FileUtils.rm(Dir.glob("*"))'	
 R3	gpg --homedir /x --delete-secret-keys	
+R3	exec > /etc/passwd	
+R3	exec >| /etc/shadow	
+R4	exec 3> /dev/sda	
+R4	command > /dev/sda	
+R4	bash -lc 'rm -rf ~'	
+R4	bash -xc 'rm -rf ~'	
+R4	sh -ec 'rm -rf ~'	
+R4	bash -c -- 'rm -rf ~'	
+R4	find . -exec sh -c 'rm -rf /' \;	
+R4	find . -exec bash -c 'rm -rf ~' {} +	
+R4	exec -a ls rm -rf /	
+R4	sudo -iu root rm -rf /	
+R4	sudo --user root rm -rf /	
+R4	timeout --signal KILL 5 rm -rf /	
+R4	stdbuf -o 0 rm -rf /	
+R3	xargs --max-args 1 rm -rf	
+R4	env -S 'rm -rf /'	
