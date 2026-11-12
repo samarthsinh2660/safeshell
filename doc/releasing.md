@@ -85,13 +85,12 @@ Each release has a GitHub milestone with the same name, and its issues are liste
 
 | Version | Theme | Contents |
 |---|---|---|
-| **v1.1.0** | Finish what the project promised | Voice requests (#13); the AI asks when a request is unclear; only the relevant sandbox notes (#12); classifier gaps (#11); arm64 `.deb`; installer `--yes` fix (#10) |
-| **v1.2.0** | Learn and see more | Learning mode (#25); read-only previews for git (#26), docker and kubectl (#27) |
-| **v1.3.0** | Shared rules | Team policies for labs and servers (#28) |
+| **v1.1.0** | Finish what the project promised | Voice requests (#13); the AI asks when a request is unclear; only the relevant sandbox notes (#12); classifier gaps and bypasses (#8, #9, #11, #17); arm64 `.deb` (#14); installer `--yes` fix (#10) |
+| **v1.2.0** | Learn and see more | Learning mode (#25); read-only previews for git (#26), docker and kubectl (#27); `safeshell history` (#32); choosing the voice model and language (#33) |
+| **v1.3.0** | Shared rules | Team policies for labs and servers (#28); fish shell hook (#31) |
 | **v1.4.0** | Undo on more filesystems | Native btrfs (#29) and ZFS (#30) snapshots |
 
-Not yet planned for a version: fish shell hook (#31), `safeshell history` (#32), and choosing the
-voice model and language (#33). Any of these can join a milestone when someone picks it up.
+Issues go in milestones; pull requests don't. A pull request belongs to the release whose issue it closes.
 
 A version ships when its milestone is empty, not on a date. Smaller fixes go out as patch
 releases whenever they're ready.
