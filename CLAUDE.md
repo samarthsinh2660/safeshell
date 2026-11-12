@@ -75,7 +75,10 @@ Go module `github.com/samarthsinh2660/safeshell` is at the repository root. Read
 - Branch names: `feat/...`, `fix/...`, `chore/...`, `docs/...`, `refactor/...`, `test/...`. One concern per PR; fewer, bigger commits inside it.
 - Commit messages: short, conventional (`feat(ai): ...`, `fix(sandbox): ...`), no co-author lines. PR descriptions follow `.github/pull_request_template.md`.
 - Never push, open or merge a PR unless the user asks. Never force-push or rewrite history without approval.
-- Before opening a PR run, `make check`; for sandbox/hook/daemon/snapshot changes also `make build && make integration`.
+- Before opening a PR run `make check`; for sandbox/hook/daemon/snapshot changes also `make build && make integration`.
+- Before opening a PR, review the branch's diff for architecture (hexagonal rules below), consistency with the existing code and docs, safety invariants and business logic. Fix what the review finds first.
+- Every PR covers 100% of the lines it adds or changes (Codecov `patch` target in `codecov.yml`). Check locally with `go test -coverprofile=c.out ./...` and `go tool cover -func=c.out`. Code that only runs inside the real sandbox child (PID 1 in new namespaces) is the one exception; say so in the PR.
+- No labels on PRs (labels are for issues). Issues go in milestones; PRs don't.
 
 ## Releases
 - A release is a PR from a branch named exactly `release/vX.Y.Z` into `main`. Merging it triggers `.github/workflows/release.yml`, which tags, builds tarballs + `.deb` + `SHA256SUMS`, and creates the GitHub Release with the files attached.
@@ -107,7 +110,7 @@ Go module `github.com/samarthsinh2660/safeshell` is at the repository root. Read
 - Linux only, amd64 + arm64 (riscv64 must vet). CGO off. New dependencies need a reason in the PR.
 
 ## Testing rules
-- Every behaviour change has a test; every bug fix has a test that failed before. Table tests for classifier rules.
+- Every behaviour change has a test; every bug fix has a test that failed before. 100% patch coverage per PR. Table tests for classifier rules.
 - Classifier: edit `eval/corpus` (dev) freely; `eval/heldout` is independent and only grows from new, unseen cases. `TestHeldoutReport` enforces the accuracy floors; never lower a floor to pass.
 - Integration tests (`test/integration`) use the real binary and kernel and skip themselves when the sandbox is unavailable. `SS_SWEEP=1 go test ./test/integration -run Sweep` pushes every labelled command through the real binary.
 - AI: `safeshell ai bench` (44 requests, fixed `eval.BenchEnv`) is the accuracy measure; cloud scores vary (about 95-100% Gemini flash-lite, 97% local Qwen 3B). Unit tests use fake backends, never the network.

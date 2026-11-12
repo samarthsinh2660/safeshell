@@ -1,0 +1,12 @@
+# Every pull request must cover all of the lines it adds or changes.
+coverage:
+  status:
+    patch:
+      default:
+        target: 100%
+    project:
+      default:
+        target: auto
+        threshold: 1%
+comment:
+  layout: "diff, files"
