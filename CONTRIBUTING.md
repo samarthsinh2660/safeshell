@@ -209,6 +209,8 @@ flowchart LR
 Use semantic versions: patch for fixes, minor for new features, major for breaking changes.
 Users then download the `.deb` or tarball from the Releases page. Getting SafeShell into the
 official Debian and Ubuntu archives is described in [doc/debian-ubuntu.md](doc/debian-ubuntu.md).
+The step-by-step release checklist and the plan for the next versions are in
+[doc/releasing.md](doc/releasing.md).
 
 ## Reporting security problems
 
