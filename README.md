@@ -55,11 +55,12 @@ sits between you and the shell and answers one question first: **can this be und
 
 Linux, amd64 or arm64, bash or zsh.
 
-**Debian / Ubuntu (amd64):**
+**Debian / Ubuntu (amd64 or arm64):**
 
 ```bash
-wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.0.0/safeshell_1.0.0_amd64.deb
-sudo apt install ./safeshell_1.0.0_amd64.deb
+arch=$(dpkg --print-architecture)   # amd64 or arm64
+wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.1.0/safeshell_1.1.0_${arch}.deb
+sudo apt install ./safeshell_1.1.0_${arch}.deb
 safeshell install          # adds the hook to your shell
 ```
 
@@ -73,8 +74,8 @@ sudo apt install safeshell
 **Any Linux (amd64 or arm64):**
 
 ```bash
-wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.0.0/safeshell-v1.0.0-linux-amd64.tar.gz
-tar -xzf safeshell-v1.0.0-linux-amd64.tar.gz && cd safeshell-v1.0.0-linux-amd64
+wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.1.0/safeshell-v1.1.0-linux-amd64.tar.gz
+tar -xzf safeshell-v1.1.0-linux-amd64.tar.gz && cd safeshell-v1.1.0-linux-amd64
 bash scripts/install.sh    # add --ai to also set up the built-in AI
 ```
 

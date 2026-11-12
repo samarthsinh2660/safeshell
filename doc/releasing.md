@@ -81,11 +81,13 @@ PR, then re-run the failed job.
 
 ## Release plan
 
-Each release has a GitHub milestone with the same name, and its issues are listed there.
+Each release has a GitHub milestone with the same name. The milestone is the full list; the table
+shows the main items only.
 
 | Version | Theme | Contents |
 |---|---|---|
 | **v1.1.0** | Finish what the project promised | Voice requests (#13); the AI asks when a request is unclear; only the relevant sandbox notes (#12); classifier gaps and bypasses (#8, #9, #11, #17); arm64 `.deb` (#14); installer `--yes` fix (#10) |
+| **v1.1.1** | Close the worst safety gaps | The high-priority classifier and hook bypasses, the partly-mirrored sandbox gap, the daemon socket fix, updated cloud models |
 | **v1.2.0** | Learn and see more | Learning mode (#25); read-only previews for git (#26), docker and kubectl (#27); `safeshell history` (#32); choosing the voice model and language (#33) |
 | **v1.3.0** | Shared rules | Team policies for labs and servers (#28); fish shell hook (#31) |
 | **v1.4.0** | Undo on more filesystems | Native btrfs (#29) and ZFS (#30) snapshots |

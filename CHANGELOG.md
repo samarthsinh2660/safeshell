@@ -2,6 +2,25 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.1.0 - 2026-11-12
+
+### Added
+- Voice: `safeshell voice` (or Ctrl-X Ctrl-V in the shell hook) turns speech into a request on your machine with whisper.cpp. The text then goes through the same checks as typed text. `safeshell voice setup` downloads and builds the engine and model, both pinned by checksum. (#13)
+- The AI asks one short question when a request is missing a detail, instead of giving up. It never asks you to confirm a dangerous request. (#22)
+- A `.deb` for arm64 as well as amd64. (#14)
+- `--verbose` on `analyze` and `simulate` shows every sandbox note.
+
+### Changed
+- `analyze` and `simulate` show only the sandbox notes about folders the command touches. When that can't be worked out, every note is shown. (#12)
+- JSON output: `sim.Warnings` is now a list of `{paths, text}` objects instead of strings.
+- `safeshell ai bench` has 44 requests (one new ambiguous request where a question is the right answer).
+
+### Fixed
+- `\rm`, `/bin/rm` and `busybox rm` are recognised like `rm`. (#8)
+- Running downloaded code is blocked in more forms: `source <(curl ...)`, `. <(curl ...)`, `eval "$(curl ...)"`, `sh -c "$(curl ...)"`, `sh -s` and `source /dev/stdin`. (#9, #17)
+- Rule gaps: perl, ruby and python mass deletes, `cp /dev/null file`, `gpg --delete-secret-keys` and `git filter-branch`/`filter-repo` are rated by how hard they are to undo. (#11)
+- `install.sh` asks before installing the AppArmor profile unless `--yes` is given. Thanks to @ShahadatTest for the first outside contribution. (#10)
+
 ## 1.0.0 - 2026-11-07
 
 First stable release.
