@@ -49,16 +49,20 @@ dist: clean-dist
 # Debian versions must start with a digit: v1.2.3 -> 1.2.3, anything else -> 0~that.
 DEBVERSION := $(shell echo '$(VERSION)' | sed -e 's/^v//' -e 's/^[^0-9]/0~&/')
 
-# A Debian package for amd64: installs /usr/bin/safeshell and the AppArmor rule for exactly that path.
+# Debian packages for amd64 and arm64: install /usr/bin/safeshell and the AppArmor rule for exactly that path.
 deb:
 	@rm -rf dist/deb; mkdir -p dist
 	@command -v dpkg-deb >/dev/null || { echo "dpkg-deb not found"; exit 1; }
-	@root=dist/deb/safeshell; mkdir -p $$root/DEBIAN $$root/usr/bin $$root/etc/apparmor.d; \
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $$root/usr/bin/safeshell ./cmd/safeshell; \
-	sed 's#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl > $$root/etc/apparmor.d/safeshell-ss; \
-	cp packaging/deb/postinst packaging/deb/postrm $$root/DEBIAN/; \
-	printf 'Package: safeshell\nVersion: $(DEBVERSION)\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: SafeShell team <noreply@example.invalid>\nDescription: A safety layer for your terminal\n Rates every command by how reversible it is, shows what it would do in a sandbox,\n blocks the dangerous ones, and lets you undo. Optional built-in AI.\n' > $$root/DEBIAN/control; \
-	find $$root -type d -exec chmod 755 {} +; chmod 644 $$root/etc/apparmor.d/safeshell-ss; dpkg-deb --build --root-owner-group $$root dist/safeshell_$(DEBVERSION)_amd64.deb && dpkg-deb -I dist/safeshell_$(DEBVERSION)_amd64.deb | head -8
+	@for arch in amd64 arm64; do \
+	  root=dist/deb/$$arch; mkdir -p $$root/DEBIAN $$root/usr/bin $$root/etc/apparmor.d; \
+	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $$root/usr/bin/safeshell ./cmd/safeshell || exit 1; \
+	  sed 's#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl > $$root/etc/apparmor.d/safeshell-ss; \
+	  cp packaging/deb/postinst packaging/deb/postrm $$root/DEBIAN/; \
+	  printf 'Package: safeshell\nVersion: $(DEBVERSION)\nSection: utils\nPriority: optional\nArchitecture: %s\nMaintainer: SafeShell team <noreply@example.invalid>\nDescription: A safety layer for your terminal\n Rates every command by how reversible it is, shows what it would do in a sandbox,\n blocks the dangerous ones, and lets you undo. Optional built-in AI.\n' $$arch > $$root/DEBIAN/control; \
+	  find $$root -type d -exec chmod 755 {} +; chmod 644 $$root/etc/apparmor.d/safeshell-ss; \
+	  dpkg-deb --build --root-owner-group $$root dist/safeshell_$(DEBVERSION)_$$arch.deb || exit 1; \
+	done
+	@ls -l dist/*.deb
 
 clean-dist:
 	@find dist -mindepth 1 -delete 2>/dev/null; mkdir -p dist
