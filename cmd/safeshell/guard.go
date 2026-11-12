@@ -76,7 +76,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	a := analyzeFast(context.Background(), line, cwd)
 	aiReview(&a, stderr)
 	if a.Decision != domain.Allow {
-		printAnalysis(stderr, a, color)
+		printAnalysis(stderr, a, cwd, color, true)
 	}
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true

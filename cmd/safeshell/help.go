@@ -50,6 +50,15 @@ Graphics: the engine uses CUDA on a recent NVIDIA driver, otherwise Vulkan, othe
    Force one with "gpu": "cuda" | "vulkan" | "cpu" under ai.local in ~/.config/safeshell/config.json.
 The AI can only make SafeShell MORE careful. It can never let a blocked command through.
 Commands:  safeshell ai setup | safeshell ai status | safeshell ai stop`},
+	{"voice", "Speak a request", `Set up once (builds a small speech engine and downloads a 148 MB English model):
+     safeshell voice setup
+Then, in your terminal, press Ctrl-X then Ctrl-V and speak. Press Enter when you are done.
+Your words replace whatever is on the command line so you can read and edit them; press Enter as usual and
+SafeShell turns them into a command and checks it like anything you typed.
+     safeshell voice            speak, confirm the words, then run the request
+     safeshell voice status     which recorder, engine and model it would use
+Needs a recorder: pipewire-bin, pulseaudio-utils or alsa-utils. The recording is deleted right
+after it is read, and nothing leaves your machine: the speech engine runs locally.`},
 	{"undo", "Undo and snapshots", `When you approve a risky command, SafeShell first saves the files it will change.
      safeshell undo            put back the most recent change and verify every file matches
      safeshell undo ID         undo a specific one
@@ -65,6 +74,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell undo / safeshell snapshots     restore / list
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
    safeshell ai setup|status|stop    manage the built-in AI
+   safeshell voice [setup|status]    speak a request (Ctrl-X Ctrl-V in your terminal)
    safeshell install / safeshell uninstall  add or remove the hook in your shell startup file
    safeshell hook bash|zsh           print the shell hook
    safeshell version                 which release this is

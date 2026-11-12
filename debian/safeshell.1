@@ -21,10 +21,10 @@ press Enter on in bash or zsh is checked first.
 .BI "check [--json] " command
 Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 means R4.
 .TP
-.BI "analyze [--json] [--cwd " DIR "] " command
+.BI "analyze [--json] [--verbose] [--cwd " DIR "] " command
 Rate a command, run it in the sandbox, and report the real files, processes and disks it would touch.
 .TP
-.BI "simulate [--json] [--cwd " DIR "] [--timeout " DURATION "] " command
+.BI "simulate [--json] [--verbose] [--cwd " DIR "] [--timeout " DURATION "] " command
 Run a command in the sandbox and show what it changed. Real files are never touched.
 .TP
 .BI explain " command"
@@ -36,6 +36,13 @@ Turn a request written in English into a command, which is then checked like any
 .B ai setup|status|stop|bench
 Manage the optional built-in AI. Nothing is downloaded until you run
 .BR "ai setup" .
+.TP
+.B voice [setup|status|\-\-text]
+Speak a request. The speech is turned into text on this machine and then handled like
+typed English. Run
+.B voice setup
+once to build the speech engine and download the model. Recording needs pipewire-bin,
+pulseaudio-utils or alsa-utils.
 .TP
 .RB "undo [" ID ]
 Put back what the last approved command changed, and verify it.

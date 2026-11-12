@@ -20,6 +20,9 @@ Architecture: any
 Built-Using: ${misc:Built-Using}
 Depends: ${misc:Depends}
 Recommends: apparmor
+Suggests: pipewire-bin | pulseaudio-utils | alsa-utils,
+          cmake,
+          g++
 Description: safety layer for your terminal
  SafeShell rates every command you run by how reversible it is, tries it in
  a rootless sandbox first to show what it would really change, blocks the

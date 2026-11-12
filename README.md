@@ -104,6 +104,7 @@ Work as normal. Inside your prompt:
 | `/help` | guided help (also `safeshell help`) |
 | `safeshell undo` | restore what the last approved command changed |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
+| Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
 
 Without the hook you can use the pieces directly:
 
@@ -138,6 +139,8 @@ Observed effects and the AI can only raise a rating, never lower it. More in
   Nothing is downloaded until you ask.
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
+- **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup` (needs cmake, a C++ compiler and a recorder: `pipewire-bin`, `pulseaudio-utils` or `alsa-utils`).
+  The words then go through the same path as typed English, so the usual checks apply.
 
 `safeshell ai bench` measures the active model on 44 labelled requests: local Qwen 3B scores about 97%,
 Gemini flash-lite 95-100%, with no unsafe suggestions in either.

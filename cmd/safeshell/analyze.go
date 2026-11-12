@@ -7,12 +7,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/platform"
+	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox/effects"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox/overlayfs"
@@ -63,11 +65,13 @@ func inspectServices(cmds []shellparse.Command) []domain.Effect {
 }
 
 func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
-	cwd, asJSON := "", false
+	cwd, asJSON, verbose := "", false, false
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch args[0] {
 		case "--json":
 			asJSON = true
+		case "--verbose":
+			verbose = true
 		case "--cwd":
 			if len(args) < 2 {
 				fmt.Fprint(stderr, usage)
@@ -94,7 +98,7 @@ func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(a)
 	} else {
-		printAnalysis(stdout, a, color)
+		printAnalysis(stdout, a, cwd, color, verbose)
 	}
 	switch a.Decision {
 	case domain.HardBlock:
@@ -112,7 +116,37 @@ var decisionText = map[domain.Decision]string{
 	domain.HardBlock: "HARD BLOCK",
 }
 
-func printAnalysis(w io.Writer, a engine.Analysis, color bool) {
+// sandboxNotes splits ws into the notes about places the command touches and
+// a count of the rest. verbose, or any doubt about what the command touches,
+// keeps them all.
+func sandboxNotes(ws []sandbox.Warning, line, cwd string, changes []sandbox.Change, verbose bool) ([]sandbox.Warning, int) {
+	if verbose {
+		return ws, 0
+	}
+	home, _ := os.UserHomeDir()
+	touched, uncertain := report.Touched(line, cwd, home, changes)
+	if uncertain {
+		return ws, 0
+	}
+	for _, p := range touched {
+		if real, err := filepath.EvalSymlinks(p); err == nil && real != p {
+			touched = append(touched, real)
+		}
+	}
+	shown := report.RelevantWarnings(ws, touched)
+	return shown, len(ws) - len(shown)
+}
+
+func hiddenNotes(w io.Writer, n int, dim, reset string) {
+	switch {
+	case n == 1:
+		fmt.Fprintf(w, "%s1 sandbox note about other folders was hidden; add --verbose to see it.%s\n", dim, reset)
+	case n > 1:
+		fmt.Fprintf(w, "%s%d sandbox notes about other folders were hidden; add --verbose to see them.%s\n", dim, n, reset)
+	}
+}
+
+func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bool) {
 	c := newPalette(color)
 	col := [...]string{c.green, c.green, c.yellow, c.red, c.red}[a.Level]
 	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, a.Level, a.Level.Label(), c.reset, decisionText[a.Decision])
@@ -142,9 +176,11 @@ func printAnalysis(w io.Writer, a engine.Analysis, color bool) {
 		fmt.Fprintf(w, "\n%s%s%s\n", c.dim, a.SimNote, c.reset)
 	}
 	if a.Sim != nil {
-		for _, wn := range a.Sim.Warnings {
-			fmt.Fprintf(w, "%sSandbox note: %s%s\n", c.dim, wn, c.reset)
+		shown, hidden := sandboxNotes(a.Sim.Warnings, a.Line, cwd, a.Sim.Diff.Changes, verbose)
+		for _, wn := range shown {
+			fmt.Fprintf(w, "%sSandbox note: %s%s\n", c.dim, wn.Text, c.reset)
 		}
+		hiddenNotes(w, hidden, c.dim, c.reset)
 	}
 	if len(a.Verdict.Alternatives) > 0 {
 		fmt.Fprintf(w, "\n%sSafer options%s\n", c.bold, c.reset)

@@ -1,11 +1,25 @@
 // Package shellhook holds the code a shell sources to route every command line
-// through `safeshell guard` before it runs.
+// through `safeshell guard` before it runs. It also binds Ctrl-X Ctrl-V to
+// `safeshell voice --text`, which puts a spoken request on the command line
+// for the person to read and edit before pressing Enter.
 package shellhook
 
 import "fmt"
 
 const bash = `# SafeShell hook for bash. Add to ~/.bashrc:  eval "$(safeshell hook bash)"
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
+# Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
+__ss_voice() {
+  [[ -n "$SAFESHELL_OFF" ]] && return
+  local out tty rc
+  tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
+  out=$(command safeshell voice --text </dev/tty 2>/dev/tty)
+  rc=$?
+  [[ -n $tty ]] && stty "$tty" </dev/tty
+  [[ $rc -eq 0 ]] || return
+  READLINE_LINE=$out
+  READLINE_POINT=${#READLINE_LINE}
+}
 __ss_guard() {
   [[ -n "$SAFESHELL_OFF" || -z "${READLINE_LINE//[[:space:]]/}" ]] && return
   local out rc tty t first unknown=()
@@ -27,6 +41,7 @@ __ss_guard() {
 if [[ $- == *i* ]]; then
   shopt -s histverify   # !! and !$ are expanded into the line first, so the guard sees what would really run
   bind -x '"\C-x\C-s": __ss_guard'
+  bind -x '"\C-x\C-v": __ss_voice'
   bind '"\C-x\C-a": accept-line'
   bind '"\C-m": "\C-x\C-s\C-x\C-a"'
   bind '"\C-j": "\C-x\C-s\C-x\C-a"'   # Ctrl-J also accepts a line, and a pasted newline is one
@@ -37,6 +52,21 @@ fi
 
 const zsh = `# SafeShell hook for zsh. Add to ~/.zshrc:  eval "$(safeshell hook zsh)"
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
+# Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
+__ss_voice() {
+  [[ -n "$SAFESHELL_OFF" ]] && return 0
+  local out tty rc
+  zle -I
+  tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
+  out=$(command safeshell voice --text </dev/tty 2>/dev/tty)
+  rc=$?
+  [[ -n $tty ]] && stty "$tty" </dev/tty
+  (( rc == 0 )) || return 0
+  BUFFER=$out
+  CURSOR=${#BUFFER}
+}
+zle -N __ss_voice
+bindkey '^X^V' __ss_voice
 __ss_check() {   # returns 1 when the line was cancelled
   [[ -n "$SAFESHELL_OFF" || -z "${BUFFER//[[:space:]]/}" ]] && return 0
   local out rc tty first unknown=()
