@@ -99,6 +99,7 @@ safeshell/                        repository root = Go module root
 │   ├── daemon/               server lifecycle, worker pool, single-instance lock
 │   ├── ipc/                  wire protocol + client
 │   ├── shellhook/            embedded bash/zsh/fish scripts + installer
+│   ├── voice/                microphone recorder + local whisper.cpp transcriber, set up by `safeshell voice setup`
 │   ├── audit/                append-only action log
 │   ├── ui/                   terminal output and prompts (/dev/tty)
 │   ├── config/               config.toml + XDG paths
@@ -118,8 +119,9 @@ Why this shape (go.dev's own guidance is to start flat and grow into `internal/`
 cmd/safeshell  ──►  everything (composition root: builds adapters, injects them into engine)
 
 engine  ──►  domain, classify, policy, report          (+ port interfaces it declares itself)
-adapters (sandbox/*, snapshot, ai/*, undo, nl, daemon, ipc, ui, audit, shellhook)
+adapters (sandbox/*, snapshot, ai/*, undo, nl, daemon, ipc, ui, audit, shellhook, voice)
         ──►  domain  (+ engine's ports they implement, + config/platform)
+voice   ──►  runtime (downloads, checksums, unpacking) and the standard library; it never imports engine
 classify ──► domain, shellparse
 shellparse ─► mvdan.cc/sh only
 domain  ──►  standard library only
