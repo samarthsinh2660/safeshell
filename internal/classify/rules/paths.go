@@ -4,6 +4,8 @@ import (
 	"os"
 	"path"
 	"strings"
+
+	"github.com/samarthsinh2660/safeshell/internal/domain"
 )
 
 var systemDirs = []string{"/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/boot", "/var", "/opt", "/sys", "/proc", "/dev", "/root", "/home", "/srv", "/run"}
@@ -87,4 +89,36 @@ func Shq(s string) string {
 		return s
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+var harmlessTargets = map[string]bool{"/dev/null": true, "/dev/stdout": true, "/dev/stderr": true, "/dev/tty": true, "/dev/zero": true}
+
+// WriteTarget rates writing (or appending) to the file t on behalf of the
+// command line cmd. appendAlt, when set, is suggested as the safer form of a
+// plain overwrite. ok is false when t is harmless to write to.
+func WriteTarget(cmd, t string, appending bool, appendAlt string) (f Finding, ok bool) {
+	t = Norm(t)
+	mk := func(l domain.Level, reason string) (Finding, bool) {
+		return Finding{Level: l, Command: cmd, Reason: reason}, true
+	}
+	switch {
+	case harmlessTargets[t] || strings.HasPrefix(t, "/dev/fd/"):
+		return Finding{}, false
+	case IsBlockDevice(t) || t == "/dev/mem" || t == "/dev/kmem":
+		return mk(R4, "Writes raw data onto "+t+", destroying what is stored there.")
+	case strings.HasPrefix(t, "/proc/") || strings.HasPrefix(t, "/sys/"):
+		return mk(R4, "Writes to a live kernel control file ("+t+"), which can crash or reboot the machine.")
+	case UnderSystem(t) && !appending:
+		f, _ = mk(R3, "Overwrites the system file "+t+".")
+		return f.WithAlt("cp "+Shq(t)+" "+Shq(t)+".bak", "make a backup of the file first"), true
+	case UnderSystem(t):
+		return mk(R2, "Appends to the system file "+t+".")
+	case appending:
+		return mk(R1, "Appends to "+t+".")
+	}
+	f, _ = mk(R2, "Overwrites "+t+" if it already exists.")
+	if appendAlt != "" {
+		f = f.WithAlt(appendAlt, "appends instead of overwriting")
+	}
+	return f, true
 }

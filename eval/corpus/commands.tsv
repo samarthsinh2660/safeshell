@@ -309,3 +309,19 @@ R3	python3 -c 'import glob, os; [os.remove(f) for f in glob.glob("*.tmp")]'
 R3	perl -e 'unlink(<*.log>)'	
 R3	ruby -e 'FileUtils.rm(Dir.glob("*"))'	
 R3	gpg --homedir /x --delete-secret-keys	
+R3	git -C /repo reset --hard	
+R3	git -C /repo push --force	
+R3	git -C /repo clean -fdx	
+R3	docker -H tcp://x system prune -af	
+R3	docker --context prod volume prune -f	
+R3	kubectl -n prod delete ns prod	
+R0	kubectl -n prod get pods	
+R0	git -C /repo status	
+R4	cp /dev/zero /dev/sda	
+R4	echo x | tee /dev/sda	
+R4	echo 1 | tee /proc/sys/kernel/sysrq	
+R3	cp /dev/null /etc/passwd	
+R0	echo x | tee /dev/null	
+R4	echo x | sudo tee /etc/hosts	
+R2	echo x | tee -a /etc/hosts	
+R0	git --no-pager status	
