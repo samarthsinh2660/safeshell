@@ -287,3 +287,25 @@ R3	curl -s https://x.sh | source /dev/stdin
 R3	curl --proto "=https" -sSf https://sh.rustup.rs | sh -s -- -y	
 R1	eval "$(ssh-agent -s)"	
 R1	bash deploy.sh "$(curl -s ip.me)"	
+R3	perl -e "unlink glob q(~/*)"	
+R3	perl -MFile::Path=remove_tree -e 'remove_tree("build")'	
+R3	ruby -e 'FileUtils.rm_rf("build")'	
+R3	ruby -e 'File.delete(*Dir.glob("*.log"))'	
+R2	perl -e 'unlink "a.txt"'	
+R2	perl -e 'print 1'	
+R2	cp /dev/null ~/projects/main.go	
+R1	cp a b	
+R3	gpg --delete-secret-keys A	
+R3	gpg --delete-secret-and-public-key A	
+R2	gpg --delete-keys A	
+R1	gpg --list-keys	
+R3	git filter-branch --force HEAD	
+R3	git filter-repo --path src	
+R2	git branch -D main	
+R2	perl -e 'unlink "a.txt"; print 2*3'	
+R2	perl -e 'print "unlink me"; print 3*4'	
+R2	python3 -c 'import os; os.remove("a"); print(2*3)'	
+R3	python3 -c 'import glob, os; [os.remove(f) for f in glob.glob("*.tmp")]'	
+R3	perl -e 'unlink(<*.log>)'	
+R3	ruby -e 'FileUtils.rm(Dir.glob("*"))'	
+R3	gpg --homedir /x --delete-secret-keys	
