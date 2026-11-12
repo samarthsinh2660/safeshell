@@ -98,6 +98,28 @@ func TestRelevantWarnings(t *testing.T) {
 	}
 }
 
+func TestTouchedUncertainEdges(t *testing.T) {
+	cases := []struct {
+		name, line, cwd, home string
+	}{
+		{"cd with no target", "cd", "/w", "/h"},
+		{"home unknown", "ls ~/x", "/w", ""},
+		{"dot without a directory", "ls ..", "", "/h"},
+		{"relative path without a directory", "ls a/b", "", "/h"},
+		{"cd to home", "cd ~ && ls /w", "/w", "/h"},
+		{"fetched argument", `sh -c "$(curl x)"`, "/w", "/h"},
+		{"ssh", "ssh host rm /x", "/w", "/h"},
+	}
+	for _, c := range cases {
+		if _, unsure := Touched(c.line, c.cwd, c.home, nil); !unsure {
+			t.Errorf("%s: %q should be uncertain", c.name, c.line)
+		}
+	}
+	if got, unsure := Touched("cd /a && ls ..", "/w", "/h", nil); unsure || !slices.Contains(got, "/") {
+		t.Errorf("dot after cd: got %v, uncertain %v", got, unsure)
+	}
+}
+
 func touchedBy(line, cwd, home string) []string {
 	p, _ := Touched(line, cwd, home, nil)
 	return p
