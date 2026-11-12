@@ -35,7 +35,8 @@ A line is treated as English when its first word is not a command and it reads l
 To force it, start the line with ?   (for example:  ? how much disk is free).
 You always see the command first and press Enter to run it. It is then checked like any typed
 command, so a dangerous suggestion is still stopped. Questions ("what does chmod 755 mean") are
-answered and nothing runs. Needs an AI model: see  safeshell help models.`},
+answered and nothing runs. If something is unclear (several files match), SafeShell asks you a
+short question first. Needs an AI model: see  safeshell help models.`},
 	{"models", "Choose or change the AI model (/models)", `Type  /models  (in your terminal or as  safeshell models ) to see the menu:
    On this machine: Qwen models, downloaded once, private, free, work offline.
      Qwen2.5-Coder 3B is the default. 1.5B is faster, 7B is the most accurate (about 6 GB RAM).

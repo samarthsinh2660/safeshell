@@ -138,7 +138,7 @@ Observed effects and the AI can only raise a rating, never lower it. More in
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
 
-`safeshell ai bench` measures the active model on 43 labelled requests: local Qwen 3B scores about 97%,
+`safeshell ai bench` measures the active model on 44 labelled requests: local Qwen 3B scores about 97%,
 Gemini flash-lite 95-100%, with no unsafe suggestions in either.
 
 ## Measured
@@ -146,7 +146,7 @@ Gemini flash-lite 95-100%, with no unsafe suggestions in either.
 | | |
 |---|---|
 | Held-out classifier accuracy | 92.3% exactly right on 220 commands the rules were never tuned on |
-| English to command | 97% (local Qwen 3B) on 43 requests |
+| English to command | 97% (local Qwen 3B) on 44 requests |
 | Sandbox safety sweep | 492 labelled commands run through the real binary: no file outside the sandbox changed |
 | Tests | unit, fuzz, and integration tests on a real terminal and the real kernel |
 
