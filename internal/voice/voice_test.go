@@ -3,10 +3,12 @@ package voice
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -28,6 +30,19 @@ func TestMain(m *testing.M) {
 	case "empty":
 		time.Sleep(time.Minute)
 		os.Exit(0)
+	case "exit":
+		os.Exit(0)
+	case "deaf": // writes audio, then ignores SIGINT so only SIGKILL stops it
+		signal.Ignore(os.Interrupt)
+		_ = os.WriteFile(os.Args[len(os.Args)-1], append([]byte("RIFF"), make([]byte, 100)...), 0o600)
+		time.Sleep(time.Minute)
+		os.Exit(0)
+	case "echo":
+		fmt.Println("hello there")
+		fmt.Fprintln(os.Stderr, "warning")
+		os.Exit(0)
+	case "fail":
+		os.Exit(3)
 	}
 	os.Exit(m.Run())
 }

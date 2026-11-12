@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -243,4 +244,80 @@ type instantRecorder struct{}
 
 func (instantRecorder) Record(context.Context, <-chan struct{}) (string, func(), error) {
 	return "/tmp/fake.wav", func() {}, nil
+}
+
+// readySetup has a speech engine on PATH and a complete model.
+func readySetup(t *testing.T, have ...string) voice.Setup {
+	t.Helper()
+	s := fakeSetup(t, append([]string{"whisper-cli"}, have...)...)
+	_ = os.MkdirAll(filepath.Dir(s.ModelPath()), 0o755)
+	f, _ := os.Create(s.ModelPath())
+	_ = f.Truncate(147964211)
+	f.Close()
+	return s
+}
+
+func TestDefaultNewVoice(t *testing.T) {
+	useSetup(t, fakeSetup(t))
+	if _, _, err := newVoice(); err == nil || err.Error() != voiceNotSetUp {
+		t.Errorf("%v", err)
+	}
+	useSetup(t, readySetup(t))
+	if _, _, err := newVoice(); err == nil || !strings.Contains(err.Error(), "No recorder found") || !strings.Contains(err.Error(), "pipewire-bin") {
+		t.Errorf("%v", err)
+	}
+	useSetup(t, readySetup(t, "arecord"))
+	rec, tr, err := newVoice()
+	if err != nil || rec.(voice.ToolRecorder).Name != "arecord" || tr.(voice.WhisperCLI).Bin != "/usr/bin/whisper-cli" {
+		t.Errorf("%v %v %v", rec, tr, err)
+	}
+}
+
+func TestVoiceRecorderFailureIsReported(t *testing.T) {
+	useVoice(t, fakeRecorder{err: errors.New("The recorder (arecord) did not produce audio.")}, fakeTranscriber{}, nil)
+	typed(t, "\n")
+	code, out, errOut := runSS("voice", "--text")
+	if code != 1 || out != "" || !strings.Contains(errOut, "did not produce audio") {
+		t.Errorf("%d %q %q", code, out, errOut)
+	}
+}
+
+func TestVoiceSetupSucceedsWhenEverythingIsThere(t *testing.T) {
+	useSetup(t, readySetup(t))
+	code, out, errOut := runSS("voice", "setup")
+	if code != 0 || !strings.Contains(out, "Speech engine ready: /usr/bin/whisper-cli") || !strings.Contains(out, "Speech model ready:") || errOut != "" {
+		t.Errorf("%d %q %q", code, out, errOut)
+	}
+}
+
+type notFound struct{}
+
+func (notFound) RoundTrip(*http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: 404, Status: "404 Not Found", Body: io.NopCloser(strings.NewReader(""))}, nil
+}
+
+func TestVoiceSetupModelDownloadFails(t *testing.T) {
+	s := fakeSetup(t, "whisper-cli")
+	s.Client = &http.Client{Transport: notFound{}}
+	useSetup(t, s)
+	code, _, errOut := runSS("voice", "setup")
+	if code != 1 || !strings.Contains(errOut, "could not download the speech model") {
+		t.Errorf("%d %q", code, errOut)
+	}
+}
+
+func TestVoiceStatusReady(t *testing.T) {
+	useSetup(t, readySetup(t, "pw-record"))
+	_, out, _ := runSS("voice", "status")
+	if !strings.Contains(out, "recorder: pw-record") || !strings.Contains(out, "model:    downloaded") {
+		t.Errorf("%q", out)
+	}
+	// A built engine that is not on PATH.
+	b := fakeSetup(t)
+	_ = os.MkdirAll(filepath.Dir(b.EnginePath()), 0o755)
+	_ = os.WriteFile(b.EnginePath(), []byte("x"), 0o755)
+	useSetup(t, b)
+	if _, out, _ := runSS("voice", "status"); !strings.Contains(out, "engine:   "+b.EnginePath()+"\n") {
+		t.Errorf("%q", out)
+	}
 }

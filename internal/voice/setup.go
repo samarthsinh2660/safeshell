@@ -102,6 +102,11 @@ func (s Setup) EnsureEngine(ctx context.Context) (string, error) {
 	if err := runtime.Download(ctx, s.Client, whisperTarURL, archive, whisperTarSHA, whisperTarSize, s.Out); err != nil {
 		return "", fmt.Errorf("could not download the speech engine source: %w. %s", err, retry)
 	}
+	return s.unpackAndBuild(ctx, archive)
+}
+
+// unpackAndBuild builds the verified source archive and installs whisper-cli.
+func (s Setup) unpackAndBuild(ctx context.Context, archive string) (string, error) {
 	work := filepath.Join(s.Dirs.Data, "engine", "whisper-"+whisperVersion+".build")
 	_ = os.RemoveAll(work)
 	defer os.RemoveAll(work)
