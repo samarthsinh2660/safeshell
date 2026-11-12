@@ -133,18 +133,18 @@ func TestSimulateReport(t *testing.T) {
 			{Path: "home/me/proj", Kind: sandbox.Deleted, IsDir: true, Files: 4312, Bytes: 2 << 30},
 			{Path: "tmp/new.txt", Kind: sandbox.Created, Files: 1, Bytes: 5},
 		}},
-		Warnings: []string{"/var/lib/docker is not available"},
+		Warnings: []sandbox.Warning{{Paths: []string{"/work/proj/cache"}, Text: "/work/proj/cache is not available"}, {Paths: []string{"/var/lib/docker"}, Text: "/var/lib/docker is not available"}},
 	}, nil)
-	code, out, _ := runSS("simulate", "--cwd", "/work", "--timeout", "5s", "rm", "-rf", "proj")
+	code, out, _ := runSS("simulate", "--cwd", "/work", "--timeout", "5s", "rm", "-rf", "/work/proj")
 	if code != 0 {
 		t.Fatalf("exit %d", code)
 	}
-	if got.Line != "rm -rf proj" || got.Cwd != "/work" || got.Timeout != 5*time.Second {
+	if got.Line != "rm -rf /work/proj" || got.Cwd != "/work" || got.Timeout != 5*time.Second {
 		t.Errorf("spec passed to the sandbox: %+v", got)
 	}
 	for _, want := range []string{
 		"Your real files were not touched", "deleted   4,312 files (2.0 GiB)", "created   1 file",
-		"/home/me/proj/  (4,312 files)", "Warning: /var/lib/docker", "stdout", "  hello",
+		"/home/me/proj/  (4,312 files)", "Warning: /work/proj/cache", "1 sandbox note about other folders was hidden", "stdout", "  hello",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q:\n%s", want, out)
@@ -257,11 +257,19 @@ func TestAnalyzeAllowAndConfirmExitZero(t *testing.T) {
 func TestAnalyzeNotesAndJSON(t *testing.T) {
 	a := sampleAnalysis()
 	a.SimNote = "no sandbox available on this machine"
-	a.Sim = &sandbox.Result{Warnings: []string{"/boot is partial"}}
+	a.Sim = &sandbox.Result{Warnings: []sandbox.Warning{{Paths: []string{"/boot"}, Text: "/boot is partial"}}}
 	fakeAnalyze(t, a)
-	_, out, _ := runSS("analyze", "x")
+	_, out, _ := runSS("analyze", "--cwd", "/boot", "x")
 	if !strings.Contains(out, "no sandbox available") || !strings.Contains(out, "Sandbox note: /boot is partial") {
 		t.Errorf("notes missing:\n%s", out)
+	}
+	_, out, _ = runSS("analyze", "--cwd", "/tmp", "x")
+	if strings.Contains(out, "/boot is partial") || !strings.Contains(out, "1 sandbox note about other folders was hidden; add --verbose to see it.") {
+		t.Errorf("unrelated note should be hidden with a hint:\n%s", out)
+	}
+	_, out, _ = runSS("analyze", "--verbose", "--cwd", "/tmp", "x")
+	if !strings.Contains(out, "Sandbox note: /boot is partial") || strings.Contains(out, "were hidden") {
+		t.Errorf("--verbose should show everything:\n%s", out)
 	}
 	code, out, _ := runSS("analyze", "--json", "x")
 	var j struct {

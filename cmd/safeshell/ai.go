@@ -60,7 +60,7 @@ func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
 	}
 	cwd, _ := os.Getwd()
 	a := analyze(context.Background(), strings.Join(args, " "), cwd)
-	printAnalysis(stdout, a, color)
+	printAnalysis(stdout, a, cwd, color, true)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	text, err := ai.Explain(ctx, b, a)

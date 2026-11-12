@@ -24,7 +24,13 @@ type Result struct {
 	Truncated bool // output was cut at MaxOutput
 	// Warnings list parts of the filesystem that could not be mirrored; they
 	// are empty inside the sandbox, so commands touching them behave differently.
-	Warnings []string
+	Warnings []Warning
+}
+
+// Warning is one part of the filesystem the sandbox could not mirror.
+type Warning struct {
+	Paths []string `json:"paths"` // the directories it concerns
+	Text  string   `json:"text"`
 }
 
 // Defaults fills in the zero values of s.

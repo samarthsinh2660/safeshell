@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/samarthsinh2660/safeshell/internal/sandbox/netwatch"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/samarthsinh2660/safeshell/internal/sandbox"
+	"github.com/samarthsinh2660/safeshell/internal/sandbox/netwatch"
 )
 
 // Init is the body of `safeshell sandbox-init`. It runs as PID 1 inside the new
@@ -64,7 +66,7 @@ func Init() int {
 // result. It returns the overlays that were really mounted and warnings for
 // anything that could not be mirrored: such a path is left empty, never
 // exposed writable.
-func buildRoot(req request) (layers []Layer, warnings []string, err error) {
+func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, err error) {
 	if err := syscall.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, ""); err != nil {
 		return nil, nil, fmt.Errorf("make mounts private: %w", err)
 	}
@@ -109,20 +111,20 @@ type builder struct {
 	root, merged string
 	static       map[string]bool // mounts that have their own layer in the plan
 	done         []Layer
-	warnings     []string // paths that are missing from the sandbox
-	partial      []string // directories whose loose files are not visible
+	warnings     []sandbox.Warning // paths that are missing from the sandbox
+	partial      []string          // directories whose loose files are not visible
 	dyn          int
 }
 
 // summary turns the collected problems into a few readable warnings.
-func (b *builder) summary() []string {
-	out := append([]string(nil), b.warnings...)
+func (b *builder) summary() []sandbox.Warning {
+	out := append([]sandbox.Warning(nil), b.warnings...)
 	if len(b.partial) > 0 {
 		shown := b.partial
 		if len(shown) > 4 {
 			shown = shown[:4]
 		}
-		out = append(out, fmt.Sprintf("loose files directly inside %d directories (for example %s) are not visible in the sandbox", len(b.partial), strings.Join(shown, ", ")))
+		out = append(out, sandbox.Warning{Paths: b.partial, Text: fmt.Sprintf("loose files directly inside %d directories (for example %s) are not visible in the sandbox", len(b.partial), strings.Join(shown, ", "))})
 	}
 	return out
 }
@@ -140,14 +142,18 @@ func (b *builder) overlay(l Layer, depth int) {
 	case errors.Is(err, syscall.EINVAL) && depth < maxDepth:
 		b.descend(l.Mount, depth)
 	default:
-		b.warnings = append(b.warnings, fmt.Sprintf("%s is not available in the sandbox (%v)", l.Mount, err))
+		b.warnings = append(b.warnings, unavailable(l.Mount, err))
 	}
+}
+
+func unavailable(path string, err error) sandbox.Warning {
+	return sandbox.Warning{Paths: []string{path}, Text: fmt.Sprintf("%s is not available in the sandbox (%v)", path, err)}
 }
 
 func (b *builder) descend(mount string, depth int) {
 	entries, err := os.ReadDir(mount)
 	if err != nil {
-		b.warnings = append(b.warnings, fmt.Sprintf("%s is not available in the sandbox (%v)", mount, err))
+		b.warnings = append(b.warnings, unavailable(mount, err))
 		return
 	}
 	loose := 0
