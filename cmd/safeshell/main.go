@@ -33,10 +33,10 @@ const usage = `SafeShell: a safety layer for your terminal.
 
 Usage:
   safeshell check [--json] <command...>     rate a command without running it
-  safeshell analyze [--json] [--cwd DIR] <command...>
+  safeshell analyze [--json] [--verbose] [--cwd DIR] <command...>
                                             the full picture: risk level, a sandbox run, the real
                                             processes and disks it would hit, and safer options
-  safeshell simulate [--json] [--cwd DIR] [--timeout 30s] <command...>
+  safeshell simulate [--json] [--verbose] [--cwd DIR] [--timeout 30s] <command...>
                                             run a command in a sandbox and show what it changed;
                                             the real files are never touched
   safeshell guard [--cwd DIR] -- <command...>
@@ -218,11 +218,13 @@ func doctor(w io.Writer, r platform.Report) int {
 
 func runSimulate(args []string, stdout, stderr io.Writer) int {
 	spec := sandbox.Spec{}
-	asJSON := false
+	asJSON, verbose := false, false
 	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
 		switch args[0] {
 		case "--json":
 			asJSON = true
+		case "--verbose":
+			verbose = true
 		case "--cwd", "--timeout":
 			if len(args) < 2 {
 				fmt.Fprint(stderr, usage)
@@ -258,14 +260,18 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(res)
 	} else {
-		simReport(stdout, spec.Line, res)
+		cwd := spec.Cwd
+		if cwd == "" {
+			cwd, _ = os.Getwd()
+		}
+		simReport(stdout, spec.Line, cwd, res, verbose)
 	}
 	return 0
 }
 
 const maxListed = 15
 
-func simReport(w io.Writer, line string, r sandbox.Result) {
+func simReport(w io.Writer, line, cwd string, r sandbox.Result, verbose bool) {
 	status := fmt.Sprintf("exit %d", r.ExitCode)
 	if r.TimedOut {
 		status = "timed out"
@@ -298,8 +304,13 @@ func simReport(w io.Writer, line string, r sandbox.Result) {
 			fmt.Fprintf(w, "  %-9s /%s%s%s\n", c.Kind, c.Path, dir, extra)
 		}
 	}
-	for _, wn := range r.Warnings {
-		fmt.Fprintf(w, "\nWarning: %s\n", wn)
+	shown, hidden := sandboxNotes(r.Warnings, line, cwd, r.Diff.Changes, verbose)
+	for _, wn := range shown {
+		fmt.Fprintf(w, "\nWarning: %s\n", wn.Text)
+	}
+	if hidden > 0 {
+		fmt.Fprintln(w)
+		hiddenNotes(w, hidden, "", "")
 	}
 	for _, o := range []struct{ name, text string }{{"stdout", r.Stdout}, {"stderr", r.Stderr}} {
 		if strings.TrimSpace(o.text) != "" {

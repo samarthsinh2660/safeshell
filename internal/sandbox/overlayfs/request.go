@@ -17,7 +17,7 @@ type outcome struct {
 	Exit  int
 	Error string // setup failed; the command did not run
 	// Warnings list directories that could not be overlaid and are empty in the sandbox.
-	Warnings []string
+	Warnings []sandbox.Warning
 	// Layers are the overlays actually mounted, including ones added by the child.
 	Layers []Layer
 }

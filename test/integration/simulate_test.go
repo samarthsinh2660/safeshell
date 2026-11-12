@@ -5,6 +5,7 @@ package integration
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -31,8 +32,11 @@ type result struct {
 	Stderr    string
 	Diff      struct{ Changes []change }
 	Truncated bool
-	Warnings  []string
-	Net       []struct {
+	Warnings  []struct {
+		Paths []string
+		Text  string
+	}
+	Net []struct {
 		Family, Addr string
 		Port, Count  int
 	}
@@ -445,5 +449,27 @@ func TestAnalyzeListsWhatDependsOnAServiceBeingStopped(t *testing.T) {
 	}
 	if a.Level != "R3" {
 		t.Errorf("stopping dbus must be at least irreversible, got %s", a.Level)
+	}
+}
+
+func TestSandboxNotesOnlyConcernWhatTheCommandTouches(t *testing.T) {
+	needSandbox(t)
+	d := fixture(t)
+	analyze := func(line string) string {
+		out, err := exec.Command(ssBin, "analyze", "--cwd", d, line).CombinedOutput()
+		var ee *exec.ExitError
+		if err != nil && !(errors.As(err, &ee) && (ee.ExitCode() == 3 || ee.ExitCode() == 4)) { // 3 and 4 are R3/R4 verdicts, not failures
+			t.Fatalf("safeshell analyze %q: %v\n%s", line, err, out)
+		}
+		return string(out)
+	}
+	if out := analyze(`find . -name "*.log" -delete`); strings.Contains(out, "/var/lib/docker") || strings.Contains(out, "/boot") {
+		t.Errorf("notes about untouched folders were shown:\n%s", out)
+	}
+	// The docker note only exists where /var/lib/docker cannot be read, so it is not checked on every machine.
+	if _, err := os.ReadDir("/var/lib/docker"); err != nil {
+		if out := analyze("rm -rf /var/lib/docker/x"); !strings.Contains(out, "Sandbox note: /var/lib/docker") {
+			t.Errorf("the note about the folder being touched is missing:\n%s", out)
+		}
 	}
 }

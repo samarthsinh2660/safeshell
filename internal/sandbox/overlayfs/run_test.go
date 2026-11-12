@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 )
 
 func TestCapBufferKeepsTheStartAndFlagsTheCut(t *testing.T) {
@@ -47,9 +49,9 @@ func TestDetail(t *testing.T) {
 }
 
 func TestSummaryCapsAndCountsPartialDirs(t *testing.T) {
-	b := &builder{warnings: []string{"/x is not available"}, partial: []string{"/a", "/b", "/c", "/d", "/e", "/f"}}
+	b := &builder{warnings: []sandbox.Warning{{Paths: []string{"/x"}, Text: "/x is not available"}}, partial: []string{"/a", "/b", "/c", "/d", "/e", "/f"}}
 	got := b.summary()
-	if len(got) != 2 || !strings.Contains(got[1], "6 directories") || strings.Contains(got[1], "/e") {
+	if len(got) != 2 || !strings.Contains(got[1].Text, "6 directories") || len(got[1].Paths) != 6 || strings.Contains(got[1].Text, "/e") {
 		t.Errorf("summary = %q", got)
 	}
 	if len((&builder{}).summary()) != 0 {
