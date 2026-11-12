@@ -81,6 +81,7 @@ Go module `github.com/samarthsinh2660/safeshell` is at the repository root. Read
 - A release is a PR from a branch named exactly `release/vX.Y.Z` into `main`. Merging it triggers `.github/workflows/release.yml`, which tags, builds tarballs + `.deb` + `SHA256SUMS`, and creates the GitHub Release with the files attached.
 - The release PR contains only release prep (docs, changelog notes, version mentions). Features land through their own PRs first.
 - Version comes from the branch name via `-X main.version`; semver. `.deb` version is the tag without `v`.
+- Follow the checklist in `doc/releasing.md` (release plan and milestones live there too).
 - See `CONTRIBUTING.md` (diagrams of the PR and release flow), `CODE_OF_CONDUCT.md` and `doc/debian-ubuntu.md`; keep them in sync when the workflow changes.
 - Users download the `.deb` (or tarball) from the GitHub Release. Getting into Debian/Ubuntu's own repositories is a separate, manual process described in the README.
 - One-time repo setup (owner only): branch protection on `main` requiring the `check` job. No secrets are needed.
