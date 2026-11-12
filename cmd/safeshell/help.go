@@ -85,6 +85,7 @@ Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when che
      safeshell undo            put back the most recent change and verify every file matches
      safeshell undo ID         undo a specific one
      safeshell snapshots       list what is saved
+     safeshell history         what SafeShell decided, newest first (--json for the raw entries)
 Undo restores deleted and changed files and removes files the command created. If anything cannot
 be restored exactly, it tells you instead of claiming success.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
@@ -97,6 +98,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell deactivate / activate   pause or resume checking in every terminal
    safeshell learn [on|off|status]   learning mode: one line on what each passing command does
    safeshell undo / safeshell snapshots     restore / list
+   safeshell history [-n 20] [--json]       the decisions SafeShell recorded, newest first
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
    safeshell ai setup|status|stop    manage the built-in AI
    safeshell voice [setup|status]    speak a request (Ctrl-X Ctrl-V in your terminal)

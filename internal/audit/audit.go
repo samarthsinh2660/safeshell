@@ -2,9 +2,11 @@
 package audit
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
@@ -55,4 +57,32 @@ func Append(path string, e Entry) error {
 	}
 	defer f.Close()
 	return json.NewEncoder(f).Encode(e)
+}
+
+// Read loads all entries from path in chronological order. If the file does not
+// exist, it returns nil, nil.
+func Read(path string) ([]Entry, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	var entries []Entry
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+		var e Entry
+		if err := json.Unmarshal([]byte(text), &e); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, scanner.Err()
 }

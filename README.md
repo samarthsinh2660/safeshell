@@ -127,6 +127,7 @@ safeshell analyze 'make clean'           # sandbox run + processes, disks and sa
 safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
 safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
 safeshell snapshots                      # what undo can restore
+safeshell history                        # what SafeShell decided, newest first
 ```
 
 ## How it works
