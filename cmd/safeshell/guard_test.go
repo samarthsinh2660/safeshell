@@ -206,19 +206,19 @@ func TestAnalyzeFastUsesTheDaemonWhenItIsRunningAndFallsBackWhenNot(t *testing.T
 	local.Line = "ran-locally"
 	fakeAnalyze(t, local)
 	socketPath = func() string { return filepath.Join(t.TempDir(), "nothing.sock") }
-	if a := analyzeFast(context.Background(), "x", "/"); a.Line != "ran-locally" {
+	if a := analyzeFast(context.Background(), "x", "/", io.Discard); a.Line != "ran-locally" {
 		t.Errorf("no daemon: %q", a.Line)
 	}
 	remote := sampleAnalysis()
 	remote.Line = "ran-in-daemon"
 	withDaemon(t, remote, nil)
-	got := analyzeFast(context.Background(), "x", "/")
+	got := analyzeFast(context.Background(), "x", "/", io.Discard)
 	if got.Line != "ran-in-daemon" || got.Level != domain.R3 || got.Decision != domain.Block || len(got.Effects) != 1 || got.Effects[0].Evidence != domain.Observed {
 		t.Errorf("through the daemon: %+v", got)
 	}
 	t.Setenv("SAFESHELL_NODAEMON", "1")
 	fakeAnalyze(t, local)
-	if a := analyzeFast(context.Background(), "x", "/"); a.Line != "ran-locally" {
+	if a := analyzeFast(context.Background(), "x", "/", io.Discard); a.Line != "ran-locally" {
 		t.Error("SAFESHELL_NODAEMON must bypass the daemon")
 	}
 }

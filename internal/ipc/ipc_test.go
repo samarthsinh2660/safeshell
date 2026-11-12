@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -149,9 +151,123 @@ func TestSocketPathPrefersTheRuntimeDirectory(t *testing.T) {
 	if SocketPath() != "/run/user/1000/safeshell.sock" {
 		t.Error(SocketPath())
 	}
+}
+
+func TestSocketPathIsEmptyWithoutARuntimeDirectory(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "")
-	if !strings.HasPrefix(SocketPath(), "/tmp/safeshell-") {
+	if SocketPath() != "" {
 		t.Error(SocketPath())
+	}
+}
+
+type fakeInfo struct {
+	fs.FileInfo
+	mode fs.FileMode
+	sys  any
+}
+
+func (f fakeInfo) Mode() fs.FileMode { return f.mode }
+func (f fakeInfo) IsDir() bool       { return f.mode.IsDir() }
+func (f fakeInfo) Sys() any          { return f.sys }
+
+func TestCheckOwnerRefusesAnythingNotOurs(t *testing.T) {
+	me := os.Getuid()
+	st := func(uid int) any { return &syscall.Stat_t{Uid: uint32(uid)} }
+	sock := fakeInfo{mode: fs.ModeSocket | 0o600, sys: st(me)}
+	dir := fakeInfo{mode: fs.ModeDir | 0o700, sys: st(me)}
+	for name, c := range map[string]struct {
+		sock, dir fs.FileInfo
+		ok        bool
+	}{
+		"ours":              {sock, dir, true},
+		"not a socket":      {fakeInfo{mode: 0o600, sys: st(me)}, dir, false},
+		"socket of another": {fakeInfo{mode: fs.ModeSocket | 0o600, sys: st(me + 1)}, dir, false},
+		"unknown owner":     {fakeInfo{mode: fs.ModeSocket | 0o600}, dir, false},
+		"folder of another": {sock, fakeInfo{mode: fs.ModeDir | 0o700, sys: st(me + 1)}, false},
+		"folder not a dir":  {sock, fakeInfo{mode: 0o700, sys: st(me)}, false},
+		"world writable":    {sock, fakeInfo{mode: fs.ModeDir | 0o777, sys: st(me)}, false},
+	} {
+		if err := checkOwner(c.sock, c.dir, me); (err == nil) != c.ok || (err != nil && !errors.Is(err, ErrUntrusted)) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestCallRefusesAPathThatIsNotOurSocket(t *testing.T) {
+	d := t.TempDir()
+	plain := filepath.Join(d, "plain")
+	if err := os.WriteFile(plain, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Call(context.Background(), plain, "ping", nil, nil); !errors.Is(err, ErrUntrusted) {
+		t.Errorf("plain file: %v", err)
+	}
+	if err := Call(context.Background(), filepath.Join(d, "none.sock"), "ping", nil, nil); err == nil || errors.Is(err, ErrUntrusted) {
+		t.Errorf("missing socket: %v", err)
+	}
+	if err := Call(context.Background(), filepath.Join(d, "no", "dir.sock"), "ping", nil, nil); err == nil || errors.Is(err, ErrUntrusted) {
+		t.Errorf("missing folder: %v", err)
+	}
+	if err := Call(context.Background(), "", "ping", nil, nil); err == nil {
+		t.Error("empty path")
+	}
+	open := t.TempDir()
+	if err := os.Chmod(open, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	l, err := net.Listen("unix", filepath.Join(open, "s.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	if err := Call(context.Background(), l.Addr().String(), "ping", nil, nil); !errors.Is(err, ErrUntrusted) {
+		t.Errorf("writable folder: %v", err)
+	}
+}
+
+func TestCallRefusesAPeerRunningAsAnotherUser(t *testing.T) {
+	path := start(t, &Server{Handlers: echo()})
+	if err := call(context.Background(), os.Getuid()+1, path, "ping", nil, nil); !errors.Is(err, ErrUntrusted) {
+		t.Errorf("peer of another user: %v", err)
+	}
+	if err := Call(context.Background(), path, "ping", nil, nil); err != nil {
+		t.Errorf("our own socket: %v", err)
+	}
+}
+
+func TestCallReportsASocketNobodyListensOn(t *testing.T) {
+	stale := filepath.Join(t.TempDir(), "stale.sock")
+	l, _ := net.Listen("unix", stale)
+	l.(*net.UnixListener).SetUnlinkOnClose(false)
+	l.Close()
+	if err := Call(context.Background(), stale, "ping", nil, nil); err == nil || errors.Is(err, ErrUntrusted) {
+		t.Errorf("stale socket: %v", err)
+	}
+}
+
+func TestCheckPeerReadsTheRealConnectionOwner(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "p.sock")
+	l, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if err := checkPeer(c, os.Getuid()); err != nil {
+		t.Errorf("same user: %v", err)
+	}
+	if err := checkPeer(c, os.Getuid()+1); !errors.Is(err, ErrUntrusted) {
+		t.Errorf("other user: %v", err)
+	}
+	a, b := net.Pipe()
+	defer a.Close()
+	defer b.Close()
+	if err := checkPeer(a, os.Getuid()); !errors.Is(err, ErrUntrusted) {
+		t.Errorf("not a unix connection: %v", err)
 	}
 }
 
