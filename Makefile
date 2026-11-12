@@ -27,6 +27,7 @@ fmt:
 
 # Everything that must pass before a commit.
 check: vet
+	bash test/scripts/install_test.sh
 	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
 	go test -race -covermode=atomic -coverprofile=coverage.out ./...
 	GOOS=linux GOARCH=arm64 go vet ./...

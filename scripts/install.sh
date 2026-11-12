@@ -21,7 +21,9 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "Note: add \$HOME/.local/bi
 if ! "$dest" doctor >/dev/null 2>&1; then
   echo "The sandbox needs a one-time permission on this system (Ubuntu 24.04+)."
   if ask "Install the AppArmor rule for $dest now (needs sudo)?"; then
-    "$here/scripts/install-apparmor.sh" "$dest" ${yes:+--yes}
+    apparmor_args=("$dest")
+    if [ "$yes" = 1 ]; then apparmor_args+=(--yes); fi
+    "$here/scripts/install-apparmor.sh" "${apparmor_args[@]}"
   fi
 fi
 
