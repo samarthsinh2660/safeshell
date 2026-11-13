@@ -49,6 +49,8 @@ Usage:
   safeshell ai setup|status|stop|bench      download the built-in model (once) / show AI state / stop it / measure it
   safeshell voice [setup [--yes]|status|--text]
                                             speak a request (local speech engine; set up once with  voice setup)
+  safeshell learn [on|off|status]           learning mode: one line after each command that passes, saying what it does
+                                            and the safer form (off by default)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
   safeshell snapshots                       list saved snapshots
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
@@ -117,6 +119,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runVoice(args[1:], stdout, stderr, color)
 	case "ask":
 		return runAsk(args[1:], stdout, stderr, color)
+	case "learn":
+		return runLearn(args[1:], stdout, stderr)
 	case "undo":
 		return runUndo(args[1:], stdout, stderr)
 	case "snapshots":

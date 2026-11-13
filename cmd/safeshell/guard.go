@@ -84,6 +84,8 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	aiReview(&a, stderr)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)
+	} else {
+		learnNote(stderr, a, color)
 	}
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true

@@ -1,8 +1,11 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
@@ -172,5 +175,47 @@ func TestLoadReportsAnUnreadableFile(t *testing.T) {
 	t.Setenv("SAFESHELL_AI", "")
 	if _, err := LoadEffective(write(t, "{")); err == nil {
 		t.Error("LoadEffective must pass on a broken file")
+	}
+}
+
+func TestSetLearnChangesOnlyItsKey(t *testing.T) {
+	p := write(t, `{"x":{"a":[1,2]},"ai":{"mode":"off"}}`)
+	if err := SetLearn(p, true); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	var m map[string]any
+	want := map[string]any{"x": map[string]any{"a": []any{1.0, 2.0}}, "ai": map[string]any{"mode": "off"}, "learn": true}
+	if err := json.Unmarshal(b, &m); err != nil || !reflect.DeepEqual(m, want) {
+		t.Errorf("%s %v", b, err)
+	}
+	q := filepath.Join(t.TempDir(), "new", "c.json") // a missing file gets just the key
+	if err := SetLearn(q, false); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(q); strings.Contains(string(b), "mode") || !strings.Contains(string(b), `"learn": false`) {
+		t.Errorf("%s", b)
+	}
+	bad := write(t, "{") // a damaged file is refused and left as it was
+	if err := SetLearn(bad, true); err == nil {
+		t.Error("a damaged file must be refused")
+	}
+	if b, _ := os.ReadFile(bad); string(b) != "{" {
+		t.Errorf("damaged file changed: %s", b)
+	}
+	if err := SetLearn(filepath.Join(p, "x", "c.json"), true); err == nil { // under a file
+		t.Error("expected an error under a file")
+	}
+	if os.Getuid() != 0 { // a folder that cannot be written to
+		ro := filepath.Join(t.TempDir(), "ro")
+		if err := os.Mkdir(ro, 0o500); err != nil {
+			t.Fatal(err)
+		}
+		if err := SetLearn(filepath.Join(ro, "c.json"), true); err == nil {
+			t.Error("a read-only folder must be an error")
+		}
+		if err := SetLearn(filepath.Join(ro, "new", "c.json"), true); err == nil {
+			t.Error("a folder that cannot be made must be an error")
+		}
 	}
 }

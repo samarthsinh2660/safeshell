@@ -104,6 +104,7 @@ Work as normal. Inside your prompt:
 | `safeshell models list` | print the models your active cloud provider offers (one per line, the one in use marked) |
 | `/help` | guided help (also `safeshell help`) |
 | `safeshell undo` | restore what the last approved command changed |
+| `safeshell learn on` | learning mode: one line after each command that passes, saying what it does and the safer form (`off` to stop; see `safeshell help learn`) |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
 | Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
 

@@ -65,6 +65,16 @@ SafeShell turns them into a command and checks it like anything you typed.
      safeshell voice status     which recorder, engine and model it would use
 Setup installs cmake, g++ and a recorder (pipewire-bin) if they are missing. The recording is deleted right
 after it is read, and nothing leaves your machine: the speech engine runs locally.`},
+	{"learn", "Learning mode: see what each command does", `Turn it on once:
+     safeshell learn on         (off again with  safeshell learn off;  safeshell learn status  shows which)
+Then every command that runs without a warning gets one line after it is checked, for example:
+     $ cp a b
+     Learn: R1 Reversible. Copies files. An existing file at the destination is overwritten.
+The line says what the command does, its level and why, and adds "Safer: ..." when there is a safer form.
+Commands that only read (R0) get no line. Commands SafeShell stops or asks about are already
+explained in full, so they get nothing extra.
+It only adds output: it never changes what is allowed or blocked, and it needs no AI.
+The setting is "learn": true in ~/.config/safeshell/config.json.`},
 	{"undo", "Undo and snapshots", `When you approve a risky command, SafeShell first saves the files it will change.
      safeshell undo            put back the most recent change and verify every file matches
      safeshell undo ID         undo a specific one
@@ -78,6 +88,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell explain <cmd>           the analysis plus a plain-English explanation (needs AI)
    safeshell explain --why <cmd>     which rule and evidence set the level (works without AI)
    safeshell ask <english>           turn English into a checked command
+   safeshell learn [on|off|status]   learning mode: one line on what each passing command does
    safeshell undo / safeshell snapshots     restore / list
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
    safeshell ai setup|status|stop    manage the built-in AI

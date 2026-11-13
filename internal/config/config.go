@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/ai/providers"
@@ -16,7 +17,10 @@ import (
 
 // Config holds every setting. The zero value is valid.
 type Config struct {
-	AI struct {
+	// Learn turns on learning mode: one line after each command that passes
+	// without a warning, saying what it does and the safer form.
+	Learn bool `json:"learn"`
+	AI    struct {
 		// Mode: auto (local if its files are installed), off, local, cloud, or
 		// hybrid (local first, cloud when local fails).
 		Mode  ai.Mode `json:"mode"`
@@ -101,6 +105,30 @@ func Save(path string, c Config) error {
 		return err
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// SetLearn changes only the "learn" key of the file at path and keeps every
+// other key exactly as it is, including keys this version does not know, so
+// turning learning mode on never freezes today's defaults into the file. A
+// damaged file is refused and left alone.
+func SetLearn(path string, on bool) error {
+	if _, err := Load(path); err != nil {
+		return err
+	}
+	raw := map[string]json.RawMessage{}
+	if b, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(b, &raw) // Load already proved it is a JSON object
+	}
+	raw["learn"] = json.RawMessage(strconv.FormatBool(on))
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(raw, "", "  ")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
