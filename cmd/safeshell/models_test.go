@@ -209,10 +209,10 @@ func TestBuildBackendByMode(t *testing.T) {
 	}
 	p, _ := providers.Find("openai")
 	config.SaveKey(p, "sk-test-key-123456")
-	if b, err := buildBackend(load("cloud", "openai"), d); err != nil || b.Name() != "gpt:gpt-4.1-mini" {
+	if b, err := buildBackend(load("cloud", "openai"), d); err != nil || b.Name() != "gpt:gpt-6-luna" {
 		t.Errorf("cloud: %v %v", b, err)
 	}
-	if b, _ := buildBackend(load("hybrid", "openai"), d); b == nil || b.Name() != "local:qwen2.5-coder-3b+gpt:gpt-4.1-mini" {
+	if b, _ := buildBackend(load("hybrid", "openai"), d); b == nil || b.Name() != "local:qwen2.5-coder-3b+gpt:gpt-6-luna" {
 		t.Errorf("hybrid: %v", b)
 	}
 	if b, _ := buildBackend(load("hybrid", ""), d); b == nil || b.Name() != "local:qwen2.5-coder-3b" {

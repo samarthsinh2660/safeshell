@@ -60,3 +60,21 @@ func TestErrorsNeverEchoTheBody(t *testing.T) {
 		t.Error("empty choices accepted")
 	}
 }
+
+func TestReasoningEffortIsSentOnlyWhenSet(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&got)
+		w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+	Client{URL: srv.URL, Model: "m", Reasoning: "low"}.Complete(context.Background(), "", "")
+	if got["reasoning_effort"] != "low" {
+		t.Errorf("body %v", got)
+	}
+	got = nil
+	Client{URL: srv.URL, Model: "m"}.Complete(context.Background(), "", "")
+	if _, ok := got["reasoning_effort"]; ok {
+		t.Errorf("body %v", got)
+	}
+}

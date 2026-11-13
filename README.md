@@ -142,15 +142,15 @@ Observed effects and the AI can only raise a rating, never lower it. More in
 - **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup` (needs cmake, a C++ compiler and a recorder: `pipewire-bin`, `pulseaudio-utils` or `alsa-utils`).
   The words then go through the same path as typed English, so the usual checks apply.
 
-`safeshell ai bench` measures the active model on 44 labelled requests: local Qwen 3B scores about 97%,
-Gemini flash-lite 95-100%, with no unsafe suggestions in either.
+`safeshell ai bench` measures the active model on 49 labelled requests: local Qwen 3B scores 100% (49 of 49),
+and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default), with no unsafe suggestions in either.
 
 ## Measured
 
 | | |
 |---|---|
 | Held-out classifier accuracy | 92.3% exactly right on 220 commands the rules were never tuned on |
-| English to command | 97% (local Qwen 3B) on 44 requests |
+| English to command | 100% (local Qwen 3B, 49 of 49) on 49 requests |
 | Sandbox safety sweep | 492 labelled commands run through the real binary: no file outside the sandbox changed |
 | Tests | unit, fuzz, and integration tests on a real terminal and the real kernel |
 
