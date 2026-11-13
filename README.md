@@ -37,7 +37,7 @@ terminal accidents are one keystroke from irreversible, and the shell gives no w
 sits between you and the shell and answers one question first: **can this be undone?**
 
 - **Rates every command, R0 to R4,** by reversibility, not by how scary it sounds.
-- **Shows the real effect.** Risky commands run in a rootless sandbox (user namespaces + OverlayFS) on a copy of your files, with the network blocked and watched. You see what would be deleted, which processes and disks it would touch, before anything happens.
+- **Shows the real effect.** Risky commands run in a rootless sandbox (user namespaces + OverlayFS) on a copy of your files, with the network blocked and watched. You see what would be deleted, which processes and disks it would touch, and which files and commits a risky `git` command would lose, before anything happens.
 - **Blocks with a reason and a safer alternative,** and still lets you say "do it anyway".
 - **Undo that is verified.** Before an approved risky command runs, the files it will change are saved; `safeshell undo` puts them back and checks the result.
 - **Optional AI helper.** Type plain English and get a command that is checked like any other. The AI can only make a command look riskier, never safer. Runs locally or with your own Claude, GPT or Gemini key.

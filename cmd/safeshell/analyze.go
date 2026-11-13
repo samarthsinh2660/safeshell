@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
@@ -20,9 +21,26 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
 
+// gitRunner runs the read-only repository queries in the caller's environment.
+// It is a test seam: tests replace it with a fake.
+var gitRunner = realGitRunner
+
+// inspectBudget is the most time one inspector may spend asking other programs.
+const inspectBudget = 15 * time.Second
+
 // analyze is replaced in tests.
 var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
-	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices}}
+	env := callerEnv(ctx)
+	inspectRepo := func(cmds []shellparse.Command) []domain.Effect {
+		if envHas(env, "GIT_DIR", "GIT_WORK_TREE") {
+			return nil // the repository is not the one in the folder, so it is not looked at
+		}
+		bctx, cancel := context.WithTimeout(ctx, inspectBudget)
+		defer cancel()
+		run := func(dir string, args ...string) (string, error) { return gitRunner(bctx, env, dir, args...) }
+		return effects.InspectGit(run, cwd, cmds)
+	}
+	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices, inspectRepo}}
 	return e.Analyze(ctx, line, cwd)
 }
 
@@ -47,12 +65,91 @@ func inspectDisks(cmds []shellparse.Command) []domain.Effect {
 
 // realRunner runs a read-only program with a short timeout and a plain locale.
 func realRunner(name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	return runLimited(context.Background(), toolTimeout, append(os.Environ(), "LC_ALL=C", "LANG=C"), "", name, args...)
+}
+
+const toolTimeout = 8 * time.Second
+
+// runLimited runs a program, found through the PATH in env, in dir and returns
+// its output, giving up after timeout or when ctx ends. The program and
+// everything it starts run in their own process group, which is killed on
+// timeout and again when the program has finished, so nothing outlives the
+// query; a child that keeps the output open cannot hold the call longer than a
+// second more.
+func runLimited(ctx context.Context, timeout time.Duration, env []string, dir, name string, args ...string) (string, error) {
+	path, err := lookPath(env, name)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Dir, cmd.Env = dir, env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = time.Second
+	defer func() {
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		}
+	}()
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// lookPath finds name in the PATH given in env (the requesting shell's, not
+// this process's), skipping relative entries so the current folder is never searched.
+func lookPath(env []string, name string) (string, error) {
+	if strings.Contains(name, "/") {
+		return name, nil
+	}
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "PATH="); ok {
+			for _, d := range filepath.SplitList(v) {
+				p := filepath.Join(d, name)
+				if fi, err := os.Stat(p); filepath.IsAbs(d) && err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
+					return p, nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("%s was not found in the PATH of your shell", name)
+}
+
+// callerEnv is the environment of the shell that asked, which the daemon
+// receives with the request, or this process's own when there is none.
+func callerEnv(ctx context.Context) []string {
+	if env := engine.EnvFrom(ctx); env != nil {
+		return env
+	}
+	return os.Environ()
+}
+
+// envHas reports whether env sets any of the named variables.
+func envHas(env []string, names ...string) bool {
+	for _, e := range env {
+		k, _, _ := strings.Cut(e, "=")
+		for _, n := range names {
+			if k == n {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// realGitRunner runs one read-only git query in dir. It never prompts, never
+// takes the optional index lock, ignores system-wide git settings and
+// attributes, and drops the variables that name a pager or an external diff.
+func realGitRunner(ctx context.Context, env []string, dir string, args ...string) (string, error) {
+	var clean []string
+	for _, e := range env {
+		if k, _, _ := strings.Cut(e, "="); k != "GIT_EXTERNAL_DIFF" && k != "GIT_PAGER" && k != "PAGER" {
+			clean = append(clean, e)
+		}
+	}
+	clean = append(clean, "LC_ALL=C", "LANG=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1")
+	return runLimited(ctx, toolTimeout, clean, dir, "git", args...)
 }
 
 func inspectPackages(cmds []shellparse.Command) []domain.Effect {

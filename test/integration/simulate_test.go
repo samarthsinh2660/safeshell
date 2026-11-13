@@ -453,6 +453,52 @@ func TestAnalyzeListsWhatDependsOnAServiceBeingStopped(t *testing.T) {
 	}
 }
 
+func TestAnalyzeListsWhatAGitCommandWouldLose(t *testing.T) {
+	if _, err := os.Stat(ssBin); err != nil { // the inspection reads git only, so the sandbox is not needed
+		t.Skip("bin/safeshell not built (run: make build)")
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", "/dev/null") // the binary under test inherits these, so no setting of this machine's leaks in
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		c.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "a.txt")
+	run("commit", "-q", "-m", "first")
+
+	a := analyze(t, "--cwd", dir, "git reset --hard")
+	if e, ok := a.effect("git"); !ok || e.Evidence != "INSPECTED" || !strings.Contains(e.Summary, "nothing would be lost") {
+		t.Fatalf("clean repository: %+v", e)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a = analyze(t, "--cwd", dir, "git reset --hard")
+	e, ok := a.effect("git")
+	if !ok || e.Evidence != "INSPECTED" || !strings.Contains(strings.Join(e.Details, "\n"), "changed a.txt") {
+		t.Fatalf("edited file: %+v", e)
+	}
+	if a.Level != "R3" {
+		t.Errorf("level %s", a.Level)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "a.txt")); string(b) != "edited\n" {
+		t.Error("the preview changed the real file")
+	}
+}
+
 func TestSandboxNotesOnlyConcernWhatTheCommandTouches(t *testing.T) {
 	needSandbox(t)
 	d := fixture(t)

@@ -5,9 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
@@ -164,5 +168,133 @@ func TestSimulateVerboseShowsEveryNote(t *testing.T) {
 	_, out, _ = runSS("simulate", "--verbose", "--cwd", "/work", "rm", "/work/x")
 	if !strings.Contains(out, "Warning: boot note") || strings.Contains(out, "hidden") {
 		t.Errorf("verbose:\n%s", out)
+	}
+}
+
+func TestRealGitRunnerRunsInTheGivenFolderWithACleanEnvironment(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	dir := t.TempDir()
+	env := append(os.Environ(), "GIT_PAGER=evil-pager", "GIT_EXTERNAL_DIFF=evil-diff", "PAGER=evil-pager")
+	if out, err := realGitRunner(context.Background(), env, dir, "--version"); err != nil || !strings.HasPrefix(out, "git version") {
+		t.Errorf("%q %v", out, err)
+	}
+	if out, err := realGitRunner(context.Background(), env, dir, "var", "GIT_PAGER"); err != nil || strings.Contains(out, "evil") {
+		t.Errorf("the pager from the environment was kept: %q %v", out, err)
+	}
+	if _, err := realGitRunner(context.Background(), env, dir, "rev-parse", "--git-dir"); err == nil {
+		t.Error("an empty folder is not a repository")
+	}
+}
+
+func TestRunLimitedStopsAtTheTimeoutEvenWhenAGrandchildKeepsTheOutputOpen(t *testing.T) {
+	start := time.Now()
+	_, err := runLimited(context.Background(), time.Second, os.Environ(), "", "sh", "-c", "sleep 6 & sleep 30")
+	if err == nil || time.Since(start) > 3*time.Second {
+		t.Errorf("returned after %v with %v", time.Since(start), err)
+	}
+	dir := t.TempDir()
+	if out, err := runLimited(context.Background(), time.Second, []string{"X=seen", "PATH=/bin:/usr/bin"}, dir, "sh", "-c", "pwd; echo $X"); err != nil || !strings.Contains(out, dir) || !strings.Contains(out, "seen") {
+		t.Errorf("%q %v", out, err)
+	}
+}
+
+func TestRunLimitedKillsWhatTheProgramLeavesBehindAndHonoursTheRequest(t *testing.T) {
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "pid")
+	// The parent exits at once; its child keeps running and holding the pipe.
+	script := "sleep 30 >/dev/null 2>&1 & echo $! > " + pidFile
+	if _, err := runLimited(context.Background(), 5*time.Second, os.Environ(), "", "sh", "-c", script); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+	gone := false
+	for i := 0; i < 50 && !gone; i++ {
+		time.Sleep(20 * time.Millisecond)
+		gone = syscall.Kill(pid, 0) != nil
+	}
+	if !gone {
+		syscall.Kill(pid, syscall.SIGKILL)
+		t.Error("a descendant outlived the query")
+	}
+	if _, err := runLimited(context.Background(), time.Second, []string{"PATH=/nonexistent"}, "", "sh"); err == nil {
+		t.Error("a program that is not in the requester's PATH must not run")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := runLimited(ctx, 5*time.Second, os.Environ(), "", "sleep", "5"); err == nil {
+		t.Error("a request that has ended must not start a query")
+	}
+}
+
+func TestLookPathUsesThePathOfTheRequestersShell(t *testing.T) {
+	bin := t.TempDir()
+	tool := filepath.Join(bin, "git")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\npwd\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "plain"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := lookPath([]string{"PATH=relative::" + bin}, "git"); err != nil || p != tool {
+		t.Errorf("%q %v", p, err)
+	}
+	for _, env := range [][]string{{"PATH=" + bin}, {"PATH=/nonexistent"}, {}} {
+		if _, err := lookPath(env, "plain"); err == nil {
+			t.Errorf("%v: a file that is not executable was found", env)
+		}
+	}
+	if p, err := lookPath(nil, "/bin/sh"); err != nil || p != "/bin/sh" {
+		t.Errorf("%q %v", p, err)
+	}
+	dir := t.TempDir()
+	out, err := realGitRunner(context.Background(), []string{"PATH=" + bin}, dir)
+	if err != nil || strings.TrimSpace(out) != dir {
+		t.Errorf("must run the client's program in the client's folder: %q %v", out, err)
+	}
+}
+
+func TestCallerEnvIsTheRequestersWhenThereIsOne(t *testing.T) {
+	if env := callerEnv(context.Background()); len(env) != len(os.Environ()) {
+		t.Errorf("no request environment should mean ours: %v", env)
+	}
+	ctx := engine.WithEnv(context.Background(), []string{"KUBECONFIG=/theirs", "GIT_DIR=/x"})
+	env := callerEnv(ctx)
+	if len(env) != 2 || !envHas(env, "KUBECONFIG") || !envHas(env, "NOPE", "GIT_DIR") || envHas(env, "GIT", "KUBE") {
+		t.Errorf("%v", env)
+	}
+}
+
+func TestAnalyzeAsksTheRepositoryWhatWouldBeLost(t *testing.T) {
+	old := gitRunner
+	t.Cleanup(func() { gitRunner = old })
+	var gotDir string
+	var gotEnv []string
+	gitRunner = func(_ context.Context, env []string, dir string, args ...string) (string, error) {
+		gotDir, gotEnv = dir, env
+		if strings.Contains(strings.Join(args, " "), " status ") {
+			return " M a.txt\x00", nil
+		}
+		return "", nil
+	}
+	dir := t.TempDir()
+	reset := func(ctx context.Context) (found bool, a engine.Analysis) {
+		a = analyze(ctx, "git reset --hard", dir)
+		for _, e := range a.Effects {
+			found = found || (e.Kind == domain.EffectGit && strings.Contains(e.Summary, "discard 1 changed file(s)"))
+		}
+		return found, a
+	}
+	if found, a := reset(engine.WithEnv(context.Background(), []string{"KUBECONFIG=/theirs"})); !found || gotDir != dir || !envHas(gotEnv, "KUBECONFIG") {
+		t.Errorf("dir %q env %v effects %+v", gotDir, gotEnv, a.Effects)
+	}
+	gotDir = ""
+	if found, _ := reset(engine.WithEnv(context.Background(), []string{"GIT_DIR=/elsewhere"})); found || gotDir != "" {
+		t.Errorf("a repository chosen by the environment must not be looked at (asked %q)", gotDir)
 	}
 }

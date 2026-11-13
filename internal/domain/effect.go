@@ -30,6 +30,7 @@ const (
 	EffectReview   EffectKind = "review"
 	EffectPackages EffectKind = "packages"
 	EffectServices EffectKind = "services"
+	EffectGit      EffectKind = "git"
 )
 
 // Effect is one thing a command would do, with how sure we are.
