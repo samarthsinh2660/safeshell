@@ -1,5 +1,3 @@
-// Package classify rates a command line by how reversible its effects are.
-// It is pure: no file, process or network access.
 package classify
 
 import (

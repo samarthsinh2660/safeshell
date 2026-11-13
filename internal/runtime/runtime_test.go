@@ -360,3 +360,75 @@ func TestTheAccessKeyIsNotOnTheCommandLine(t *testing.T) {
 		t.Error("key file does not hold the key")
 	}
 }
+
+func TestBuildSizeAndGPU(t *testing.T) {
+	b := Build{Variant: "cuda12", Main: Asset{Size: 10}, Extra: []Asset{{Size: 3}, {Size: 2}}}
+	if b.Size() != 15 || !b.GPU() {
+		t.Errorf("%d %v", b.Size(), b.GPU())
+	}
+	if (Build{Variant: "cpu", Main: Asset{Size: 7}}).GPU() || (Build{Variant: "cpu", Main: Asset{Size: 7}}).Size() != 7 {
+		t.Error("the cpu build uses no graphics card")
+	}
+}
+
+func TestDefaultDirsFollowXDG(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/data")
+	t.Setenv("XDG_STATE_HOME", "/state")
+	if d := DefaultDirs(); d.Data != "/data/safeshell" || d.State != "/state/safeshell" {
+		t.Errorf("%+v", d)
+	}
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("HOME", "/home/alice")
+	if d := DefaultDirs(); d.Data != "/home/alice/.local/share/safeshell" || d.State != "/home/alice/.local/state/safeshell" {
+		t.Errorf("%+v", d)
+	}
+}
+
+// install puts a runnable engine of build b under d.
+func install(t *testing.T, d Dirs, b Build) {
+	t.Helper()
+	bin := d.ServerBin(b)
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInstalledListsEveryInstalledCandidateBestFirst(t *testing.T) {
+	machine(t, "", true) // Vulkan present, no NVIDIA driver
+	d := Dirs{Data: t.TempDir()}
+	if got := d.Installed("amd64", "auto"); len(got) != 0 {
+		t.Fatalf("nothing installed yet: %v", got)
+	}
+	cands := Candidates("amd64", "auto")
+	if variants(cands) != "vulkan,cpu" {
+		t.Fatalf("candidates %s", variants(cands))
+	}
+	install(t, d, cands[1])
+	if got := variants(d.Installed("amd64", "auto")); got != "cpu" {
+		t.Errorf("only the cpu build is installed: %s", got)
+	}
+	install(t, d, cands[0])
+	if got := variants(d.Installed("amd64", "auto")); got != "vulkan,cpu" {
+		t.Errorf("both are installed, best first: %s", got)
+	}
+}
+
+func TestInstallPreferredDownloadsNothingWhenEnginesArePresent(t *testing.T) {
+	machine(t, "", true)
+	d := Dirs{Data: t.TempDir()}
+	for _, b := range Candidates("amd64", "auto") {
+		install(t, d, b)
+	}
+	var out strings.Builder
+	if err := d.InstallPreferred(context.Background(), nil, "amd64", "auto", &out); err != nil || out.Len() != 0 {
+		t.Errorf("%v %q", err, out.String())
+	}
+	err := d.InstallPreferred(context.Background(), nil, "riscv64", "auto", &out)
+	if err == nil || !strings.Contains(err.Error(), "riscv64") {
+		t.Errorf("an architecture with no engine: %v", err)
+	}
+}

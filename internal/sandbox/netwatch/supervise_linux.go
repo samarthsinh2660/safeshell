@@ -18,7 +18,6 @@ import (
 const (
 	ioctlRecv    = 0xC0502100 // SECCOMP_IOCTL_NOTIF_RECV
 	ioctlSend    = 0xC0182101 // SECCOMP_IOCTL_NOTIF_SEND
-	ioctlIDValid = 0x40082102 // SECCOMP_IOCTL_NOTIF_ID_VALID
 	flagContinue = 1          // SECCOMP_USER_NOTIF_FLAG_CONTINUE
 )
 

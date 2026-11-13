@@ -9,3 +9,10 @@ coverage.*
 *.part
 /dist/
 node_modules/
+_build/
+debian/safeshell/
+debian/.debhelper/
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
+.claude/

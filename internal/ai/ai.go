@@ -61,7 +61,7 @@ func (c Chain) Complete(ctx context.Context, system, user string) (string, error
 	return "", errors.Join(errs...)
 }
 
-// Redact removes the home directory and user name before text leaves the machine.
+// Redact replaces the home directory path with ~ before text leaves the machine.
 func Redact(s string) string {
 	if h, err := os.UserHomeDir(); err == nil && len(h) > 1 {
 		s = strings.ReplaceAll(s, h, "~")

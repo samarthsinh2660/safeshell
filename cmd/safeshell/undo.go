@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/snapshot"
+	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
 // snapshotLimit is the most file data one snapshot may copy.
@@ -17,11 +17,7 @@ const snapshotLimit = 2 << 30
 
 // snapshotDir is where snapshots live; tests replace it.
 var snapshotDir = func() string {
-	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
-		return filepath.Join(d, "safeshell", "snapshots")
-	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".local", "share", "safeshell", "snapshots")
+	return filepath.Join(xdg.Dir("XDG_DATA_HOME", ".local", "share"), "snapshots")
 }
 
 // targets lists the paths a simulated run changed: files to save, and files it
@@ -29,7 +25,7 @@ var snapshotDir = func() string {
 func targets(changes []sandbox.Change) []snapshot.Target {
 	var ts []snapshot.Target
 	for _, c := range changes {
-		ts = append(ts, snapshot.Target{Path: "/" + c.Path, Create: c.Kind == sandbox.Created})
+		ts = append(ts, snapshot.Target{Path: c.Abs(), Create: c.Kind == sandbox.Created})
 	}
 	return ts
 }

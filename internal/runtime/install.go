@@ -65,7 +65,7 @@ func (d Dirs) InstallPreferred(ctx context.Context, client *http.Client, goarch,
 	return nil
 }
 
-// Installed returns the first candidate that is ready to run.
+// Installed returns every candidate engine that is installed, best first.
 func (d Dirs) Installed(goarch, gpu string) []Build {
 	var out []Build
 	for _, b := range Candidates(goarch, gpu) {

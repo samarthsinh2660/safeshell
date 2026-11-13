@@ -41,7 +41,7 @@ This document is the "so we stay consistent" contract for a two-person team: whe
         |     |                  AIBackend   Policy   Audit     |
         |     v                                                 |
         |   adapters: sandbox/overlayfs, sandbox/effects,       |
-        |             snapshot, ai/local, ai/cloud, ...         |
+        |             snapshot, ai/local, ai/anthropic, ...     |
         +---------------------------+---------------------------+
                                     |
               real filesystem   ~/.local/share/safeshell (snapshots, audit)
@@ -88,27 +88,34 @@ safeshell/                        repository root = Go module root
 │   ├── policy/               allow / ask / block / override rules, trusted paths
 │   ├── sandbox/              Simulator port + diff helpers
 │   │   ├── overlayfs/        rootless namespaces + OverlayFS, observed file diff   (linux only)
-│   │   └── effects/          network, process, service, database, git, pkg, disk adapters
+│   │   ├── effects/          network, process, service, database, git, pkg, disk adapters
+│   │   └── netwatch/         seccomp user-notification supervisor that records network attempts   (linux only)
 │   ├── snapshot/             snapshot store + restore (btrfs/zfs or path-copy)
-│   ├── undo/                 undo plans + verification in the sandbox
+│   ├── undo/                 undo plans + verification in the sandbox   (planned, #119; today `safeshell undo` lives in cmd/safeshell/undo.go on top of snapshot)
 │   ├── report/               Verdict + Effects -> impact report (content, not rendering)
 │   ├── nl/                   natural language -> candidate command
-│   ├── ai/                   Backend interface, guards, redaction, prompts
-│   │   ├── local/            OpenAI-compatible local server (Ollama / llama-server), no cgo
-│   │   └── cloud/            hosted model with the user's own key
-│   ├── daemon/               server lifecycle, worker pool, single-instance lock
-│   ├── ipc/                  wire protocol + client
-│   ├── shellhook/            embedded bash/zsh/fish scripts + installer
+│   ├── ai/                   Backend interface, retry and HTTP helpers, guards, redaction, impact review prompts
+│   │   ├── local/            managed llama-server (downloaded by `safeshell ai setup`), no cgo, no Ollama
+│   │   ├── openai/           OpenAI-style chat client (GPT, Gemini's compatible endpoint, the local server)
+│   │   ├── anthropic/        Anthropic Messages API client (its backends are named "cloud:...")
+│   │   └── providers/        the hosted providers on offer: ids, keys, default models, model lists
+│   ├── models/               catalog of local models
+│   ├── runtime/              downloads, verifies and runs the local engine (llama.cpp); XDG data dirs
+│   ├── install/              adds and removes the shell hook in the user's startup file
+│   ├── ipc/                  wire protocol + client + server for the daemon socket (the daemon command is in cmd/safeshell/daemon.go)
+│   ├── shellhook/            embedded bash/zsh scripts + the hook text
 │   ├── voice/                microphone recorder + local whisper.cpp transcriber, set up by `safeshell voice setup`
 │   ├── audit/                append-only action log
 │   ├── ui/                   terminal output and prompts (/dev/tty)
-│   ├── config/               config.toml + XDG paths
+│   ├── config/               settings and API keys (JSON) under the XDG config folder
+│   ├── xdg/                  the XDG base folders, standard library only (used by config, audit, runtime)
 │   └── platform/             capability detection, powers `safeshell doctor`
 ├── eval/                     evaluation harness + labelled corpus (metrics for the report)
-│   └── corpus/
+│   ├── corpus/               development set: edit freely
+│   └── heldout/              independent set that only grows; enforces the accuracy floors
 ├── test/integration/         end-to-end tests that need a real shell / namespaces / VM
 ├── packaging/                systemd unit, AppArmor profile, .deb files
-└── scripts/                  dev helpers (VM test runner, release)
+└── scripts/                  the installers (install.sh, install-apparmor.sh)
 ```
 
 Why this shape (go.dev's own guidance is to start flat and grow into `internal/` and `cmd/`; `golang-standards/project-layout` is a community convention, not an official standard, so we copy only what we need): `cmd/` holds binaries, `internal/` prevents accidental external imports, and splitting `internal/` by *responsibility* (not by layer name like `models/` or `utils/`) keeps each package small enough for one person to hold in their head.
@@ -119,12 +126,14 @@ Why this shape (go.dev's own guidance is to start flat and grow into `internal/`
 cmd/safeshell  ──►  everything (composition root: builds adapters, injects them into engine)
 
 engine  ──►  domain, classify, policy, report          (+ port interfaces it declares itself)
-adapters (sandbox/*, snapshot, ai/*, undo, nl, daemon, ipc, ui, audit, shellhook, voice)
+adapters (sandbox/*, snapshot, ai/*, nl, ipc, ui, audit, shellhook, voice)
         ──►  domain  (+ engine's ports they implement, + config/platform)
 voice   ──►  runtime (downloads, checksums, unpacking) and the standard library; it never imports engine
 classify ──► domain, shellparse
 shellparse ─► mvdan.cc/sh only
 domain  ──►  standard library only
+report  ──►  domain, shellparse, and the data types of sandbox (FileDiff, Change, NetAttempt, Warning): the one place a pure package reads an adapter package's types
+ai      ──►  domain, report; it never imports engine (cmd/safeshell builds ai.Facts from an engine.Analysis)
 ```
 
 Hard rules:

@@ -25,7 +25,7 @@ func Touched(line, cwd, home string, changes []sandbox.Change) (paths []string, 
 		t.paths = append(t.paths, filepath.Clean(cwd))
 	}
 	for _, c := range changes {
-		t.paths = append(t.paths, filepath.Clean("/"+c.Path))
+		t.paths = append(t.paths, filepath.Clean(c.Abs()))
 	}
 	res, err := shellparse.Parse(line)
 	if err != nil {

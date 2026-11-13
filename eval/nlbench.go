@@ -62,7 +62,7 @@ func LoadRequests() ([]Request, error) {
 		case "?":
 			r.MayAsk, r.MaxLevel = true, domain.R2
 		default:
-			l, ok := map[string]domain.Level{"R0": domain.R0, "R1": domain.R1, "R2": domain.R2, "R3": domain.R3, "R4": domain.R4}[f[3]]
+			l, ok := domain.ParseLevel(f[3])
 			if !ok {
 				return nil, fmt.Errorf("line %d: bad level %q", n, f[3])
 			}

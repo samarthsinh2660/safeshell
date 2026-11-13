@@ -91,3 +91,9 @@ func TestListModelsSendsTheBearerKey(t *testing.T) {
 		t.Fatalf("%v %v %q %q", got, err, auth, path)
 	}
 }
+
+func TestName(t *testing.T) {
+	if got := (Client{Label: "gpt:m"}).Name(); got != "gpt:m" {
+		t.Error(got)
+	}
+}

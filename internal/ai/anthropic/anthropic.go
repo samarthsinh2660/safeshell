@@ -1,12 +1,10 @@
-// Package cloud talks to the Anthropic Messages API.
-package cloud
+// Package anthropic talks to the Anthropic Messages API.
+package anthropic
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +22,13 @@ type Anthropic struct {
 
 func (a Anthropic) Name() string { return "cloud:" + a.model() }
 
+func (a Anthropic) base() string {
+	if b := strings.TrimRight(a.URL, "/"); b != "" {
+		return b
+	}
+	return "https://api.anthropic.com"
+}
+
 func (a Anthropic) model() string {
 	if a.Model == "" {
 		return "claude-haiku-5-5"
@@ -36,7 +41,7 @@ func (a Anthropic) ListModels(ctx context.Context) ([]ai.ModelInfo, error) {
 	if a.Key == "" {
 		return nil, errors.New("no API key (set ANTHROPIC_API_KEY)")
 	}
-	return ai.FetchModels(ctx, a.Client, "cloud:anthropic", strings.TrimRight(a.URL, "/")+"/v1/models?limit=100",
+	return ai.FetchModels(ctx, a.Client, "cloud:anthropic", a.base()+"/v1/models?limit=100",
 		map[string]string{"x-api-key": a.Key, "anthropic-version": "2023-06-01"})
 }
 
@@ -44,35 +49,17 @@ func (a Anthropic) Complete(ctx context.Context, system, user string) (string, e
 	if a.Key == "" {
 		return "", errors.New("no API key (set ANTHROPIC_API_KEY)")
 	}
-	base := strings.TrimRight(a.URL, "/")
-	if base == "" {
-		base = "https://api.anthropic.com"
-	}
-	body, _ := json.Marshal(map[string]any{
+	body := map[string]any{
 		"model": a.model(), "max_tokens": 1500, "temperature": 0, "system": system,
 		"messages": []map[string]string{{"role": "user", "content": user}},
-	})
+	}
 	c := a.Client
 	if c == nil {
 		c = &http.Client{Timeout: 30 * time.Second}
 	}
-	resp, err := ai.Do(ctx, c, func() (*http.Request, error) {
-		req, err := http.NewRequest(http.MethodPost, base+"/v1/messages", bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("x-api-key", a.Key)
-		req.Header.Set("anthropic-version", "2023-06-01")
-		return req, nil
-	})
+	b, err := ai.Post(ctx, c, a.Name(), a.base()+"/v1/messages", map[string]string{"x-api-key": a.Key, "anthropic-version": "2023-06-01"}, body)
 	if err != nil {
 		return "", err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		return "", ai.StatusError(a.Name(), resp.StatusCode) // the body can echo the prompt, so it is not shown
 	}
 	var out struct {
 		Content []struct{ Type, Text string } `json:"content"`
