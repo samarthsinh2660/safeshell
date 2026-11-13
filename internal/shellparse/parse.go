@@ -35,6 +35,9 @@ type Command struct {
 	// FetchedArgs are the indexes in Args of words holding a $(...) that
 	// downloads, as in  eval "$(curl ...)"  or  sh -c "$(curl ...)".
 	FetchedArgs []int
+	// Substituted are the words of the commands inside $(...) and <(...) in
+	// the arguments, so a file read there can still be seen.
+	Substituted []string
 	Redirs      []Redirect
 	// Stdin is text fed to the command by a pipe from echo/printf, a here-string
 	// or a here-document. It is how `echo "DROP TABLE x" | psql` is seen.
@@ -211,12 +214,14 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 	words := make([]string, 0, len(call.Args))
 	downloads := false
 	var fetched []int // indexes in words
+	var substituted []string
 	for _, a := range call.Args {
 		words = append(words, wordString(a))
 		idx := len(words) - 1
 		syntax.Walk(a, func(n syntax.Node) bool {
 			switch x := n.(type) {
 			case *syntax.CmdSubst:
+				substituted = append(substituted, substWords(x)...)
 				saved := w.cwd
 				for _, s := range x.Stmts {
 					if fetchesNetwork(s) && !slices.Contains(fetched, idx) {
@@ -227,6 +232,7 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 				w.cwd = saved
 				return false
 			case *syntax.ProcSubst:
+				substituted = append(substituted, substWords(x)...)
 				for _, s := range x.Stmts {
 					if fetchesNetwork(s) {
 						downloads = true
@@ -241,7 +247,7 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 	if len(words) == 0 {
 		return Command{}, false
 	}
-	cmd := Command{Background: st.Background, Remote: w.remote, Downloads: downloads, Redirs: redirects(st.Redirs), Cwd: w.cwd, Stdin: hereText(st.Redirs)}
+	cmd := Command{Background: st.Background, Remote: w.remote, Downloads: downloads, Redirs: redirects(st.Redirs), Cwd: w.cwd, Stdin: hereText(st.Redirs), Substituted: substituted}
 	rest := unwrap(words, &cmd)
 	if len(rest) == 0 {
 		// `exec > file` has no command left, but the redirect still happens.
@@ -258,6 +264,18 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 		w.stdinCode(&cmd, depth)
 	}
 	return cmd, true
+}
+
+// substWords returns every word written inside a substitution.
+func substWords(n syntax.Node) []string {
+	var ws []string
+	syntax.Walk(n, func(n syntax.Node) bool {
+		if w, ok := n.(*syntax.Word); ok {
+			ws = append(ws, wordString(w))
+		}
+		return true
+	})
+	return ws
 }
 
 // nested queues code embedded in the arguments of c.
