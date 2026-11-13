@@ -32,13 +32,33 @@ func (l *Level) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
-	for i, n := range [...]string{"R0", "R1", "R2", "R3", "R4"} {
-		if s == n {
-			*l = Level(i)
-			return nil
+	v, ok := ParseLevel(s)
+	if !ok {
+		return fmt.Errorf("unknown level %q", s)
+	}
+	*l = v
+	return nil
+}
+
+// ParseLevel reads "R0" to "R4" exactly; ok is false for anything else.
+func ParseLevel(s string) (Level, bool) {
+	for l := R0; l <= R4; l++ {
+		if l.String() == s {
+			return l, true
 		}
 	}
-	return fmt.Errorf("unknown level %q", s)
+	return 0, false
+}
+
+// ExitCode is the process exit status for a command rated l: 4 for R4, 3 for R3, otherwise 0.
+func (l Level) ExitCode() int {
+	switch l {
+	case R4:
+		return 4
+	case R3:
+		return 3
+	}
+	return 0
 }
 
 // Alternative is a safer command offered instead of the one typed.
@@ -60,8 +80,8 @@ type Verdict struct {
 	Level        Level         `json:"level"`
 	Findings     []Finding     `json:"findings"`
 	Alternatives []Alternative `json:"alternatives,omitempty"`
-	// Unclassified lists commands the rules do not know. They are rated R1 for
-	// now; later phases hand them to the sandbox and the AI layer.
+	// Unclassified lists commands the rules do not know. They are rated R1 here;
+	// the sandbox run and the AI review can raise that.
 	Unclassified []string `json:"unclassified,omitempty"`
 }
 

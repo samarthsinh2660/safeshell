@@ -107,3 +107,70 @@ func TestPathHonoursXDG(t *testing.T) {
 		t.Error(Path())
 	}
 }
+
+func TestPathsFallBackToTheHomeFolder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "/home/alice")
+	if Path() != "/home/alice/.config/safeshell/config.json" || KeysPath() != "/home/alice/.config/safeshell/keys.json" {
+		t.Error(Path(), KeysPath())
+	}
+	t.Setenv("XDG_CONFIG_HOME", "/cfg")
+	if Path() != "/cfg/safeshell/config.json" {
+		t.Error(Path())
+	}
+}
+
+func TestSaveFailsCleanly(t *testing.T) {
+	d := t.TempDir()
+	file := filepath.Join(d, "file")
+	os.WriteFile(file, nil, 0o600)
+	if Save(filepath.Join(file, "sub", "c.json"), Config{}) == nil {
+		t.Error("a folder that cannot be made")
+	}
+	tmpBlocked := filepath.Join(d, "a.json")
+	os.Mkdir(tmpBlocked+".tmp", 0o700)
+	if Save(tmpBlocked, Config{}) == nil {
+		t.Error("a temporary file that cannot be written")
+	}
+	target := filepath.Join(d, "b.json")
+	os.MkdirAll(filepath.Join(target, "inside"), 0o700)
+	if Save(target, Config{}) == nil {
+		t.Error("a target that cannot be replaced")
+	}
+}
+
+func TestSaveKeyFailsCleanly(t *testing.T) {
+	p, _ := providers.Find("openai")
+	t.Setenv("OPENAI_API_KEY", "")
+
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	os.WriteFile(filepath.Join(cfg, "safeshell"), nil, 0o600) // the settings folder is a file
+	if SaveKey(p, "sk-1234567890") == nil {
+		t.Error("a folder that cannot be made")
+	}
+
+	cfg = t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	os.MkdirAll(KeysPath()+".tmp", 0o700)
+	if SaveKey(p, "sk-1234567890") == nil {
+		t.Error("a temporary file that cannot be written")
+	}
+
+	cfg = t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	os.MkdirAll(filepath.Join(KeysPath(), "inside"), 0o700)
+	if SaveKey(p, "sk-1234567890") == nil {
+		t.Error("a key file that cannot be replaced")
+	}
+}
+
+func TestLoadReportsAnUnreadableFile(t *testing.T) {
+	if _, err := Load(t.TempDir()); err == nil { // a folder, not a file
+		t.Error("expected a read error")
+	}
+	t.Setenv("SAFESHELL_AI", "")
+	if _, err := LoadEffective(write(t, "{")); err == nil {
+		t.Error("LoadEffective must pass on a broken file")
+	}
+}

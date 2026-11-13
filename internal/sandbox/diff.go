@@ -34,6 +34,9 @@ type Change struct {
 	Notable []string
 }
 
+// Abs is the change's path with its leading slash.
+func (c Change) Abs() string { return "/" + c.Path }
+
 // FileDiff is the observed effect of a command on the filesystem.
 type FileDiff struct {
 	Changes   []Change

@@ -21,8 +21,6 @@ func Norm(p string) string {
 	return path.Clean(p)
 }
 
-// Critical reports whether deleting or rewriting p would damage the whole
-// system or the whole home directory, and says what p is.
 // Critical reports whether deleting or rewriting a path would damage the whole
 // system or home directory, and says what the path is.
 func Critical(raw string) (bool, string) {
@@ -48,6 +46,8 @@ func Critical(raw string) (bool, string) {
 	return false, ""
 }
 
+// UnderSystem reports whether raw is inside a system directory such as /etc or
+// /usr. /home, /dev, /run and /var are left out: they hold user and runtime data.
 func UnderSystem(raw string) bool {
 	p := Norm(raw)
 	for _, d := range systemDirs {
@@ -67,6 +67,7 @@ func wholeCwd(p string) bool {
 	return false
 }
 
+// IsBlockDevice reports whether p is a disk, partition or loop device under /dev.
 func IsBlockDevice(p string) bool {
 	for _, pre := range []string{"/dev/sd", "/dev/hd", "/dev/vd", "/dev/xvd", "/dev/nvme", "/dev/mmcblk", "/dev/disk", "/dev/mapper", "/dev/md", "/dev/loop"} {
 		if strings.HasPrefix(p, pre) {

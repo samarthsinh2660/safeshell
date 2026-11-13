@@ -3,11 +3,9 @@
 package openai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -52,29 +50,17 @@ func (c Client) Complete(ctx context.Context, system, user string) (string, erro
 	if c.Reasoning != "" {
 		req["reasoning_effort"] = c.Reasoning
 	}
-	body, _ := json.Marshal(req)
 	cl := c.Client
 	if cl == nil {
 		cl = &http.Client{Timeout: 90 * time.Second}
 	}
-	resp, err := ai.Do(ctx, cl, func() (*http.Request, error) {
-		hr, err := http.NewRequest(http.MethodPost, strings.TrimRight(c.URL, "/")+"/chat/completions", bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		hr.Header.Set("Content-Type", "application/json")
-		if c.Key != "" {
-			hr.Header.Set("Authorization", "Bearer "+c.Key)
-		}
-		return hr, nil
-	})
+	header := map[string]string{}
+	if c.Key != "" {
+		header["Authorization"] = "Bearer " + c.Key
+	}
+	b, err := ai.Post(ctx, cl, c.Label, strings.TrimRight(c.URL, "/")+"/chat/completions", header, req)
 	if err != nil {
 		return "", err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if resp.StatusCode != http.StatusOK {
-		return "", ai.StatusError(c.Label, resp.StatusCode) // the body can echo the prompt, so it is not shown
 	}
 	var out struct {
 		Choices []struct{ Message struct{ Content string } }

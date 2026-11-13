@@ -208,8 +208,8 @@ func setup(t *testing.T, have ...string) Setup {
 }
 
 func TestEnsureEngineNeedsBuildTools(t *testing.T) {
-	const msg = "Building the speech engine needs cmake and a C++ compiler. On Ubuntu:  sudo apt install build-essential cmake  then run this again."
-	for _, have := range [][]string{nil, {"cmake"}, {"g++"}} {
+	const msg = "Building the speech engine needs cmake, make and a C++ compiler. On Debian or Ubuntu:  sudo apt-get install cmake g++ make  then run  safeshell voice setup  again."
+	for _, have := range [][]string{nil, {"cmake"}, {"g++"}, {"cmake", "g++"}} {
 		if _, err := setup(t, have...).EnsureEngine(context.Background()); err == nil || err.Error() != msg {
 			t.Errorf("%v: %v", have, err)
 		}
@@ -230,7 +230,7 @@ func TestEnsureEngineRejectsWrongArchiveBeforeExtracting(t *testing.T) {
 		_, _ = w.Write([]byte("not the real archive"))
 	}))
 	defer srv.Close()
-	s := setup(t, "cmake", "g++")
+	s := setup(t, "cmake", "g++", "make")
 	s.Client = &http.Client{Transport: redirect{srv.URL}}
 	s.Run = func(context.Context, string, ...string) ([]byte, error) {
 		t.Error("nothing may be built from an archive that failed its checksum")
@@ -323,5 +323,149 @@ func TestStatus(t *testing.T) {
 	s.LookPath = lookIn("whisper-cli")
 	if st := s.Status(); !st.EngineFromPATH || st.EngineBin != "/usr/bin/whisper-cli" {
 		t.Errorf("%+v", st)
+	}
+}
+
+func TestMissingBuildToolsAndPackages(t *testing.T) {
+	for _, tc := range []struct {
+		have     []string
+		missing  string
+		recorder bool
+		pkgs     string
+	}{
+		{nil, "cmake,g++,make", false, "cmake,g++,make,pipewire-bin"},
+		{[]string{"cmake", "c++", "make"}, "", true, ""},
+		{[]string{"cmake", "make"}, "g++", true, "g++"},
+		{[]string{"g++", "make"}, "cmake", false, "cmake,pipewire-bin"},
+		{[]string{"cmake", "clang++"}, "make", true, "make"},
+	} {
+		got := setup(t, tc.have...).missingBuildTools()
+		if strings.Join(got, ",") != tc.missing || strings.Join(packages(got, tc.recorder), ",") != tc.pkgs {
+			t.Errorf("%v: %v %v", tc.have, got, packages(got, tc.recorder))
+		}
+	}
+}
+
+func asker(answer string, ok bool, asked *int) func(string) (string, bool) {
+	return func(string) (string, bool) { *asked++; return answer, ok }
+}
+
+// fakeInstall gives s an apt-get whose install makes every tool appear.
+func fakeInstall(t *testing.T, s *Setup, calls *[]string, result error) {
+	installed := false
+	s.LookPath = func(n string) (string, error) {
+		if installed {
+			return "/usr/bin/" + n, nil
+		}
+		return lookIn("apt-get")(n)
+	}
+	s.RunTTY = func(_ context.Context, n string, a ...string) error {
+		*calls = append(*calls, n+" "+strings.Join(a, " "))
+		installed = result == nil
+		return result
+	}
+}
+
+func TestEnsureTools(t *testing.T) {
+	ctx := context.Background()
+	const cmd = "sudo apt-get install -y cmake g++ make pipewire-bin"
+	var calls []string
+	var asked int
+
+	// Nothing to build: no prompt, no install, and a missing recorder is only a note.
+	s := setup(t, "cmake", "g++", "make", "arecord")
+	s.RunTTY = func(context.Context, string, ...string) error { t.Error("nothing to install"); return nil }
+	if err := s.EnsureTools(ctx, false, asker("", true, &asked)); err != nil || asked != 0 {
+		t.Errorf("%v %d", err, asked)
+	}
+	s = setup(t, "whisper-cli") // an engine on PATH: no compiler needed, no recorder
+	out := &strings.Builder{}
+	s.Out = out
+	if err := s.EnsureTools(ctx, false, asker("", true, &asked)); err != nil || asked != 0 || !strings.Contains(out.String(), "no recorder") || !strings.Contains(out.String(), "pulseaudio-utils") {
+		t.Errorf("%v %d %q", err, asked, out.String())
+	}
+
+	// No apt-get: name what to install.
+	err := setup(t, "arecord").EnsureTools(ctx, true, asker("", true, &asked))
+	if err == nil || !strings.Contains(err.Error(), "cmake, g++, make") || !strings.Contains(err.Error(), "package manager") || asked != 0 {
+		t.Errorf("%v", err)
+	}
+
+	// Yes and --yes install; a missing recorder is installed in the same step.
+	for name, tc := range map[string]struct {
+		yes    bool
+		answer string
+	}{"y": {false, "y"}, "Yes": {false, " Yes "}, "enter": {false, ""}, "--yes": {true, "never asked"}} {
+		calls, asked = nil, 0
+		s = setup(t)
+		out = &strings.Builder{}
+		s.Out = out
+		fakeInstall(t, &s, &calls, nil)
+		if err := s.EnsureTools(ctx, tc.yes, asker(tc.answer, true, &asked)); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+		if len(calls) != 1 || calls[0] != cmd || !strings.Contains(out.String(), cmd) || (tc.yes != (asked == 0)) || strings.Contains(out.String(), "no recorder") {
+			t.Errorf("%s: %v %q asked %d", name, calls, out.String(), asked)
+		}
+	}
+
+	// A recorder that is already there is not part of the install; build tools missing alone are.
+	calls = nil
+	s = setup(t, "arecord")
+	fakeInstall(t, &s, &calls, nil)
+	inner := s.LookPath
+	s.LookPath = func(n string) (string, error) {
+		if n == "arecord" {
+			return "/usr/bin/arecord", nil
+		}
+		return inner(n)
+	}
+	if err := s.EnsureTools(ctx, true, nil); err != nil || len(calls) != 1 || calls[0] != "sudo apt-get install -y cmake g++ make" {
+		t.Errorf("%v %v", err, calls)
+	}
+
+	// No, no answer (end of input) and other answers: nothing runs.
+	for name, tc := range map[string]struct {
+		answer string
+		ok     bool
+		want   string
+	}{"no": {"n", true, "nothing was installed"}, "other": {"maybe", true, "nothing was installed"}, "end of input": {"", false, "could not read an answer"}, "end of input with text": {"y", false, "could not read an answer"}} {
+		calls, asked = nil, 0
+		s = setup(t, "apt-get")
+		s.RunTTY = func(_ context.Context, n string, a ...string) error { calls = append(calls, n); return nil }
+		err := s.EnsureTools(ctx, false, asker(tc.answer, tc.ok, &asked))
+		if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), "safeshell voice setup") || len(calls) != 0 || asked != 1 {
+			t.Errorf("%s: %v %v", name, err, calls)
+		}
+	}
+
+	// Ctrl-C while the question is open: cancelled, and nothing runs.
+	calls = nil
+	cctx, cancel := context.WithCancel(ctx)
+	s = setup(t, "apt-get")
+	s.RunTTY = func(_ context.Context, n string, a ...string) error { calls = append(calls, n); return nil }
+	err = s.EnsureTools(cctx, false, func(string) (string, bool) { cancel(); return "", true })
+	if !errors.Is(err, context.Canceled) || len(calls) != 0 {
+		t.Errorf("%v %v", err, calls)
+	}
+
+	// The install fails, or leaves tools missing.
+	s = setup(t, "apt-get")
+	s.RunTTY = func(context.Context, string, ...string) error { return errors.New("exit 100") }
+	if err := s.EnsureTools(ctx, true, nil); err == nil || !strings.Contains(err.Error(), "exit 100") || !strings.Contains(err.Error(), "sudo apt-get update") {
+		t.Errorf("%v", err)
+	}
+	s.RunTTY = func(context.Context, string, ...string) error { return nil }
+	if err := s.EnsureTools(ctx, true, nil); err == nil || !strings.Contains(err.Error(), "still missing") {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestRunTTYRunsAProgram(t *testing.T) {
+	if err := RunTTY(context.Background(), "true"); err != nil {
+		t.Skip("no true:", err)
+	}
+	if RunTTY(context.Background(), "false") == nil {
+		t.Error("a failing program must fail")
 	}
 }
