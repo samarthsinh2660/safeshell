@@ -4,6 +4,8 @@ import (
 	"os"
 	"path"
 	"strings"
+
+	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
 
 var systemDirs = []string{"/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/boot", "/var", "/opt", "/sys", "/proc", "/dev", "/root", "/home", "/srv", "/run"}
@@ -109,6 +111,8 @@ func WriteTarget(cmd, t string, appending bool, appendAlt string) (f Finding, ok
 		return f.WithAlt("cp "+Shq(t)+" "+Shq(t)+".bak", "make a backup of the file first"), true
 	case UnderSystem(t):
 		return Finding{Level: R2, Command: cmd, Reason: "Appends to the system file " + t + "."}, true
+	case appending && shellparse.IsStartupFile(t):
+		return Finding{Level: R2, Command: cmd, Reason: "Adds to " + t + ", which your shell runs every time it starts. Whatever is added keeps running later, unseen."}, true
 	case appending:
 		return Finding{Level: R1, Command: cmd, Reason: "Appends to " + t + "."}, true
 	}

