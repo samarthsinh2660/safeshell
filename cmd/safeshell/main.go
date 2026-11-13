@@ -159,24 +159,24 @@ func printCheck(w io.Writer, line string, v domain.Verdict, color bool) {
 	c := newPalette(color)
 	col := [...]string{c.green, c.green, c.yellow, c.red, c.red}[v.Level]
 	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, v.Level, v.Level.Label(), c.reset, decision[v.Level])
-	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, line, c.reset)
+	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, report.Printable(line), c.reset)
 	for _, f := range v.Findings {
 		if f.Level == domain.R0 && v.Level > domain.R0 {
 			continue
 		}
-		fmt.Fprintf(w, "\n  %s%s%s  %s\n", c.bold, f.Level, c.reset, f.Reason)
+		fmt.Fprintf(w, "\n  %s%s%s  %s\n", c.bold, f.Level, c.reset, report.Printable(f.Reason))
 		if f.Command != line {
-			fmt.Fprintf(w, "      %s%s%s\n", c.dim, f.Command, c.reset)
+			fmt.Fprintf(w, "      %s%s%s\n", c.dim, report.Printable(f.Command), c.reset)
 		}
 	}
 	if len(v.Alternatives) > 0 {
 		fmt.Fprintf(w, "\n%sSafer options%s\n", c.bold, c.reset)
 		for i, a := range v.Alternatives {
-			fmt.Fprintf(w, "  %d) %s%s%s\n     %s\n", i+1, c.green, a.Command, c.reset, a.Note)
+			fmt.Fprintf(w, "  %d) %s%s%s\n     %s\n", i+1, c.green, report.Printable(a.Command), c.reset, report.Printable(a.Note))
 		}
 	}
 	if len(v.Unclassified) > 0 {
-		fmt.Fprintf(w, "\n%sNot recognised yet: %s (rated R1; later phases test these in a sandbox)%s\n", c.dim, strings.Join(v.Unclassified, ", "), c.reset)
+		fmt.Fprintf(w, "\n%sNot recognised yet: %s (rated R1; later phases test these in a sandbox)%s\n", c.dim, report.Printable(strings.Join(v.Unclassified, ", ")), c.reset)
 	}
 }
 
@@ -257,7 +257,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	spec.Line = strings.Join(args, " ")
 	res, err := simulate(context.Background(), spec)
 	if err != nil {
-		fmt.Fprintf(stderr, "safeshell simulate: %v\n", err)
+		fmt.Fprintf(stderr, "safeshell simulate: %s\n", report.Printable(err.Error()))
 		return 1
 	}
 	if asJSON {
@@ -282,7 +282,7 @@ func simReport(w io.Writer, line, cwd string, r sandbox.Result, verbose bool) {
 		status = "timed out"
 	}
 	t := r.Diff.Totals()
-	fmt.Fprintf(w, "Simulated in %s (%s). Your real files were not touched.\n$ %s\n\n", r.Duration.Round(time.Millisecond), status, line)
+	fmt.Fprintf(w, "Simulated in %s (%s). Your real files were not touched.\n$ %s\n\n", r.Duration.Round(time.Millisecond), status, report.Printable(line))
 	fmt.Fprintf(w, "  created   %s\n  modified  %s\n  deleted   %s", report.Files(t.Created), report.Files(t.Modified), report.Files(t.Deleted))
 	if t.Deleted > 0 {
 		fmt.Fprintf(w, " (%s)", report.HumanBytes(t.DeletedBytes))
@@ -306,12 +306,12 @@ func simReport(w io.Writer, line, cwd string, r sandbox.Result, verbose bool) {
 			if c.IsDir && c.Files > 0 {
 				extra = fmt.Sprintf("  (%s)", report.Files(c.Files))
 			}
-			fmt.Fprintf(w, "  %-9s /%s%s%s\n", c.Kind, c.Path, dir, extra)
+			fmt.Fprintf(w, "  %-9s /%s%s%s\n", c.Kind, report.Printable(c.Path), dir, extra)
 		}
 	}
 	shown, hidden := sandboxNotes(r.Warnings, line, cwd, r.Diff.Changes, verbose)
 	for _, wn := range shown {
-		fmt.Fprintf(w, "\nWarning: %s\n", wn.Text)
+		fmt.Fprintf(w, "\nWarning: %s\n", report.Printable(wn.Text))
 	}
 	if hidden > 0 {
 		fmt.Fprintln(w)
@@ -330,7 +330,7 @@ func simReport(w io.Writer, line, cwd string, r sandbox.Result, verbose bool) {
 func indent(s string) string {
 	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
 	for i, l := range lines {
-		lines[i] = "  " + l
+		lines[i] = "  " + report.Printable(l)
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

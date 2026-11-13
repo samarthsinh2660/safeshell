@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/samarthsinh2660/safeshell/internal/report"
 )
 
 // Backend is one way of reaching a model.
@@ -91,7 +93,7 @@ func Clean(s string, max int, closing ...string) string {
 		}
 	}
 	s = strings.Map(func(r rune) rune {
-		if r < 32 || r == 127 {
+		if report.Unsafe(r) {
 			return ' '
 		}
 		return r

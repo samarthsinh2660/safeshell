@@ -13,6 +13,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
+	"github.com/samarthsinh2660/safeshell/internal/report"
 )
 
 // aiReview lets the model read the sandbox result and raise the risk. Any
@@ -68,7 +69,7 @@ func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
 		fmt.Fprintln(stderr, "safeshell explain:", firstErrLine(err))
 		return 1
 	}
-	fmt.Fprintf(stdout, "\nIn plain English\n  %s\n", text)
+	fmt.Fprintf(stdout, "\nIn plain English\n  %s\n", report.Printable(text))
 	return 0
 }
 
@@ -108,10 +109,10 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 				in = guardInput()
 			}
 			if len(replies) >= maxClarifications || !isTerminal(in) { // no one to ask: show it like an answer
-				fmt.Fprintf(stderr, "The AI asks: %s\nNothing was run. Try again with more detail.\n", r.Question)
+				fmt.Fprintf(stderr, "The AI asks: %s\nNothing was run. Try again with more detail.\n", report.Printable(r.Question))
 				return 1, true
 			}
-			fmt.Fprintf(stderr, "The AI asks: %s\n> ", r.Question)
+			fmt.Fprintf(stderr, "The AI asks: %s\n> ", report.Printable(r.Question))
 			reply, err := readLine(in)
 			if err != nil || reply == "" {
 				fmt.Fprintln(stderr, "Cancelled. Nothing was run.")
@@ -121,7 +122,7 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 			continue
 		}
 		if r.Command == "" { // a question: show the answer, run nothing
-			fmt.Fprintln(stderr, r.Answer)
+			fmt.Fprintln(stderr, report.Printable(r.Answer))
 			return 1, true
 		}
 		return proposeAndGuard(r, cwd, stdout, stderr, color), true
@@ -170,9 +171,9 @@ func readLine(in io.Reader) (string, error) {
 }
 
 func proposeAndGuard(r nl.Result, cwd string, stdout, stderr io.Writer, color bool) int {
-	fmt.Fprintf(stderr, "Proposed: %s\n", r.Command)
+	fmt.Fprintf(stderr, "Proposed: %s\n", report.Printable(r.Command))
 	if r.Note != "" {
-		fmt.Fprintf(stderr, "          %s\n", r.Note)
+		fmt.Fprintf(stderr, "          %s\n", report.Printable(r.Note))
 	}
 	return guardLine(r.Command, cwd, stdout, stderr, color, true)
 }

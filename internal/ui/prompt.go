@@ -64,10 +64,15 @@ func Choose(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts 
 }
 
 // Proceed asks whether to run a command the assistant wrote. Enter means yes,
-// because the person has just read it and it passed the safety checks.
-func Proceed(in *bufio.Reader, w io.Writer) bool {
-	fmt.Fprint(w, "\nRun it? [Y/n] ")
+// because the person has just read it and it passed the safety checks, unless
+// enterRuns is false (the command changes the shell itself), when Enter means no.
+func Proceed(in *bufio.Reader, w io.Writer, enterRuns bool) bool {
+	if enterRuns {
+		fmt.Fprint(w, "\nRun it? [Y/n] ")
+	} else {
+		fmt.Fprint(w, "\nThis changes your shell itself. Run it? [y/N] ")
+	}
 	s, err := in.ReadString('\n')
 	s = strings.ToLower(strings.TrimSpace(s))
-	return s == "y" || s == "yes" || (s == "" && err == nil)
+	return s == "y" || s == "yes" || (s == "" && err == nil && enterRuns)
 }

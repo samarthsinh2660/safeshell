@@ -57,7 +57,7 @@ func runSnapshots(stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "No snapshots yet.")
 	}
 	for _, m := range ms {
-		fmt.Fprintf(stdout, "%s  %s  %s\n", m.ID, report.HumanBytes(m.Bytes), m.Line)
+		fmt.Fprintf(stdout, "%s  %s  %s\n", m.ID, report.HumanBytes(m.Bytes), report.Printable(m.Line))
 	}
 	return 0
 }
@@ -85,7 +85,7 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "safeshell undo: no such snapshot:", id)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Undoing: %s\n", m.Line)
+	fmt.Fprintf(stdout, "Undoing: %s\n", report.Printable(m.Line))
 	r, err := snapshot.Restore(store, id)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell undo:", err)
@@ -95,7 +95,7 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 	if len(r.Problems) > 0 {
 		fmt.Fprintln(stdout, "NOT fully undone:")
 		for _, p := range r.Problems {
-			fmt.Fprintln(stdout, "  -", p)
+			fmt.Fprintln(stdout, "  -", report.Printable(p))
 		}
 		return 1
 	}
