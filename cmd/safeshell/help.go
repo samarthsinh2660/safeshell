@@ -15,7 +15,9 @@ var helpTopics = []topic{
 2. Get the built-in AI (optional, free, private, one download):
      safeshell ai setup
    or type  /models  to pick a different model, or to connect Claude, GPT or Gemini.
-3. Try it:
+3. See it work, safely:
+     safeshell tour               a one-minute walk-through in a throwaway folder
+4. Try it:
      rm -rf ~/some-folder        SafeShell stops it, shows what would be lost, offers safer options
      show me the biggest files   English becomes a command you can read before it runs
      /help                       this guide, any time`},
@@ -83,14 +85,15 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell install / safeshell uninstall  add or remove the hook in your shell startup file
    safeshell hook bash|zsh           print the shell hook
    safeshell version                 which release this is
-   safeshell doctor                  what this machine supports (sandbox, AI, snapshots)
+   safeshell doctor                  check every part (sandbox, hook, daemon, snapshots, AI) and say what to fix
+   safeshell tour                    a one-minute walk-through: a read, a blocked rm -rf, a snapshot, an undo
    Inside your terminal:  /models   /help`},
 	{"privacy", "What leaves your machine", `Local mode: nothing. The model runs on your computer; the only download is the model itself.
 Cloud mode: the command text you typed (or the English request, folder listing and the sandbox
 summary used for the review) goes to the provider you chose, with your home folder name replaced
 by ~. File contents are never sent. A log of decisions stays on your machine in
 ~/.local/state/safeshell/audit.jsonl.`},
-	{"trouble", "Something is wrong", `safeshell doctor                     shows what is missing on this machine
+	{"trouble", "Something is wrong", `safeshell doctor                     checks every part and says what to do about each problem
 "sandbox unavailable"         Ubuntu 24.04+ needs a one-time rule: scripts/install-apparmor.sh
 "model is not downloaded"     type /models and pick one, or run  safeshell ai setup
 English is not recognised     start the line with ?   or run  safeshell ask "..."

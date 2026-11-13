@@ -56,6 +56,7 @@ if [[ $- == *i* ]]; then
   bind -m vi-command -x '"v": __ss_noedit'
   bind -m vi-command -x '"#": __ss_noedit'
   unset __ss_k
+  export SAFESHELL_HOOK=$$   # this shell's pid; lets safeshell doctor tell that the hook is active in this shell
 fi
 `
 
@@ -106,6 +107,7 @@ for __ss_w in accept-line accept-and-hold accept-line-and-down-history accept-an
   zle -N ${__ss_w} __ss_${__ss_w//-/_}
 done
 unset __ss_w
+if [[ -o interactive ]]; then export SAFESHELL_HOOK=$$; fi   # this shell's pid; lets safeshell doctor tell that the hook is active in this shell
 `
 
 // Script returns the hook for the named shell.

@@ -53,6 +53,7 @@ opts:
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
+	tourHint(stderr)
 	cwd = cwdOr(cwd)
 	line := strings.Join(args, " ")
 	if code, ok := slashCommand(line, stderr); ok {

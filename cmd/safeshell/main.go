@@ -56,7 +56,8 @@ Usage:
   safeshell uninstall                       remove the hook
   safeshell hook bash|zsh                   print the shell hook; add  eval "$(safeshell hook bash)"  to your rc file
   safeshell version                         which release this is
-  safeshell doctor                          show what this machine allows (sandbox, snapshots, AI)
+  safeshell doctor                          check every part: sandbox, hook, daemon, snapshots, AI; says what to fix
+  safeshell tour                            a one-minute walk-through in a throwaway folder (nothing is left behind)
 
 Quote the command so your shell passes it through untouched:
   safeshell check 'rm -rf ~/projects'
@@ -133,6 +134,11 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		}
 		fmt.Fprintln(stdout, "safeshell", version)
 		return 0
+	case "tour":
+		if !unexpectedArgs("tour", args[1:], stderr) {
+			return 2
+		}
+		return runTour(stdout, stderr, color)
 	case "doctor":
 		if !unexpectedArgs("doctor", args[1:], stderr) {
 			return 2

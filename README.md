@@ -88,8 +88,8 @@ git clone https://github.com/samarthsinh2660/safeshell.git && cd safeshell
 make build && bash scripts/install.sh
 ```
 
-Open a new terminal and every command you press Enter on is checked first. Run `safeshell doctor` to see
-what your machine supports. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
+Open a new terminal and every command you press Enter on is checked first. Run `safeshell doctor` to check
+every part (sandbox, hook, daemon, snapshots, AI) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
 otherwise run `scripts/install-apparmor.sh` (uses sudo).
 
 > The command is `safeshell`, not `ss`: `/usr/bin/ss` already belongs to the system's `iproute2`.

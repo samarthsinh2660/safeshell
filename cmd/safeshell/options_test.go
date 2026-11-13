@@ -47,7 +47,7 @@ func TestEverySubcommandAnswersHelpWithoutActing(t *testing.T) {
 	}
 	before := tree(t, home)
 
-	for _, cmd := range []string{"check", "analyze", "simulate", "guard", "explain", "ask", "models", "ai", "voice", "undo", "snapshots", "daemon", "install", "uninstall", "hook", "version", "doctor", "help"} {
+	for _, cmd := range []string{"check", "analyze", "simulate", "guard", "explain", "ask", "models", "ai", "voice", "undo", "snapshots", "daemon", "install", "uninstall", "hook", "version", "doctor", "tour", "help"} {
 		for _, flag := range []string{"--help", "-h"} {
 			code, out, errOut := runSS(cmd, flag)
 			if cmd == "guard" { // a hook runs what guard prints on stdout, so its help goes to stderr and it exits 2
@@ -120,7 +120,7 @@ func TestBadArgumentsExitTwoWithTheNextStep(t *testing.T) {
 	for _, args := range [][]string{
 		{"check", "--bogus"}, {"explain", "--bogus"}, {"ask", "--bogus"},
 		{"analyze", "--bogus", "ls"}, {"simulate", "--bogus", "ls"},
-		{"uninstall", "now"}, {"snapshots", "x"}, {"version", "x"}, {"doctor", "x"},
+		{"uninstall", "now"}, {"snapshots", "x"}, {"version", "x"}, {"doctor", "x"}, {"tour", "x"},
 		{"models", "x"}, {"hook"}, {"install", "--bogus"}, {"daemon", "x"}, {"ai", "x"}, {"voice", "x"}, {"undo", "a", "b"},
 		{"help", "nope"}, {"undo", "--bogus"}, {"guard", "--bogus", "ls"},
 		{"nope", "--help"}, {"uninstal", "--help"}, {"--version", "--help"},

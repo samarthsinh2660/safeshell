@@ -13,7 +13,7 @@ var commandLineCmds = map[string]bool{"check": true, "analyze": true, "simulate"
 var subcommands = map[string]bool{
 	"check": true, "analyze": true, "simulate": true, "explain": true, "ask": true, "guard": true,
 	"models": true, "ai": true, "voice": true, "undo": true, "snapshots": true, "daemon": true,
-	"install": true, "uninstall": true, "hook": true, "version": true, "doctor": true, "help": true,
+	"install": true, "uninstall": true, "hook": true, "version": true, "doctor": true, "tour": true, "help": true,
 }
 
 // wantsHelp is true when -h or --help is among the options of the subcommand

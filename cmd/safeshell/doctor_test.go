@@ -8,8 +8,7 @@ import (
 )
 
 func TestDoctor(t *testing.T) {
-	old := probe
-	defer func() { probe = old }()
+	doctorHome(t) // never read the developer's own hook, snapshots or settings
 
 	probe = func() platform.Report {
 		return platform.Report{Kernel: "6.8.0", UserNS: true, Overlay: true, Seccomp: true, Landlock: true, CgroupV2: true, RootFS: "ext4", Shells: []string{"bash", "zsh"}}
