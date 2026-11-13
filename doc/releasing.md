@@ -87,10 +87,16 @@ shows the main items only.
 | Version | Theme | Contents |
 |---|---|---|
 | **v1.1.0** | Finish what the project promised | Voice requests (#13); the AI asks when a request is unclear; only the relevant sandbox notes (#12); classifier gaps and bypasses (#8, #9, #11, #17); arm64 `.deb` (#14); installer `--yes` fix (#10) |
-| **v1.1.1** | Close the worst safety gaps | The high-priority classifier and hook bypasses, the partly-mirrored sandbox gap, the daemon socket fix, updated cloud models |
-| **v1.2.0** | Learn and see more | Learning mode (#25); read-only previews for git (#26), docker and kubectl (#27); `safeshell history` (#32); choosing the voice model and language (#33) |
-| **v1.3.0** | Shared rules | Team policies for labs and servers (#28); fish shell hook (#31) |
-| **v1.4.0** | Undo on more filesystems | Native btrfs (#29) and ZFS (#30) snapshots |
+| **v1.1.1** | Close the worst safety gaps | Classifier and hook bypasses (#36–#41, #58, #59); the partly-mirrored sandbox gap (#50); daemon socket, sandbox terminal and safe printing hardening; current cloud models and the model picker |
+| **v1.2.0** | Learn and see more | Learning mode (#25); read-only previews for git (#26), docker and kubectl (#27) and databases (#86); `safeshell history` (#32); `explain --why` (#87); a fuller `doctor` (#88); secrets sent over the network (#73) and commands that run later (#72); `--help` on every subcommand (#63) |
+| **v1.3.0** | Trust the sandbox and undo | Correct undo and snapshots (#53, #78); secrets kept out of the audit log (#74); daemon parity (#51); packaging and CI fixes (#64, #65, #67) |
+| **v1.4.0** | Shared rules | Team policies for labs and servers (#28); the remaining classifier gaps (#42–#48, #90); no raw secrets sent to cloud AI (#75) |
+| **v1.5.0** | Undo you can trust | Never overwrite newer work (#92); the right snapshot (#93); quotas (#94); special files and hard links (#95, #96); snapshots without the sandbox (#98) |
+| **v1.6.0** | More shells, terminals and remote machines | fish shell hook (#31); guarding AI coding agents (#99); production host labels for ssh (#100); a GitHub Action and pre-commit hook (#101) |
+| **v1.7.0** | AI, voice, accessibility and other languages | Choosing the voice model and language (#33); requests in Hindi and other languages (#107); plain output for screen readers (#106); a prompt-injection test set (#105) |
+| **v1.8.0** | Servers and supply chain | Strict mode (#111); protected folders (#112); per-project rules (#113); system-wide install (#114); journald and metrics (#115, #116); verifiable releases (#117) |
+| **v1.9.0** | More filesystems and big folders | Native btrfs (#29) and ZFS (#30) snapshots; visible loose files (#70); undo for packages and services (#119); large folders (#120) |
+| **v2.0.0** | Polish for the next major release | AI-proposed safer alternatives checked in the sandbox (#124); "don't ask again here" (#89); status and doctor text fixes (#128); small AI fixes (#125, #127) |
 
 Issues go in milestones; pull requests don't. A pull request belongs to the release whose issue it closes.
 
