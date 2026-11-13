@@ -1,6 +1,9 @@
 package rules
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // flags is a command's arguments split into options and operands.
 type flags struct {
@@ -52,6 +55,29 @@ func (f flags) hasAny(words ...string) bool {
 		}
 	}
 	return false
+}
+
+// globalOpts are the options of a few tools that take a value and may come
+// before the sub-command, such as `git -C repo status`.
+var globalOpts = map[string][]string{
+	"git":     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"},
+	"docker":  {"-H", "--host", "--context", "-c", "--config", "-l", "--log-level", "--tlscacert", "--tlscert", "--tlskey"},
+	"podman":  {"--url", "--connection", "--root", "--runroot", "--log-level"},
+	"kubectl": {"-n", "--namespace", "--context", "--kubeconfig", "-s", "--server", "--token", "--cluster", "--user", "--as", "-v", "--request-timeout"},
+}
+
+// skipGlobals drops the options (and their values) that come before the
+// sub-command, so the sub-command is the first word left.
+func skipGlobals(name string, args []string) []string {
+	opts, ok := globalOpts[name]
+	for ok && len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		n := 1
+		if slices.Contains(opts, args[0]) {
+			n = 2
+		}
+		args = args[min(n, len(args)):]
+	}
+	return args
 }
 
 // sub returns the first operand (the sub-command of git, docker, apt, ...).

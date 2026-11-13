@@ -106,3 +106,25 @@ func TestEveryRuleTableEntryIsNonNil(t *testing.T) {
 		}
 	}
 }
+
+func TestSkipGlobals(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"git", []string{"-C", "/repo", "status"}, []string{"status"}},
+		{"git", []string{"--no-pager", "-c", "a=b", "log"}, []string{"log"}},
+		{"git", []string{"--git-dir=x", "status"}, []string{"status"}},
+		{"git", []string{"-C"}, []string{}},
+		{"docker", []string{"-H", "tcp://x", "ps"}, []string{"ps"}},
+		{"kubectl", []string{"-n", "prod", "get", "pods"}, []string{"get", "pods"}},
+		{"git", nil, nil},
+		{"rm", []string{"-rf", "x"}, []string{"-rf", "x"}},
+	}
+	for _, tc := range tests {
+		if got := skipGlobals(tc.name, tc.args); !slices.Equal(got, tc.want) {
+			t.Errorf("skipGlobals(%s, %v) = %v, want %v", tc.name, tc.args, got, tc.want)
+		}
+	}
+}

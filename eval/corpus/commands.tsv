@@ -349,3 +349,23 @@ R4	sudo --login-class c rm -rf /
 R4	nice --adjustment 5 rm -rf /	
 R4	ionice --class 2 rm -rf /	
 R4	ionice --classdata 4 rm -rf /	
+R3	git -C /repo reset --hard	
+R3	git -C /repo push --force	
+R3	git -C /repo clean -fdx	
+R3	docker -H tcp://x system prune -af	
+R3	docker --context prod volume prune -f	
+R3	kubectl -n prod delete ns prod	
+R0	kubectl -n prod get pods	
+R0	git -C /repo status	
+R4	cp /dev/zero /dev/sda	
+R4	echo x | tee /dev/sda	
+R4	echo 1 | tee /proc/sys/kernel/sysrq	
+R3	cp /dev/null /etc/passwd	
+R0	echo x | tee /dev/null	
+R3	echo x | sudo tee /etc/hosts	
+R1	echo x | tee -a /etc/hosts	
+R0	git --no-pager status	
+R3	docker --log-level debug system prune -af	
+R3	kubectl --server x delete ns y	
+R3	git --namespace foo push -f	
+R2	echo x | tee /etc/hosts	

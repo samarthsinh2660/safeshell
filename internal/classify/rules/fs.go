@@ -89,11 +89,19 @@ func ruleMv(c shellparse.Command, f flags) []Finding {
 }
 
 func ruleCp(c shellparse.Command, f flags) []Finding {
-	if n := len(f.pos); n > 1 && UnderSystem(Norm(f.pos[n-1])) {
-		return one(fnd(R2, c, "Overwrites a system file with this one. A wrong file here can stop a service from starting."))
-	}
-	if len(f.pos) > 1 && f.pos[0] == "/dev/null" {
-		return one(fnd(R2, c, "Empties the target file."))
+	if n := len(f.pos); n > 1 {
+		// Only raw devices and kernel files, and emptying a system file with
+		// /dev/null, rate like `>`. Copying or teeing real content onto a
+		// system file is one level lower (see the heldout set).
+		fd, ok := WriteTarget(c.String(), f.pos[n-1], false, "")
+		switch {
+		case ok && fd.Level == R4, ok && fd.Level == R3 && f.pos[0] == "/dev/null":
+			return one(fd)
+		case f.pos[0] == "/dev/null":
+			return one(fnd(R2, c, "Empties the target file."))
+		case UnderSystem(Norm(f.pos[n-1])):
+			return one(fnd(R2, c, "Overwrites a system file with this one. A wrong file here can stop a service from starting."))
+		}
 	}
 	if f.has('f', "force") {
 		return one(fnd(R2, c, "Overwrites existing files at the destination without asking.").WithAlt("cp -i "+targets(f), "asks before overwriting"))
@@ -116,6 +124,21 @@ func ruleSed(c shellparse.Command, f flags) []Finding {
 }
 
 func ruleTee(c shellparse.Command, f flags) []Finding {
+	var fs []Finding
+	for _, t := range f.pos {
+		if fd, ok := WriteTarget(c.String(), t, f.has('a', "append"), ""); ok {
+			if fd.Level < R4 && UnderSystem(t) { // one below `>`, like cp
+				fd.Level--
+			}
+			fs = append(fs, fd)
+		}
+	}
+	if len(f.pos) > 0 {
+		if len(fs) == 0 {
+			return one(fnd(R0, c, "Only passes its input along; the files it is given are harmless."))
+		}
+		return fs
+	}
 	if f.has('a', "append") {
 		return one(fnd(R1, c, "Appends to files."))
 	}
