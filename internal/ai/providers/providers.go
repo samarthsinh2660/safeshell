@@ -25,8 +25,8 @@ type Provider struct {
 // All is every provider on offer.
 var All = []Provider{
 	{ID: "anthropic", Title: "Claude", Maker: "Anthropic", Env: []string{"ANTHROPIC_API_KEY"}, DefaultModel: "claude-haiku-5-5", KeyURL: "https://console.anthropic.com/settings/keys"},
-	{ID: "openai", Title: "GPT", Maker: "OpenAI", Env: []string{"OPENAI_API_KEY"}, DefaultModel: "gpt-4.1-mini", KeyURL: "https://platform.openai.com/api-keys"},
-	{ID: "gemini", Title: "Gemini", Maker: "Google", Env: []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"}, DefaultModel: "gemini-flash-lite-latest", KeyURL: "https://aistudio.google.com/apikey"},
+	{ID: "openai", Title: "GPT", Maker: "OpenAI", Env: []string{"OPENAI_API_KEY"}, DefaultModel: "gpt-6-luna", KeyURL: "https://platform.openai.com/api-keys"},
+	{ID: "gemini", Title: "Gemini", Maker: "Google", Env: []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"}, DefaultModel: "gemini-3.5-flash-lite", KeyURL: "https://aistudio.google.com/apikey"},
 }
 
 // Find returns the provider with the given id.

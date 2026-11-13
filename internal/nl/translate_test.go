@@ -192,3 +192,18 @@ func TestAnswerBeatsQuestionAndCommandBeatsQuestion(t *testing.T) {
 		t.Errorf("a command wins over a question: %+v %v", r, err)
 	}
 }
+
+func TestAListedToolIsACommandEvenIfNotInstalledHere(t *testing.T) {
+	e := Env{Tools: []string{"nosuchtool-xyz"}}
+	r, err := Translate(context.Background(), &fake{reply: `{"command":"nosuchtool-xyz --all"}`}, "do it", e)
+	if err != nil || r.Command != "nosuchtool-xyz --all" || r.Answer != "" {
+		t.Fatalf("%+v %v", r, err)
+	}
+	r, _ = Translate(context.Background(), &fake{reply: `{"command":"nosuchtool-xyz"}`}, "do it", Env{})
+	if r.Command != "" || r.Answer == "" {
+		t.Errorf("unlisted unknown word should be advice: %+v", r)
+	}
+	if listed("   ", e.Tools) {
+		t.Error("blank command")
+	}
+}

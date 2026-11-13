@@ -17,7 +17,7 @@ import (
 
 // Client is one chat endpoint.
 type Client struct {
-	Label  string // shown in reports, e.g. "gpt:gpt-4.1-mini"
+	Label  string // shown in reports, e.g. "gpt:gpt-6-luna"
 	URL    string // base, e.g. https://api.openai.com/v1
 	Key    string // empty for the local engine
 	Model  string
