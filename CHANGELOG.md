@@ -8,7 +8,7 @@ A safety release: it closes the worst classifier and hook bypasses and hardens t
 
 ### Added
 - `/models` → `choose N` and `safeshell models list` show the models your own API key can use and save your pick. (#131, #133)
-- `safeshell voice setup` offers to install what it needs (`cmake`, `g++`, `pipewire-bin`) with `sudo apt-get`, after asking. `--yes` skips the question.
+- `safeshell voice setup` offers to install what it needs (`cmake`, `g++`, `make`, and `pipewire-bin` when there is no recorder) with `sudo apt-get`, after asking. `--yes` skips the question. (#136)
 
 ### Changed
 - Cloud defaults: OpenAI `gpt-6-luna`, Gemini `gemini-3.5-flash-lite`; Claude is unchanged. The prompt ignores filler words, reads typos as the intended word, and asks instead of guessing a deletion for a vague "clean up". `safeshell ai bench` has 49 requests. (#131)
@@ -16,7 +16,7 @@ A safety release: it closes the worst classifier and hook bypasses and hardens t
 - Commands in the sandbox have no terminal: `/dev/tty` is gone and they start in their own session. Ctrl-C no longer reaches them; the timeout still ends them. (#130)
 - Without an absolute `XDG_RUNTIME_DIR` there is no daemon; commands are checked directly and `safeshell daemon` says why. (#83)
 - CI runs one check per part and requires 100% coverage of changed lines. (#68)
-- Internal clean-up: shared helpers, consistent messages, more tests. `internal/ai/cloud` is now `internal/ai/anthropic`.
+- Internal clean-up: shared helpers, consistent messages, more tests. `internal/ai/cloud` is now `internal/ai/anthropic`. (#136)
 
 ### Fixed
 - Global options before a subcommand no longer hide it (`git -C repo reset --hard`), and `cp`/`tee` are rated by their target (`cp /dev/zero /dev/sda`). (#39, #40)
