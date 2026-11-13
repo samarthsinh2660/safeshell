@@ -15,9 +15,18 @@ import (
 	"time"
 )
 
+// privateDir is a temporary folder only we can write to, whatever the umask.
+func privateDir(t *testing.T) string {
+	t.Helper()
+	d := t.TempDir()
+	if err := os.Chmod(d, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
 func start(t *testing.T, s *Server) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "s.sock")
+	path := filepath.Join(privateDir(t), "s.sock")
 	l, err := Listen(path)
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +144,7 @@ func TestListenReplacesAStaleSocketButNotALiveOne(t *testing.T) {
 	if _, err := Listen(path); err == nil || !strings.Contains(err.Error(), "already running") {
 		t.Errorf("a second daemon: %v", err)
 	}
-	stale := filepath.Join(t.TempDir(), "stale.sock")
+	stale := filepath.Join(privateDir(t), "stale.sock")
 	l, _ := net.Listen("unix", stale)
 	l.(*net.UnixListener).SetUnlinkOnClose(false)
 	l.Close() // leaves the file behind, as a crash would
@@ -153,10 +162,12 @@ func TestSocketPathPrefersTheRuntimeDirectory(t *testing.T) {
 	}
 }
 
-func TestSocketPathIsEmptyWithoutARuntimeDirectory(t *testing.T) {
-	t.Setenv("XDG_RUNTIME_DIR", "")
-	if SocketPath() != "" {
-		t.Error(SocketPath())
+func TestSocketPathIsEmptyWithoutAnAbsoluteRuntimeDirectory(t *testing.T) {
+	for _, v := range []string{"", "relative/run"} {
+		t.Setenv("XDG_RUNTIME_DIR", v)
+		if SocketPath() != "" {
+			t.Errorf("%q: %q", v, SocketPath())
+		}
 	}
 }
 
@@ -185,6 +196,7 @@ func TestCheckOwnerRefusesAnythingNotOurs(t *testing.T) {
 		"unknown owner":     {fakeInfo{mode: fs.ModeSocket | 0o600}, dir, false},
 		"folder of another": {sock, fakeInfo{mode: fs.ModeDir | 0o700, sys: st(me + 1)}, false},
 		"folder not a dir":  {sock, fakeInfo{mode: 0o700, sys: st(me)}, false},
+		"group writable":    {sock, fakeInfo{mode: fs.ModeDir | 0o770, sys: st(me)}, false},
 		"world writable":    {sock, fakeInfo{mode: fs.ModeDir | 0o777, sys: st(me)}, false},
 	} {
 		if err := checkOwner(c.sock, c.dir, me); (err == nil) != c.ok || (err != nil && !errors.Is(err, ErrUntrusted)) {
@@ -194,7 +206,7 @@ func TestCheckOwnerRefusesAnythingNotOurs(t *testing.T) {
 }
 
 func TestCallRefusesAPathThatIsNotOurSocket(t *testing.T) {
-	d := t.TempDir()
+	d := privateDir(t)
 	plain := filepath.Join(d, "plain")
 	if err := os.WriteFile(plain, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -236,7 +248,7 @@ func TestCallRefusesAPeerRunningAsAnotherUser(t *testing.T) {
 }
 
 func TestCallReportsASocketNobodyListensOn(t *testing.T) {
-	stale := filepath.Join(t.TempDir(), "stale.sock")
+	stale := filepath.Join(privateDir(t), "stale.sock")
 	l, _ := net.Listen("unix", stale)
 	l.(*net.UnixListener).SetUnlinkOnClose(false)
 	l.Close()
@@ -246,7 +258,7 @@ func TestCallReportsASocketNobodyListensOn(t *testing.T) {
 }
 
 func TestCheckPeerReadsTheRealConnectionOwner(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "p.sock")
+	path := filepath.Join(privateDir(t), "p.sock")
 	l, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)

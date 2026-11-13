@@ -67,10 +67,10 @@ type Server struct {
 }
 
 // SocketPath is where the daemon listens: $XDG_RUNTIME_DIR/safeshell.sock. It is
-// empty when there is no private runtime folder; there is then no daemon (a
+// empty when there is no absolute runtime folder; there is then no daemon (a
 // shared folder such as /tmp is never used).
 func SocketPath() string {
-	if d := os.Getenv("XDG_RUNTIME_DIR"); d != "" {
+	if d := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(d) {
 		return filepath.Join(d, "safeshell.sock")
 	}
 	return ""
@@ -88,10 +88,10 @@ func owner(fi fs.FileInfo) int {
 }
 
 // checkOwner requires a socket owned by uid inside a folder owned by uid that
-// other users cannot write to.
+// no one else can write to.
 func checkOwner(sock, dir fs.FileInfo, uid int) error {
 	if sock.Mode().Type() != fs.ModeSocket || owner(sock) != uid ||
-		!dir.IsDir() || owner(dir) != uid || dir.Mode().Perm()&0o002 != 0 {
+		!dir.IsDir() || owner(dir) != uid || dir.Mode().Perm()&0o022 != 0 {
 		return ErrUntrusted
 	}
 	return nil
@@ -263,6 +263,8 @@ func failure(id json.RawMessage, code int, msg string) response {
 
 // Call makes one request on a fresh connection and decodes the result into out (which may be nil).
 // It talks only to a socket that belongs to the current user (ErrUntrusted otherwise).
+// The peer check on the connection is the security boundary; the path check
+// before it is an early warning that avoids connecting to an obvious fake.
 func Call(ctx context.Context, path, method string, params, out any) error {
 	uid := os.Getuid()
 	if err := checkPath(path, uid); err != nil {

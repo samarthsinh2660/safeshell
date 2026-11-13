@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -28,7 +27,10 @@ type analyzeParams struct {
 func runDaemon(args []string, stdout, stderr io.Writer) int {
 	path := ipc.SocketPath()
 	if len(args) == 1 && args[0] == "stop" {
-		if err := ipc.Call(context.Background(), path, "shutdown", nil, nil); err != nil {
+		if err := ipc.Call(context.Background(), path, "shutdown", nil, nil); errors.Is(err, ipc.ErrUntrusted) {
+			warnUntrusted(stderr, path)
+			return 1
+		} else if err != nil {
 			fmt.Fprintln(stdout, "The SafeShell daemon is not running.")
 			return 0
 		}
@@ -40,7 +42,7 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if path == "" {
-		fmt.Fprintln(stderr, "safeshell daemon: no private runtime folder was found (XDG_RUNTIME_DIR is not set), so the daemon cannot start. Commands are still checked directly, just a little slower.")
+		fmt.Fprintln(stderr, "safeshell daemon: no private runtime folder was found (XDG_RUNTIME_DIR is not set to a full path), so the daemon cannot start. Commands are still checked directly, just a little slower.")
 		return 1
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -97,30 +99,9 @@ func daemonHandlers(shutdown func()) map[string]ipc.Handler {
 // socketPath is replaced in tests.
 var socketPath = ipc.SocketPath
 
-// daemonEnv is the part of the caller's environment the analysis needs: the
-// variables the simulated command and the tools it runs read. Anything that
-// looks like a credential is never included.
-func daemonEnv(environ []string) []string {
-	var out []string
-	for _, kv := range environ {
-		name, _, _ := strings.Cut(kv, "=")
-		if envAllowed[name] || strings.HasPrefix(name, "LC_") {
-			up := strings.ToUpper(name)
-			if !strings.Contains(up, "KEY") && !strings.Contains(up, "TOKEN") && !strings.Contains(up, "SECRET") && !strings.Contains(up, "PASSWORD") {
-				out = append(out, kv)
-			}
-		}
-	}
-	return out
-}
-
-var envAllowed = map[string]bool{
-	"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true,
-	"PWD": true, "OLDPWD": true, "LANG": true, "LANGUAGE": true, "TERM": true, "TMPDIR": true,
-	"VIRTUAL_ENV": true, "CONDA_PREFIX": true, "KUBECONFIG": true, "DOCKER_HOST": true,
-	"GIT_DIR": true, "GIT_WORK_TREE": true, "GOPATH": true, "GOROOT": true, "NODE_PATH": true,
-	"CARGO_HOME": true, "RUSTUP_HOME": true,
-	"XDG_CONFIG_HOME": true, "XDG_DATA_HOME": true, "XDG_CACHE_HOME": true, "XDG_STATE_HOME": true,
+// warnUntrusted says a socket that is not ours was ignored.
+func warnUntrusted(w io.Writer, path string) {
+	fmt.Fprintf(w, "Warning: %s is not your SafeShell daemon, so it was ignored and the command was checked directly. Delete it to stop this warning.\n", path)
 }
 
 // analyzeFast asks the daemon when one is running and falls back to doing the
@@ -131,12 +112,12 @@ func analyzeFast(ctx context.Context, line, cwd string, stderr io.Writer) engine
 		var a engine.Analysis
 		c, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer cancel()
-		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, daemonEnv(os.Environ())}, &a)
+		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ()}, &a)
 		if err == nil {
 			return a
 		}
 		if errors.Is(err, ipc.ErrUntrusted) {
-			fmt.Fprintln(stderr, "Warning: the SafeShell daemon socket does not belong to you, so it was ignored. Checking directly instead.")
+			warnUntrusted(stderr, socketPath())
 		}
 	}
 	return analyze(ctx, line, cwd)
