@@ -185,6 +185,10 @@ func (b *builder) descend(mount string, depth int) {
 	}
 }
 
+// devices are the device nodes bound into the sandbox. There is deliberately no
+// tty: a command must not reach the user's real terminal.
+var devices = []string{"null", "zero", "full", "random", "urandom"}
+
 // mountPseudo gives the sandbox its own /proc, a minimal /dev and an empty /run.
 func mountPseudo(root string) error {
 	const noexec = syscall.MS_NOSUID | syscall.MS_NODEV | syscall.MS_NOEXEC
@@ -196,7 +200,7 @@ func mountPseudo(root string) error {
 	if err := syscall.Mount("tmpfs", dev, "tmpfs", syscall.MS_NOSUID, "mode=755,size=1m"); err != nil {
 		return fmt.Errorf("mount /dev: %w", err)
 	}
-	for _, n := range []string{"null", "zero", "full", "random", "urandom", "tty"} {
+	for _, n := range devices {
 		target := filepath.Join(dev, n)
 		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY, 0o666)
 		if err != nil {
