@@ -100,7 +100,8 @@ Work as normal. Inside your prompt:
 
 | Type | To |
 |---|---|
-| `/models` | choose the AI: download a local model, or connect Claude, GPT or Gemini with an API key |
+| `/models` | choose the AI: download a local model, or connect Claude, GPT or Gemini with an API key, then `choose N` to pick any model your key offers |
+| `safeshell models list` | print the models your active cloud provider offers (one per line, the one in use marked) |
 | `/help` | guided help (also `safeshell help`) |
 | `safeshell undo` | restore what the last approved command changed |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |

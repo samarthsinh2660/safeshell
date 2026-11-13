@@ -33,6 +33,7 @@ type modelMenu struct {
 	install func(ctx context.Context, cfg config.Config, m models.Model, w io.Writer) error
 	check   func(p providers.Provider, key, model string) error
 	secret  func(prompt string) (string, error)
+	list    func(ctx context.Context, p providers.Provider, key string) ([]ai.ModelInfo, error)
 }
 
 func newModelMenu(in io.Reader, out io.Writer) *modelMenu {
@@ -41,6 +42,7 @@ func newModelMenu(in io.Reader, out io.Writer) *modelMenu {
 		install: installLocal,
 		check:   func(p providers.Provider, key, model string) error { return providers.Check(p.Backend(key, model)) },
 		secret:  readSecret,
+		list:    listCloud,
 	}
 }
 
@@ -52,6 +54,11 @@ func installLocal(ctx context.Context, cfg config.Config, m models.Model, w io.W
 		return err
 	}
 	return d.InstallModel(ctx, nil, m, w)
+}
+
+// listCloud asks a provider which models the key can use.
+func listCloud(ctx context.Context, p providers.Provider, key string) ([]ai.ModelInfo, error) {
+	return p.ListModels(ctx, key)
 }
 
 func readSecret(prompt string) (string, error) {
@@ -102,7 +109,7 @@ func (m *modelMenu) render(c config.Config) {
 		}
 		fmt.Fprintf(m.out, "  %d) %-7s %-10s %-18s %s%s\n", len(models.Catalog)+i+1, p.Title, "("+p.Maker+")", model, key, mark)
 	}
-	fmt.Fprintln(m.out, "\n  A number picks (and downloads or connects) it.   key N: change a key   model N NAME: change a cloud model")
+	fmt.Fprintln(m.out, "\n  A number picks (and downloads or connects) it.   key N: change a key   model N NAME: change a cloud model   choose N: pick from the models your key offers")
 	fmt.Fprintln(m.out, "  off / auto / local / cloud / hybrid: change the mode.   q: leave")
 }
 
@@ -132,6 +139,11 @@ func (m *modelMenu) handle(ctx context.Context, c config.Config, f []string) {
 	case "key":
 		if p, ok := m.cloudAt(f); ok {
 			m.connect(ctx, c, p, true)
+		}
+		return
+	case "choose":
+		if p, ok := m.cloudAt(f); ok {
+			m.choose(ctx, c, p)
 		}
 		return
 	case "model":
@@ -218,12 +230,92 @@ func (m *modelMenu) connect(ctx context.Context, c config.Config, p providers.Pr
 	m.save(c, p.Title+" ("+p.Maker+") is connected and in use.")
 }
 
+// current is the cloud model in use for p: the saved one, or the provider's default.
+func current(c config.Config, p providers.Provider) string {
+	if c.AI.Cloud.Provider == p.ID && c.AI.Cloud.Model != "" {
+		return c.AI.Cloud.Model
+	}
+	return p.DefaultModel
+}
+
+// choose lists the models p offers this key and saves the one the person picks.
+func (m *modelMenu) choose(ctx context.Context, c config.Config, p providers.Provider) {
+	key := config.Key(p)
+	if key == "" {
+		fmt.Fprintf(m.out, "There is no %s key yet. Type the number of %s first to connect it.\n", p.Title, p.Title)
+		return
+	}
+	list, err := m.list(ctx, p, key)
+	if err != nil {
+		fmt.Fprintf(m.out, "Could not list the %s models: %v\nThe model stays %s.\n", p.Title, err, current(c, p))
+		return
+	}
+	if len(list) == 0 {
+		fmt.Fprintf(m.out, "%s offered no models for this key. The model stays %s.\n", p.Title, current(c, p))
+		return
+	}
+	fmt.Fprintf(m.out, "\nModels your %s key can use:\n", p.Title)
+	for i, md := range list {
+		mark, name := "", ""
+		if md.ID == current(c, p) {
+			mark = "  <- in use"
+		}
+		if md.Name != "" {
+			name = "  (" + md.Name + ")"
+		}
+		fmt.Fprintf(m.out, "  %d) %s%s%s\n", i+1, md.ID, name, mark)
+	}
+	in, _ := m.line("Pick a number (Enter keeps the current model): ")
+	n, err := strconv.Atoi(in)
+	if err != nil || n < 1 || n > len(list) {
+		fmt.Fprintf(m.out, "No change. The model stays %s.\n", current(c, p))
+		return
+	}
+	c.AI.Cloud.Provider, c.AI.Cloud.Model = p.ID, list[n-1].ID
+	m.save(c, p.Title+" will use the model "+list[n-1].ID+".")
+}
+
 func (m *modelMenu) save(c config.Config, msg string) {
 	if err := config.Save(m.cfgPath, c); err != nil {
 		fmt.Fprintln(m.out, "Could not save the settings:", err)
 		return
 	}
 	fmt.Fprintln(m.out, msg)
+}
+
+// runModelsList is `safeshell models list`: the models the active cloud provider offers.
+func runModelsList(ctx context.Context, stdout, stderr io.Writer, list func(context.Context, providers.Provider, string) ([]ai.ModelInfo, error)) int {
+	c, err := config.LoadEffective(config.Path())
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell models:", err)
+		return 1
+	}
+	p, ok := providers.Find(c.AI.Cloud.Provider)
+	if !ok {
+		fmt.Fprintln(stderr, "safeshell models: no cloud provider is set. Type /models to connect Claude, GPT or Gemini.")
+		return 1
+	}
+	key := config.Key(p)
+	if key == "" {
+		fmt.Fprintf(stderr, "safeshell models: there is no %s key yet. Type /models to add one.\n", p.Title)
+		return 1
+	}
+	models, err := list(ctx, p, key)
+	if err != nil {
+		fmt.Fprintf(stderr, "safeshell models: could not list the %s models: %v\n", p.Title, err)
+		return 1
+	}
+	for _, md := range models {
+		line := md.ID
+		if md.Name != "" {
+			line += "  (" + md.Name + ")"
+		}
+		if md.ID == current(c, p) {
+			line += "  <- in use"
+		}
+		fmt.Fprintln(stdout, line)
+	}
+	return 0
 }
 
 // runModels is `safeshell models` and the /models command.

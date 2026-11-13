@@ -40,3 +40,23 @@ func TestAnthropicErrorsDoNotEchoTheBody(t *testing.T) {
 		t.Errorf("missing key: %v", err)
 	}
 }
+
+func TestAnthropicListsModels(t *testing.T) {
+	var hdr http.Header
+	var path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hdr, path = r.Header, r.URL.Path
+		w.Write([]byte(`{"data":[{"id":"claude-haiku-5-5","display_name":"Claude Haiku 5.5"}]}`))
+	}))
+	defer srv.Close()
+	got, err := Anthropic{Key: "k", URL: srv.URL + "/"}.ListModels(context.Background())
+	if err != nil || len(got) != 1 || got[0].Name != "Claude Haiku 5.5" || path != "/v1/models" {
+		t.Fatalf("%v %v %q", got, err, path)
+	}
+	if hdr.Get("x-api-key") != "k" || hdr.Get("anthropic-version") == "" {
+		t.Errorf("hdr %v", hdr)
+	}
+	if _, err := (Anthropic{}).ListModels(context.Background()); err == nil || !strings.Contains(err.Error(), "API key") {
+		t.Errorf("missing key: %v", err)
+	}
+}

@@ -44,6 +44,7 @@ Usage:
   safeshell explain <command...>            the analysis plus a plain-English explanation (needs AI)
   safeshell ask <what you want in English>
                                             AI proposes a command; it is checked like any other
+  safeshell models [list]                   choose the AI model (menu), or list the models your cloud key offers
   safeshell ai setup|status                 download the built-in model (once) / show AI state
   safeshell voice [setup|status|--text]     speak a request (local speech engine; set up once with  voice setup)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
@@ -94,6 +95,9 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 	case "uninstall":
 		return runUninstall(stdout, stderr)
 	case "models":
+		if len(args) == 2 && args[1] == "list" {
+			return runModelsList(context.Background(), stdout, stderr, listCloud)
+		}
 		return runModels(guardInput(), stdout)
 	case "help":
 		return runHelp(args[1:], stdout)
