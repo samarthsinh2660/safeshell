@@ -9,25 +9,26 @@ import "fmt"
 const bash = `# SafeShell hook for bash. Add to ~/.bashrc:  eval "$(safeshell hook bash)"
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
 # Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
-__ss_voice() {
-  [[ -n "$SAFESHELL_OFF" ]] && return
+__ss_voice_run() {
+  [[ -n "${SAFESHELL_OFF-}" ]] && return 0
   local out tty rc
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
   out=$(command safeshell voice --text </dev/tty 2>/dev/tty)
   rc=$?
   [[ -n $tty ]] && stty "$tty" </dev/tty
-  [[ $rc -eq 0 ]] || return
+  [[ $rc -eq 0 ]] || return 0
   READLINE_LINE=$out
   READLINE_POINT=${#READLINE_LINE}
 }
-__ss_guard() {
-  [[ -n "$SAFESHELL_OFF" || -z "${READLINE_LINE//[[:space:]]/}" ]] && return
+__ss_voice() { __ss_voice_run || printf '\nSafeShell voice hit an error. Nothing was put on the line.\n' >/dev/tty; }
+__ss_guard_run() {
+  [[ -n "${SAFESHELL_OFF-}" || -z "${READLINE_LINE//[[:space:]]/}" ]] && return 0
   local out rc tty t first unknown=()
   t=${READLINE_LINE#"${READLINE_LINE%%[![:space:]]*}"}; first=${t%%[[:space:]]*}
   # A first word the shell does not know may be plain English: let SafeShell AI try it.
   [[ -z "$(type -t -- "$first" 2>/dev/null)" ]] && unknown=(--unknown)
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # readline leaves the terminal raw, so Enter would not end an answer
-  out=$(command safeshell guard --cwd "$PWD" "${unknown[@]}" -- "$READLINE_LINE" </dev/tty 2>/dev/tty)
+  out=$(command safeshell guard --cwd "$PWD" ${unknown[@]+"${unknown[@]}"} -- "$READLINE_LINE" </dev/tty 2>/dev/tty)
   rc=$?
   [[ -n $tty ]] && stty "$tty" </dev/tty
   case $rc in
@@ -38,15 +39,23 @@ __ss_guard() {
   esac
   READLINE_POINT=${#READLINE_LINE}
 }
+__ss_guard() { __ss_guard_run || printf '\nSafeShell hit an error, so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' >/dev/tty; }
+__ss_noedit() { printf '\nSafeShell: edit-and-run is off because it would run the line unchecked. Edit the line here and press Enter.\n' >/dev/tty; }
 if [[ $- == *i* ]]; then
   shopt -s histverify   # !! and !$ are expanded into the line first, so the guard sees what would really run
-  bind -x '"\C-x\C-s": __ss_guard'
-  bind -x '"\C-x\C-v": __ss_voice'
-  bind '"\C-x\C-a": accept-line'
-  bind '"\C-m": "\C-x\C-s\C-x\C-a"'
-  bind '"\C-j": "\C-x\C-s\C-x\C-a"'   # Ctrl-J also accepts a line, and a pasted newline is one
-  bind '"\C-x\C-o": operate-and-get-next'
-  bind '"\C-o": "\C-x\C-s\C-x\C-o"'   # Ctrl-O runs the line and brings up the next one: guard it too
+  # Bind every keymap, so the guard also works in vi mode, whether it is switched on before or after this runs.
+  for __ss_k in emacs vi-insert vi-command; do
+    bind -m $__ss_k -x '"\C-x\C-s": __ss_guard'
+    bind -m $__ss_k -x '"\C-x\C-v": __ss_voice'
+    bind -m $__ss_k '"\C-x\C-a": accept-line'
+    bind -m $__ss_k '"\C-m": "\C-x\C-s\C-x\C-a"'
+    bind -m $__ss_k '"\C-j": "\C-x\C-s\C-x\C-a"'   # Ctrl-J also accepts a line, and a pasted newline is one
+    bind -m $__ss_k '"\C-x\C-o": operate-and-get-next'
+    bind -m $__ss_k '"\C-o": "\C-x\C-s\C-x\C-o"'   # Ctrl-O runs the line and brings up the next one: guard it too
+    bind -m $__ss_k -x '"\C-x\C-e": __ss_noedit'   # edit-and-execute-command runs the edited line unchecked
+  done
+  bind -m vi-command -x '"v": __ss_noedit'
+  unset __ss_k
 fi
 `
 
@@ -54,7 +63,8 @@ const zsh = `# SafeShell hook for zsh. Add to ~/.zshrc:  eval "$(safeshell hook 
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
 # Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
 __ss_voice() {
-  [[ -n "$SAFESHELL_OFF" ]] && return 0
+  emulate -L zsh
+  [[ -n "${SAFESHELL_OFF-}" ]] && return 0
   local out tty rc
   zle -I
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
@@ -68,7 +78,8 @@ __ss_voice() {
 zle -N __ss_voice
 bindkey '^X^V' __ss_voice
 __ss_check() {   # returns 1 when the line was cancelled
-  [[ -n "$SAFESHELL_OFF" || -z "${BUFFER//[[:space:]]/}" ]] && return 0
+  emulate -L zsh
+  [[ -n "${SAFESHELL_OFF-}" || -z "${BUFFER//[[:space:]]/}" ]] && return 0
   local out rc tty first unknown=()
   first=${${(z)BUFFER}[1]}
   whence -- "$first" >/dev/null 2>&1 || unknown=(--unknown)
@@ -84,10 +95,19 @@ __ss_check() {   # returns 1 when the line was cancelled
   return 0
 }
 setopt hist_verify   # expand !! into the line first so the guard sees what would really run
-# Every widget that submits a line is wrapped, not just accept-line.
+# Every widget that submits a line is wrapped, not just accept-line, so every keymap (viins, vicmd, emacs) is covered.
+__ss_submit() {
+  emulate -L zsh
+  __ss_check
+  case $? in
+    0) ;;
+    1) zle .accept-line; return ;;
+    *) print -u2 "\nSafeShell hit an error, so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this." ;;
+  esac
+  zle .${WIDGET}
+}
 for __ss_w in accept-line accept-and-hold accept-line-and-down-history accept-and-infer-next-history; do
-  eval "__ss_widget_${__ss_w//-/_}() { __ss_check || { zle .accept-line; return }; zle .${__ss_w} }"
-  zle -N ${__ss_w} __ss_widget_${__ss_w//-/_}
+  zle -N ${__ss_w} __ss_submit
 done
 unset __ss_w
 `
