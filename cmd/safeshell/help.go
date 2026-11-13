@@ -44,6 +44,9 @@ short question first. Needs an AI model: see  safeshell help models.`},
      checked, then stored in ~/.config/safeshell/keys.json (readable only by you), or read from
      ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY. Only the command text is sent, with your
      home folder name hidden, and never file contents.
+   To pick a model your key offers: in the menu type  choose N  (N is the cloud number), then a number
+     from the list. Outside the menu,  safeshell models list  prints the same list. If the list cannot
+     be fetched you are told why and the current model stays.
    Modes: auto (local if downloaded), local, cloud, hybrid (local first, cloud as backup), off.
 Graphics: the engine uses CUDA on a recent NVIDIA driver, otherwise Vulkan, otherwise the CPU, and
    falls back automatically if the graphics card fails. See what is used with  safeshell doctor.

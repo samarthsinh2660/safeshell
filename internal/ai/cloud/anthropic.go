@@ -31,6 +31,15 @@ func (a Anthropic) model() string {
 	return a.Model
 }
 
+// ListModels returns the models this key can use, newest first.
+func (a Anthropic) ListModels(ctx context.Context) ([]ai.ModelInfo, error) {
+	if a.Key == "" {
+		return nil, errors.New("no API key (set ANTHROPIC_API_KEY)")
+	}
+	return ai.FetchModels(ctx, a.Client, "cloud:anthropic", strings.TrimRight(a.URL, "/")+"/v1/models?limit=100",
+		map[string]string{"x-api-key": a.Key, "anthropic-version": "2023-06-01"})
+}
+
 func (a Anthropic) Complete(ctx context.Context, system, user string) (string, error) {
 	if a.Key == "" {
 		return "", errors.New("no API key (set ANTHROPIC_API_KEY)")

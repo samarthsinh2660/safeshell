@@ -31,6 +31,12 @@ type Client struct {
 
 func (c Client) Name() string { return c.Label }
 
+// ListModels returns the model ids this key can use.
+func (c Client) ListModels(ctx context.Context) ([]ai.ModelInfo, error) {
+	return ai.FetchModels(ctx, c.Client, c.Label, strings.TrimRight(c.URL, "/")+"/models",
+		map[string]string{"Authorization": "Bearer " + c.Key})
+}
+
 func (c Client) Complete(ctx context.Context, system, user string) (string, error) {
 	tokens := c.Tokens
 	if tokens == "" {

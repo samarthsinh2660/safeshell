@@ -78,3 +78,16 @@ func TestReasoningEffortIsSentOnlyWhenSet(t *testing.T) {
 		t.Errorf("body %v", got)
 	}
 }
+
+func TestListModelsSendsTheBearerKey(t *testing.T) {
+	var auth, path string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth, path = r.Header.Get("Authorization"), r.URL.Path
+		w.Write([]byte(`{"data":[{"id":"gpt-x"}]}`))
+	}))
+	defer srv.Close()
+	got, err := Client{Label: "gpt", URL: srv.URL + "/v1/", Key: "k"}.ListModels(context.Background())
+	if err != nil || len(got) != 1 || got[0].ID != "gpt-x" || auth != "Bearer k" || path != "/v1/models" {
+		t.Fatalf("%v %v %q %q", got, err, auth, path)
+	}
+}
