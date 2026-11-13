@@ -117,9 +117,30 @@ func checkPeer(c net.Conn, uid int) error {
 	return nil
 }
 
+// maxSocketPath is the longest socket path in bytes the system accepts: the
+// sun_path field is 104 bytes on macOS and 108 on Linux, and one is the NUL.
+const maxSocketPath = 103
+
+// ErrPathTooLong means the socket path is longer than the system allows. The
+// message says which folder to shorten.
+var ErrPathTooLong = errors.New("the SafeShell socket path is too long")
+
+// checkLength refuses a socket path the system cannot bind, before the bind
+// fails with a raw "invalid argument" error.
+func checkLength(path string) error {
+	if len(path) <= maxSocketPath {
+		return nil
+	}
+	return fmt.Errorf("%w (%d bytes, the limit is %d): %s. Set XDG_RUNTIME_DIR to a shorter folder, for example one under /tmp, and try again",
+		ErrPathTooLong, len(path), maxSocketPath, path)
+}
+
 // Listen creates the private socket. A leftover socket from a crashed daemon is
 // replaced; one that still answers is an error.
 func Listen(path string) (net.Listener, error) {
+	if err := checkLength(path); err != nil {
+		return nil, err
+	}
 	if _, err := os.Lstat(path); err == nil {
 		if c, err := net.DialTimeout("unix", path, 300*time.Millisecond); err == nil {
 			c.Close()
@@ -267,6 +288,9 @@ func failure(id json.RawMessage, code int, msg string) response {
 // before it is an early warning that avoids connecting to an obvious fake.
 func Call(ctx context.Context, path, method string, params, out any) error {
 	uid := os.Getuid()
+	if err := checkLength(path); err != nil {
+		return err
+	}
 	if err := checkPath(path, uid); err != nil {
 		return err
 	}

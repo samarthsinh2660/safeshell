@@ -292,3 +292,32 @@ func TestCallHonoursItsContext(t *testing.T) {
 		t.Errorf("%v after %v", err, time.Since(start))
 	}
 }
+
+func TestLongSocketPathGetsAClearMessage(t *testing.T) {
+	long := filepath.Join(privateDir(t), strings.Repeat("r", 120), "safeshell.sock")
+	if len(long) <= maxSocketPath {
+		t.Fatalf("test path is only %d bytes", len(long))
+	}
+	if _, err := Listen(long); !errors.Is(err, ErrPathTooLong) || !strings.Contains(err.Error(), "XDG_RUNTIME_DIR") {
+		t.Errorf("Listen: %v", err)
+	}
+	// The client must not try to connect: it reports the same clear reason and
+	// is not mistaken for an untrusted socket, so the hook falls back quietly.
+	err := Call(context.Background(), long, "ping", nil, nil)
+	if !errors.Is(err, ErrPathTooLong) || errors.Is(err, ErrUntrusted) {
+		t.Errorf("Call: %v", err)
+	}
+}
+
+func TestSocketPathAtTheLimitIsAccepted(t *testing.T) {
+	if err := checkLength(filepath.Join(privateDir(t), "s.sock")); err != nil {
+		t.Errorf("short path refused: %v", err)
+	}
+	exact := strings.Repeat("a", maxSocketPath)
+	if err := checkLength(exact); err != nil {
+		t.Errorf("path of exactly %d bytes refused: %v", maxSocketPath, err)
+	}
+	if err := checkLength(exact + "a"); !errors.Is(err, ErrPathTooLong) {
+		t.Errorf("one byte over the limit accepted: %v", err)
+	}
+}
