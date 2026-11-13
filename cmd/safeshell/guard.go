@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -14,7 +13,9 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
+	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/shellhook"
+	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 	"github.com/samarthsinh2660/safeshell/internal/ui"
 )
 
@@ -72,8 +73,11 @@ opts:
 	return guardLine(line, cwd, stdout, stderr, color, false)
 }
 
-// changesShell matches a line that sets up the shell itself (aliases, functions, traps, variables, eval).
-var changesShell = regexp.MustCompile(`(?:^|[\s;&|(])(?:alias|function|trap|export|eval)(?:$|[\s;&|)])`)
+// changesShell is true for a line that sets up the shell itself, or that cannot be read.
+func changesShell(line string) bool {
+	r, err := shellparse.Parse(line)
+	return err != nil || r.ChangesShell
+}
 
 // guardLine analyses one command line, asks if needed, and prints what to run.
 func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed bool) int {
@@ -85,14 +89,14 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true
 	if proposed && a.Decision == domain.Allow {
-		ok = ui.Proceed(in, stderr, !changesShell.MatchString(line)) // the assistant wrote it, so the person always sees it first
+		ok = ui.Proceed(in, stderr, !changesShell(line)) // the assistant wrote it, so the person always sees it first
 	} else {
 		cmd, ok = ui.Choose(in, stderr, line, a.Decision, a.Verdict.Alternatives)
 	}
 	record(a, cmd, ok)
 	if ok && cmd == line { // a replacement command has different effects, so the saved files do not apply
 		if note := protect(a); note != "" {
-			fmt.Fprintln(stderr, note)
+			fmt.Fprintln(stderr, report.Printable(note))
 		}
 	}
 	if !ok {

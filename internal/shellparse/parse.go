@@ -61,6 +61,16 @@ type Pipeline struct{ Cmds []Command }
 type Result struct {
 	Pipelines []Pipeline
 	ForkBomb  bool
+	// ChangesShell is true when the line sets up the running shell itself:
+	// it defines a function, sets a variable, or runs a builtin like export, alias or source.
+	ChangesShell bool
+}
+
+// shellBuiltins are commands whose effect lasts in the shell that runs them.
+var shellBuiltins = map[string]bool{
+	"alias": true, "unalias": true, "export": true, "declare": true, "typeset": true, "readonly": true,
+	"local": true, "unset": true, "trap": true, "eval": true, "source": true, ".": true, "set": true,
+	"shopt": true, "bind": true, "enable": true, "builtin": true, "hash": true,
 }
 
 // Parse analyses line. It returns an error only if the line is not valid shell.
@@ -94,12 +104,18 @@ func (w *walker) single(c Command) {
 }
 
 func (w *walker) stmt(s *syntax.Stmt, depth int) {
+	if _, ok := s.Cmd.(*syntax.DeclClause); ok { // export, declare, typeset, readonly, local
+		w.res.ChangesShell = true
+	}
 	switch c := s.Cmd.(type) {
 	case nil:
 		if len(s.Redirs) > 0 {
 			w.single(Command{Redirs: redirects(s.Redirs), Background: s.Background, Remote: w.remote})
 		}
 	case *syntax.CallExpr:
+		if len(c.Args) == 0 && len(c.Assigns) > 0 || len(c.Args) > 0 && shellBuiltins[wordString(c.Args[0])] {
+			w.res.ChangesShell = true
+		}
 		if cmd, ok := w.build(c, s, depth); ok {
 			w.single(cmd)
 			if cmd.Name == "cd" {
@@ -114,6 +130,7 @@ func (w *walker) stmt(s *syntax.Stmt, depth int) {
 		w.stmt(c.X, depth)
 		w.stmt(c.Y, depth)
 	case *syntax.FuncDecl:
+		w.res.ChangesShell = true
 		if isForkBomb(c) {
 			w.res.ForkBomb = true
 		}

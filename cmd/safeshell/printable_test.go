@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -124,11 +125,30 @@ func TestProposalThatChangesTheShellDefaultsToNo(t *testing.T) {
 	if code != 1 || out != "" || !strings.Contains(errOut, "[y/N]") {
 		t.Errorf("Enter must not run a shell-changing line: %d %q %q", code, out, errOut)
 	}
-	for line, want := range map[string]bool{"export A=1": true, "ls; eval $x": true, "(trap '' INT)": true, "function f { :; }": true, "echo exported": false, "ls -la": false} {
-		if changesShell.MatchString(line) != want {
+	for line, want := range map[string]bool{"export A=1": true, "echo 'export'": false, "ls -la": false, "echo 'x": true} {
+		if changesShell(line) != want {
 			t.Errorf("%q: want %v", line, want)
 		}
 	}
+}
+
+func TestGuardNoteAndErrorsAreEscaped(t *testing.T) {
+	useStore(t)
+	old := snapshotDir
+	t.Cleanup(func() { snapshotDir = old })
+	snapshotDir = func() string { return "/proc/nope" + esc } // cannot be created, so the note carries this path
+	a := sampleAnalysis()
+	a.Sim = &sandbox.Result{Diff: sandbox.FileDiff{Changes: []sandbox.Change{{Path: "tmp/x", Kind: sandbox.Created}}}}
+	fakeAnalyze(t, a)
+	answer(t, "d\nyes\n")
+	_, _, errOut := runSS("guard", "--", "rm x")
+	noRawEscape(t, "guard note", errOut)
+	if !strings.Contains(errOut, `\x1b[2K`) {
+		t.Errorf("guard note lost the escape marker: %q", errOut)
+	}
+	fakeSim(t, sandbox.Result{}, errors.New("failed"+esc))
+	_, _, errOut = runSS("simulate", "x")
+	noRawEscape(t, "simulate error", errOut)
 }
 
 func TestSnapshotsAndUndoPrintTheCommandEscaped(t *testing.T) {
@@ -148,5 +168,17 @@ func TestSnapshotsAndUndoPrintTheCommandEscaped(t *testing.T) {
 	noRawEscape(t, "undo", out)
 	if !strings.Contains(out, `Undoing: rm x\x1b[2K`) {
 		t.Errorf("undo: %q", out)
+	}
+}
+
+func TestBenchPrintsModelOutputEscaped(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SAFESHELL_AI", "local")
+	_, out, _ := runSS("ai", "bench", "--pace", "0s")
+	noRawEscape(t, "bench", out)
+	if !strings.Contains(out, "why: could not ask") {
+		t.Errorf("bench did not print the reason:\n%.400s", out)
 	}
 }

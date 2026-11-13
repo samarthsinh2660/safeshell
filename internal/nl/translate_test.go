@@ -195,3 +195,10 @@ func TestAnswerBeatsQuestionAndCommandBeatsQuestion(t *testing.T) {
 		t.Errorf("a command wins over a question: %+v %v", r, err)
 	}
 }
+
+func TestTranslateTurnsTabsIntoSpaces(t *testing.T) {
+	r, err := Translate(context.Background(), &fake{reply: `{"command":"ls\t-la"}`}, "x", env)
+	if err != nil || r.Command != "ls -la" {
+		t.Errorf("%+v %v", r, err)
+	}
+}

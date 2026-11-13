@@ -88,7 +88,7 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "Undoing: %s\n", report.Printable(m.Line))
 	r, err := snapshot.Restore(store, id)
 	if err != nil {
-		fmt.Fprintln(stderr, "safeshell undo:", err)
+		fmt.Fprintln(stderr, "safeshell undo:", report.Printable(err.Error()))
 		return 1
 	}
 	fmt.Fprintf(stdout, "Restored %s, removed %s that the command created.\n", report.Files(r.Restored), report.Files(r.Removed))

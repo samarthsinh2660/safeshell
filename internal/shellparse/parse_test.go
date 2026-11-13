@@ -446,3 +446,19 @@ func TestEnvSplitOddInput(t *testing.T) {
 		})
 	}
 }
+
+func TestChangesShell(t *testing.T) {
+	for line, want := range map[string]bool{
+		"f() { :; }": true, "PATH=/x": true, "declare -x A=1": true, "source ./x": true, "export A=1": true,
+		"ls; eval $x": true, "alias ll='ls -l'": true, ". ./env": true,
+		"echo 'export'": false, "grep alias f": false, "./trap.sh": false, "ls -la": false, "A=1 ls": false,
+	} {
+		r, err := Parse(line)
+		if err != nil {
+			t.Fatalf("%q: %v", line, err)
+		}
+		if r.ChangesShell != want {
+			t.Errorf("%q: ChangesShell = %v, want %v", line, r.ChangesShell, want)
+		}
+	}
+}

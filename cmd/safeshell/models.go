@@ -330,9 +330,9 @@ func runBench(c config.Config, args []string, stdout, stderr io.Writer) int {
 		if got == "" {
 			got = o.Answer
 		}
-		fmt.Fprintf(stdout, "%s %5.1fs  %s\n        -> %s\n", mark, o.Elapsed.Seconds(), o.Request.Text, got)
+		fmt.Fprintf(stdout, "%s %5.1fs  %s\n        -> %s\n", mark, o.Elapsed.Seconds(), o.Request.Text, report.Printable(got))
 		if !o.Pass {
-			fmt.Fprintf(stdout, "        why: %s\n", o.Why)
+			fmt.Fprintf(stdout, "        why: %s\n", report.Printable(o.Why))
 		}
 	})
 	var total time.Duration

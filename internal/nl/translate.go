@@ -114,7 +114,7 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		return Result{}, err
 	}
 	// A command wins over a question: Question is only set when there is no command.
-	cmd := strings.TrimSpace(raw.Command)
+	cmd := strings.TrimSpace(strings.ReplaceAll(raw.Command, "\t", " "))
 	r := Result{Command: cmd, Note: strings.TrimSpace(clean(raw.Note, 300)), Answer: strings.TrimSpace(clean(raw.Answer, 600))}
 	q := strings.TrimSpace(clean(raw.Question, 300))
 	switch {
@@ -124,7 +124,9 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		return Result{Note: r.Note, Question: q}, nil
 	case cmd == "":
 		return Result{Note: r.Note}, ErrNoCommand
-	case report.ContainsUnsafe(cmd) || len(cmd) > 1000:
+	case report.ContainsUnsafe(cmd):
+		return Result{}, errors.New("the model proposed a command with hidden characters, so it was not used")
+	case len(cmd) > 1000:
 		return Result{}, errors.New("the model proposed a command that is not a single line")
 	case !Runnable(cmd): // e.g. ":q" for "how do I quit vim": that is advice, not a command
 		r.Answer, r.Command = cmd, ""

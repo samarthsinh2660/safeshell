@@ -257,7 +257,7 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	spec.Line = strings.Join(args, " ")
 	res, err := simulate(context.Background(), spec)
 	if err != nil {
-		fmt.Fprintf(stderr, "safeshell simulate: %v\n", err)
+		fmt.Fprintf(stderr, "safeshell simulate: %s\n", report.Printable(err.Error()))
 		return 1
 	}
 	if asJSON {
