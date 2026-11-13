@@ -257,3 +257,52 @@ func TestInlineInterpreterCode(t *testing.T) {
 		t.Errorf("a script file should be handed to the sandbox as unclassified: %+v", v.Unclassified)
 	}
 }
+
+func TestGlobalOptionsDoNotHideTheSubcommand(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want Level
+	}{
+		{"git -C /repo reset --hard", R3},
+		{"git -C /repo push --force", R3},
+		{"git -C /repo clean -fdx", R3},
+		{"git -C /repo status", R0},
+		{"docker -H tcp://x system prune -af", R3},
+		{"docker --context prod volume prune -f", R3},
+		{"kubectl -n prod delete ns prod", R3},
+		{"kubectl -n prod get pods", R0},
+		{"docker --log-level debug system prune -af", R3},
+		{"kubectl --server x delete ns y", R3},
+		{"git --namespace foo push -f", R3},
+	} {
+		if got := Classify(tc.line).Level; got != tc.want {
+			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestCpAndTeeRateLikeRedirectToTheSameTarget(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want Level
+	}{
+		{"cp /dev/zero /dev/sda", R4},
+		{"echo x | tee /dev/sda", R4},
+		{"echo 1 | tee /proc/sys/kernel/sysrq", R4},
+		{"cp /dev/null /etc/passwd", R3},
+		{"echo x | tee /dev/null", R0},
+		{"echo x | tee /etc/hosts", R2},
+		{"echo x | sudo tee /etc/hosts", R3},
+		{"cp /dev/null notes.txt", R2},
+		{"echo x | tee -a /etc/hosts", R1},
+		{"echo x | tee -a log.txt", R1},
+		{"echo x | tee out.txt /dev/null", R2},
+		{"echo x | tee", R2},
+		{"echo x | tee -a", R1},
+		{"cp a /etc/b", R2},
+	} {
+		if got := Classify(tc.line).Level; got != tc.want {
+			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
+		}
+	}
+}
