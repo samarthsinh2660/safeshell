@@ -53,6 +53,42 @@ func TestKeyFromEnvChecksEachVariable(t *testing.T) {
 	}
 }
 
+func TestEnvKeyName(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		env      map[string]string
+		want     string
+	}{
+		{"nothing set", "gemini", nil, ""},
+		{"blank counts as unset", "gemini", map[string]string{"GEMINI_API_KEY": "  "}, ""},
+		{"single variable", "anthropic", map[string]string{"ANTHROPIC_API_KEY": "k"}, "ANTHROPIC_API_KEY"},
+		{"second variable only", "gemini", map[string]string{"GOOGLE_API_KEY": "k"}, "GOOGLE_API_KEY"},
+		{"first variable wins", "gemini", map[string]string{"GEMINI_API_KEY": "a", "GOOGLE_API_KEY": "b"}, "GEMINI_API_KEY"},
+		{"blank first falls through", "gemini", map[string]string{"GEMINI_API_KEY": " ", "GOOGLE_API_KEY": "b"}, "GOOGLE_API_KEY"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, ok := Find(tt.provider)
+			if !ok {
+				t.Fatalf("no provider %s", tt.provider)
+			}
+			for _, e := range p.Env {
+				t.Setenv(e, "")
+			}
+			for k, v := range tt.env {
+				t.Setenv(k, v)
+			}
+			if got := p.EnvKeyName(); got != tt.want {
+				t.Errorf("EnvKeyName() = %q, want %q", got, tt.want)
+			}
+			if (tt.want == "") != (p.KeyFromEnv() == "") {
+				t.Errorf("KeyFromEnv() disagrees with EnvKeyName() = %q", tt.want)
+			}
+		})
+	}
+}
+
 func listFrom(t *testing.T, id, body string, code int) ([]ai.ModelInfo, error) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
