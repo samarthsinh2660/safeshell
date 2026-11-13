@@ -27,7 +27,7 @@ func TestBackendNamesCarryTheModel(t *testing.T) {
 		t.Error(n)
 	}
 	o, _ := Find("openai")
-	if n := o.Backend("k", "").Name(); n != "gpt:gpt-4.1-mini" {
+	if n := o.Backend("k", "").Name(); n != "gpt:gpt-6-luna" {
 		t.Error(n)
 	}
 }

@@ -112,3 +112,15 @@ func TestUnreachableModelIsNotCountedAsWrongAnswers(t *testing.T) {
 		t.Errorf("asked %d passed %d skipped %v", res.Asked(), res.Passed(), res.Outcomes[0].Skipped)
 	}
 }
+
+func TestBenchEnvCountsItsListedToolsAsInstalled(t *testing.T) {
+	e := BenchEnv()
+	for _, n := range e.Tools {
+		if !e.Has(n) {
+			t.Errorf("%s is listed but not runnable", n)
+		}
+	}
+	if !e.Has("sh") || e.Has("definitely-not-a-program") {
+		t.Error("other programs should follow this machine's PATH")
+	}
+}

@@ -139,7 +139,7 @@ func (m *modelMenu) handle(ctx context.Context, c config.Config, f []string) {
 			c.AI.Cloud.Provider, c.AI.Cloud.Model = p.ID, f[2]
 			m.save(c, p.Title+" will use the model "+f[2]+".")
 		} else if ok {
-			fmt.Fprintln(m.out, "Usage: model N NAME   (for example: model 6 gpt-4.1)")
+			fmt.Fprintln(m.out, "Usage: model N NAME   (for example: model 6 gpt-6-luna)")
 		}
 		return
 	}

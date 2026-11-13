@@ -6,7 +6,9 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -192,10 +194,17 @@ func RunBench(ctx context.Context, b ai.Backend, env nl.Env, reqs []Request, pac
 // whatever folder the tester happens to be in would make a correct "that file
 // does not exist" count as a failure.)
 func BenchEnv() nl.Env {
+	tools := []string{"git", "rg", "jq", "curl", "wget", "tar", "zip", "unzip", "systemctl", "apt", "docker", "python3", "make", "safeshell", "ip", "lsof"}
 	return nl.Env{
 		OS: "Ubuntu 24.04", Shell: "bash", Cwd: "/home/user/project",
+		Has: func(name string) bool { // the listed tools count as installed, whatever this machine has
+			if _, err := exec.LookPath(name); err == nil {
+				return true
+			}
+			return slices.Contains(tools, name)
+		},
 		Listing: []string{"a.tmp", "app.log", "archive.tar.gz", "b.tmp", "build/", "config.txt", "config.yaml", "data.zip",
 			"log.txt", "main.py", "notes.txt", "photos/", "report.txt", "script.sh", "src/", "utils.py"},
-		Tools: []string{"git", "rg", "jq", "curl", "wget", "tar", "zip", "unzip", "systemctl", "apt", "docker", "python3", "make", "safeshell", "ip", "lsof"},
+		Tools: tools,
 	}
 }

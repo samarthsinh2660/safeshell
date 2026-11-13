@@ -141,7 +141,7 @@ func TestRunnableRecognisesRealCommandsAndRejectsAdvice(t *testing.T) {
 		"ls -la": true, "cd /tmp": true, "./run.sh": true, "FOO=1 ls": true, "sudo apt install x": true,
 		":q": false, "Press Esc then :q": false, "": false, "definitely-not-a-program --x": false,
 	} {
-		if got := Runnable(cmd); got != want {
+		if got := (Env{}).Runnable(cmd); got != want {
 			t.Errorf("Runnable(%q) = %v, want %v", cmd, got, want)
 		}
 	}
@@ -200,5 +200,24 @@ func TestTranslateTurnsTabsIntoSpaces(t *testing.T) {
 	r, err := Translate(context.Background(), &fake{reply: `{"command":"ls\t-la"}`}, "x", env)
 	if err != nil || r.Command != "ls -la" {
 		t.Errorf("%+v %v", r, err)
+	}
+}
+
+func TestHasDecidesWhetherAToolCanRun(t *testing.T) {
+	e := Env{Has: func(n string) bool { return n == "nosuchtool-xyz" }}
+	for cmd, want := range map[string]bool{
+		"nosuchtool-xyz --all": true, "FOO=1 nosuchtool-xyz": true, "ls": false, "cd /tmp": true,
+	} {
+		if got := e.Runnable(cmd); got != want {
+			t.Errorf("Runnable(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+	r, err := Translate(context.Background(), &fake{reply: `{"command":"nosuchtool-xyz"}`}, "do it", e)
+	if err != nil || r.Command != "nosuchtool-xyz" {
+		t.Fatalf("%+v %v", r, err)
+	}
+	r, _ = Translate(context.Background(), &fake{reply: `{"command":"nosuchtool-xyz"}`}, "do it", Env{})
+	if r.Command != "" || r.Answer == "" {
+		t.Errorf("unknown program should be advice: %+v", r)
 	}
 }

@@ -23,10 +23,11 @@ Rules:
 - Prefer the safest command that does the job: list or preview before deleting, trash-put instead of rm when available, no sudo unless required, never add -f or -y the user did not ask for.
 - Do not chain unrelated steps. One command (pipes and && are fine). It must fit on one line.
 - Relative paths are relative to the working directory given. Use the directory listing to pick real file names.
+- The request may be spoken or typed in a hurry: ignore filler words (um, uh, like, you know) and read obvious typos as the word meant. For questions about the state of this repository or the running containers, give the read-only command that shows the answer.
 - If the user asks a question that is not a task (what does X mean, how does Y work, how do I quit an editor), put a short answer in "answer" and leave "command" empty. "command" must always be something that can be typed into a bash prompt and run.
 - If the request can be done with a command (even a simple read like free -h), the command goes in "command". Never describe a command in "answer" instead of giving it, and never say you cannot look at something: give the command and let the user run it.
 - Never use "question" to confirm a dangerous request; refuse it in "answer". Never refuse in prose. If a request is dangerous (wiping a disk or the home folder), leave "command" empty and explain the risk in "answer".
-- If the request can be done but one specific thing is missing or ambiguous (several files match, no destination given, which branch), put ONE short question naming the choices in "question" and leave "command" and "answer" empty. Lines starting with "clarification" inside <request> are the person's replies to your earlier questions; use them. Do not ask when a sensible safe default exists.
+- If the request can be done but one specific thing is missing or ambiguous (several files match, no destination given, which branch), put ONE short question naming the choices in "question" and leave "command" and "answer" empty. Lines starting with "clarification" inside <request> are the person's replies to your earlier questions; use them. Do not ask when a sensible safe default exists. A request to tidy or clean up that names no target is ambiguous: ask which files or folders, and never guess a deletion. This never applies to dangerous requests, which are always refused in "answer".
 - If the request makes no sense at all, leave "command" empty and say what is missing in "answer".
 - SafeShell will check, simulate and ask the user before anything risky runs, so do not refuse a legitimate request; just choose the safe form of it.
 
@@ -39,6 +40,8 @@ request: show me the biggest files here
 {"command":"du -ah . | sort -rh | head -n 15","note":"15 largest files and folders under this directory.","answer":""}
 request: delete all the .tmp files in this folder
 {"command":"find . -maxdepth 1 -name '*.tmp' -print","note":"Lists them first; remove with -delete once you have checked.","answer":""}
+request: uh what changed since my last commit
+{"command":"git diff --stat","note":"Lists the files changed since the last commit.","answer":""}
 request: open the report
 {"command":"","note":"","answer":"","question":"3 files match report*: report.pdf, report-v2.pdf, report-final.pdf. Which one?"}
 request: what does chmod 755 mean
@@ -51,6 +54,8 @@ type Env struct {
 	Cwd     string
 	Listing []string // names in the working directory
 	Tools   []string // useful programs that are installed
+	// Has reports whether a program can be run. Nil means look on this machine's PATH.
+	Has func(name string) bool
 }
 
 func (e Env) render() string {
@@ -128,7 +133,7 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		return Result{}, errors.New("the model proposed a command with hidden characters, so it was not used")
 	case len(cmd) > 1000:
 		return Result{}, errors.New("the model proposed a command that is not a single line")
-	case !Runnable(cmd): // e.g. ":q" for "how do I quit vim": that is advice, not a command
+	case !env.Runnable(cmd): // e.g. ":q" for "how do I quit vim": that is advice, not a command
 		r.Answer, r.Command = cmd, ""
 		if r.Note != "" {
 			r.Answer += "  (" + r.Note + ")"
@@ -192,7 +197,7 @@ var shellWords = map[string]bool{"cd": true, "export": true, "source": true, "."
 	"declare": true, "local": true, "readonly": true, "shift": true, "trap": true, "sudo": true}
 
 // Runnable reports whether the first word of a proposed command is something the shell could run.
-func Runnable(cmd string) bool {
+func (e Env) Runnable(cmd string) bool {
 	f := strings.Fields(cmd)
 	if len(f) == 0 {
 		return false
@@ -204,6 +209,9 @@ func Runnable(cmd string) bool {
 	}
 	if shellWords[w] || strings.HasPrefix(w, "./") || strings.HasPrefix(w, "/") || strings.HasPrefix(w, "~/") || strings.HasPrefix(w, "(") || strings.HasPrefix(w, "{") {
 		return true
+	}
+	if e.Has != nil {
+		return e.Has(w)
 	}
 	_, err := exec.LookPath(w)
 	return err == nil

@@ -17,14 +17,16 @@ import (
 
 // Client is one chat endpoint.
 type Client struct {
-	Label  string // shown in reports, e.g. "gpt:gpt-4.1-mini"
+	Label  string // shown in reports, e.g. "gpt:gpt-6-luna"
 	URL    string // base, e.g. https://api.openai.com/v1
 	Key    string // empty for the local engine
 	Model  string
 	Tokens string // name of the length parameter: "max_tokens" (default) or "max_completion_tokens"
 	// Temperature is sent only when set; some hosted models accept just their default.
 	Temperature *float64
-	Client      *http.Client
+	// Reasoning is sent as reasoning_effort when set, so a reasoning model leaves room for its answer.
+	Reasoning string
+	Client    *http.Client
 }
 
 func (c Client) Name() string { return c.Label }
@@ -40,6 +42,9 @@ func (c Client) Complete(ctx context.Context, system, user string) (string, erro
 	}
 	if c.Temperature != nil {
 		req["temperature"] = *c.Temperature
+	}
+	if c.Reasoning != "" {
+		req["reasoning_effort"] = c.Reasoning
 	}
 	body, _ := json.Marshal(req)
 	cl := c.Client
