@@ -8,6 +8,7 @@ A safety release: it closes the worst classifier and hook bypasses and hardens t
 
 ### Added
 - `/models` → `choose N` and `safeshell models list` show the models your own API key can use and save your pick. (#131, #133)
+- `safeshell explain --why <command>` shows which rule and which evidence set the level, without the AI. (#87)
 - `safeshell voice setup` offers to install what it needs (`cmake`, `g++`, `make`, and `pipewire-bin` when there is no recorder) with `sudo apt-get`, after asking. `--yes` skips the question. (#136)
 
 ### Changed
@@ -19,6 +20,7 @@ A safety release: it closes the worst classifier and hook bypasses and hardens t
 - Internal clean-up: shared helpers, consistent messages, more tests. `internal/ai/cloud` is now `internal/ai/anthropic`. (#136)
 
 ### Fixed
+- Every subcommand answers `-h`/`--help` with its help and does nothing else; `safeshell uninstall --help` used to uninstall. `--` ends the options, and an unknown option exits 2 and says what to run. (#63)
 - Global options before a subcommand no longer hide it (`git -C repo reset --hard`), and `cp`/`tee` are rated by their target (`cp /dev/zero /dev/sda`). (#39, #40)
 - `exec > /etc/passwd`, `bash -lc '...'`, `find -exec sh -c '...'` and wrapper options such as `exec -a ls rm -rf /` are looked into. (#36, #37, #38, #41)
 - "Changes no files" is no longer trusted when the sandbox could not see a folder you can write to. (#50)
