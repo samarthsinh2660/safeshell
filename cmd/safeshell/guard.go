@@ -43,7 +43,7 @@ opts:
 		case args[0] == "--cwd" && len(args) >= 2:
 			cwd, args = args[1], args[2:]
 		case strings.HasPrefix(args[0], "-"):
-			fmt.Fprintf(stderr, "safeshell guard: bad option %s\n", args[0])
+			unknownOption("guard", args, stderr)
 			return 2
 		default:
 			break opts
@@ -139,7 +139,7 @@ func slashCommand(line string, w io.Writer) (code int, ok bool) {
 	case "/models":
 		runModels(nil, guardInput(), w, w)
 	case "/help":
-		runHelp(f[1:], w)
+		runHelp(f[1:], w, w)
 	default:
 		return 0, false
 	}

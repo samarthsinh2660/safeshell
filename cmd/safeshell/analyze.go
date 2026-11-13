@@ -75,7 +75,7 @@ type flags struct {
 // that follow. cmd names the subcommand in messages. ok is false once a message
 // has been printed and the caller should exit 2.
 func parseFlags(cmd string, args []string, withTimeout bool, stderr io.Writer) (f flags, rest []string, ok bool) {
-	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
+	for len(args) > 0 && strings.HasPrefix(args[0], "--") && args[0] != "--" {
 		switch {
 		case args[0] == "--json":
 			f.json = true
@@ -96,11 +96,12 @@ func parseFlags(cmd string, args []string, withTimeout bool, stderr io.Writer) (
 			}
 			args = args[1:]
 		default:
-			fmt.Fprintf(stderr, "safeshell %s: unknown option %s\n", cmd, args[0])
+			unknownOption(cmd, args, stderr)
 			return f, nil, false
 		}
 		args = args[1:]
 	}
+	args, _ = endOptions(cmd, args, stderr) // what is left is "--" or the command, never an option
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return f, nil, false

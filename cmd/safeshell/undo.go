@@ -62,6 +62,9 @@ func runSnapshots(stdout, stderr io.Writer) int {
 func runUndo(args []string, stdout, stderr io.Writer) int {
 	store := snapshotDir()
 	var id string
+	if !unknownOption("undo", args, stderr) {
+		return 2
+	}
 	if len(args) > 1 {
 		fmt.Fprint(stderr, usage)
 		return 2

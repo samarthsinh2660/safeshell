@@ -74,6 +74,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell analyze <cmd>           the full picture: rating, sandbox result, what it would hit
    safeshell simulate <cmd>          run in the sandbox and list the changes (nothing real is touched)
    safeshell explain <cmd>           the analysis plus a plain-English explanation (needs AI)
+   safeshell explain --why <cmd>     which rule and evidence set the level (works without AI)
    safeshell ask <english>           turn English into a checked command
    safeshell undo / safeshell snapshots     restore / list
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
@@ -96,8 +97,8 @@ English is not recognised     start the line with ?   or run  safeshell ask "...
 Disable for one terminal      SAFESHELL_OFF=1        Turn AI off: /models then  off`},
 }
 
-// runHelp prints the overview, or one topic.
-func runHelp(args []string, w io.Writer) int {
+// runHelp prints the overview, or one topic; an unknown topic goes to stderr.
+func runHelp(args []string, w, stderr io.Writer) int {
 	if len(args) > 0 {
 		want := strings.ToLower(args[0])
 		for _, t := range helpTopics {
@@ -106,6 +107,7 @@ func runHelp(args []string, w io.Writer) int {
 				return 0
 			}
 		}
+		w = stderr // an unknown topic is an error
 		fmt.Fprintf(w, "No help topic called %q.\n\n", args[0])
 	}
 	fmt.Fprint(w, "SafeShell stops dangerous commands before they run, shows what would happen, and lets you undo.\n\nTopics (safeshell help <topic>, or /help <topic> in your terminal):\n")

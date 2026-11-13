@@ -16,6 +16,10 @@ func runCheck(args []string, stdout, stderr io.Writer, color bool) int {
 	if len(args) > 0 && args[0] == "--json" {
 		asJSON, args = true, args[1:]
 	}
+	args, ok := endOptions("check", args, stderr)
+	if !ok {
+		return 2
+	}
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2

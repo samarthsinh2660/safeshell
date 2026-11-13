@@ -41,11 +41,12 @@ Usage:
                                             the real files are never touched
   safeshell guard [--cwd DIR] -- <command...>
                                             what the shell hook runs: analyse, ask, print the command to run
-  safeshell explain <command...>            the analysis plus a plain-English explanation (needs AI)
+  safeshell explain [--why] <command...>    the analysis plus a plain-English explanation (needs AI);
+                                            --why shows which rule and evidence set the level (no AI needed)
   safeshell ask <what you want in English>
                                             AI proposes a command; it is checked like any other
   safeshell models [list]                   choose the AI model (menu), or list the models your cloud key offers
-  safeshell ai setup|status                 download the built-in model (once) / show AI state
+  safeshell ai setup|status|stop|bench      download the built-in model (once) / show AI state / stop it / measure it
   safeshell voice [setup [--yes]|status|--text]
                                             speak a request (local speech engine; set up once with  voice setup)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
@@ -78,7 +79,14 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return 0
 	}
 	if args[0] == "-h" || args[0] == "--help" {
-		return runHelp(nil, stdout)
+		return runHelp(nil, stdout, stderr)
+	}
+	if subcommands[args[0]] && wantsHelp(args[0], args[1:]) {
+		if args[0] == "guard" { // a hook runs whatever guard prints on stdout, so help goes to stderr and exits 2
+			runSubHelp("guard", stderr)
+			return 2
+		}
+		return runSubHelp(args[0], stdout)
 	}
 	switch args[0] {
 	case "check":
@@ -94,11 +102,14 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 	case "install":
 		return runInstall(args[1:], stdout, stderr)
 	case "uninstall":
+		if !unexpectedArgs("uninstall", args[1:], stderr) {
+			return 2
+		}
 		return runUninstall(stdout, stderr)
 	case "models":
 		return runModels(args[1:], guardInput(), stdout, stderr)
 	case "help":
-		return runHelp(args[1:], stdout)
+		return runHelp(args[1:], stdout, stderr)
 	case "ai":
 		return runAI(args[1:], stdout, stderr)
 	case "voice":
@@ -108,15 +119,24 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 	case "undo":
 		return runUndo(args[1:], stdout, stderr)
 	case "snapshots":
+		if !unexpectedArgs("snapshots", args[1:], stderr) {
+			return 2
+		}
 		return runSnapshots(stdout, stderr)
 	case "guard":
 		return runGuard(args[1:], stdout, stderr, color)
 	case "hook":
 		return runHook(args[1:], stdout, stderr)
 	case "version", "--version":
+		if !unexpectedArgs("version", args[1:], stderr) {
+			return 2
+		}
 		fmt.Fprintln(stdout, "safeshell", version)
 		return 0
 	case "doctor":
+		if !unexpectedArgs("doctor", args[1:], stderr) {
+			return 2
+		}
 		return runDoctor(stdout)
 	default:
 		fmt.Fprintf(stderr, "safeshell: unknown command %q\n\n%s", args[0], usage)
