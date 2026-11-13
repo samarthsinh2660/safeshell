@@ -227,7 +227,8 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 	cmd := Command{Background: st.Background, Remote: w.remote, Downloads: downloads, Redirs: redirects(st.Redirs), Cwd: w.cwd, Stdin: hereText(st.Redirs)}
 	rest := unwrap(words, &cmd)
 	if len(rest) == 0 {
-		return cmd, false
+		// `exec > file` has no command left, but the redirect still happens.
+		return cmd, len(cmd.Redirs) > 0
 	}
 	cmd.Name, cmd.Args = rest[0], rest[1:]
 	for _, i := range fetched {
@@ -246,11 +247,8 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 func (w *walker) nested(c *Command, depth int) {
 	switch c.Name {
 	case "sh", "bash", "zsh", "dash", "ksh":
-		for i, a := range c.Args {
-			if a == "-c" && i+1 < len(c.Args) {
-				_ = w.parseString(c.Args[i+1], depth+1)
-				return
-			}
+		if code, ok := shellCode(c.Args); ok {
+			_ = w.parseString(code, depth+1)
 		}
 	case "eval":
 		_ = w.parseString(strings.Join(c.Args, " "), depth+1)
@@ -263,12 +261,48 @@ func (w *walker) nested(c *Command, depth int) {
 			w.remote = prev
 		}
 	case "find":
-		w.findExec(c)
+		w.findExec(c, depth)
 	case "python", "python3", "perl", "ruby", "node":
 		for _, sh := range embeddedShell(InlineCode(*c)) {
 			_ = w.parseString(sh, depth+1)
 		}
 	}
+}
+
+// shellCode returns the code a shell runs for `-c`: the first operand after
+// its options. Options may sit before or after the -c cluster, and -o / -O
+// take a value of their own (bash -Oc extglob CODE).
+func shellCode(args []string) (string, bool) {
+	hasC := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			i++
+			return operand(args, i, hasC)
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			hasC = hasC || strings.Contains(a, "c")
+			i += strings.Count(a, "o") + strings.Count(a, "O")
+		default:
+			return operand(args, i, hasC)
+		}
+	}
+	return "", false
+}
+
+// operand returns args[i] when the shell was given -c.
+func operand(args []string, i int, hasC bool) (string, bool) {
+	if hasC && i < len(args) {
+		return args[i], true
+	}
+	return "", false
+}
+
+// isCFlag reports whether a is `-c` or a short-option cluster holding it,
+// such as -lc, -xc or -ec.
+func isCFlag(a string) bool {
+	return strings.HasPrefix(a, "-") && !strings.HasPrefix(a, "--") && strings.Contains(a, "c")
 }
 
 // stdinCode analyses text a shell reads from stdin, as in `echo "rm -rf /" | sh`.
@@ -279,10 +313,13 @@ func (w *walker) stdinCode(c *Command, depth int) {
 	switch c.Name {
 	case "sh", "bash", "zsh", "dash", "ksh":
 		for _, a := range c.Args {
+			if a == "-s" || a == "--" {
+				break // what follows are arguments for the script read from stdin
+			}
 			if !strings.HasPrefix(a, "-") {
 				return // runs a named script, not stdin
 			}
-			if a == "-c" {
+			if isCFlag(a) {
 				return
 			}
 		}
@@ -314,23 +351,25 @@ func (w *walker) cd(args []string) {
 	}
 }
 
-func (w *walker) findExec(c *Command) {
-	for i, a := range c.Args {
+func (w *walker) findExec(c *Command, depth int) {
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
 		if a != "-exec" && a != "-execdir" && a != "-ok" && a != "-okdir" {
 			continue
 		}
-		var inner []string
-		for _, b := range c.Args[i+1:] {
-			if b == ";" || b == "+" || b == `\;` {
-				break
-			}
-			inner = append(inner, b)
+		end := i + 1
+		for end < len(c.Args) && c.Args[end] != ";" && c.Args[end] != "+" && c.Args[end] != `\;` {
+			end++
 		}
 		sub := Command{Remote: c.Remote, ViaFind: true}
-		inner = unwrap(inner, &sub)
+		inner := unwrap(slices.Clone(c.Args[i+1:end]), &sub)
+		i = end // inner -exec words belong to the inner command, not to this find
 		if len(inner) > 0 {
 			sub.Name, sub.Args = inner[0], inner[1:]
 			w.single(sub)
+			if depth+1 < maxDepth {
+				w.nested(&sub, depth+1)
+			}
 		}
 	}
 }
@@ -359,29 +398,45 @@ func unwrap(args []string, cmd *Command) []string {
 		switch args[0] {
 		case "sudo", "doas":
 			cmd.Sudo = true
-			args = skipOpts(args[1:], "-u", "-g", "-h", "-p", "-C", "-r", "-t", "-U", "-D")
+			args = skipOpts(args[1:], "-u", "-g", "-p", "-C", "-r", "-t", "-U", "-D", "-T", "-R", "-c", "-a",
+				"--user", "--group", "--host", "--prompt", "--close-from", "--role", "--type", "--other-user", "--chdir",
+				"--chroot", "--command-timeout", "--login-class")
 		case "env":
+			whole := args
 			args = args[1:]
 			for len(args) > 0 && (strings.Contains(args[0], "=") || strings.HasPrefix(args[0], "-")) {
-				if args[0] == "-u" || args[0] == "-C" {
+				if src, n := envSplit(args); n > 0 {
+					words := splitWords(strings.ReplaceAll(src, `\_`, " "))
+					if words == nil {
+						return whole // not one plain command: leave env as the command, do not hide the rest
+					}
+					args = append(words, args[n:]...)
+					continue
+				}
+				if takesValue(args[0], "-u", "-C", "--unset", "--chdir") {
 					args = args[1:]
 				}
 				if len(args) > 0 {
 					args = args[1:]
 				}
 			}
-		case "nohup", "time", "command", "builtin", "exec", "setsid", "stdbuf", "busybox":
+		case "nohup", "time", "command", "builtin", "setsid", "busybox":
 			args = skipOpts(args[1:])
+		case "exec":
+			args = skipOpts(args[1:], "-a") // -a NAME only renames argv[0]
+		case "stdbuf":
+			args = skipOpts(args[1:], "-i", "-o", "-e", "--input", "--output", "--error")
 		case "nice", "ionice":
-			args = skipOpts(args[1:], "-n", "-c")
+			args = skipOpts(args[1:], "-n", "-c", "--adjustment", "--class", "--classdata")
 		case "timeout":
-			args = skipOpts(args[1:], "-s", "-k")
+			args = skipOpts(args[1:], "-s", "-k", "--signal", "--kill-after")
 			if len(args) > 0 { // the DURATION operand
 				args = args[1:]
 			}
 		case "xargs":
 			cmd.ViaXargs = true
-			args = skipOpts(args[1:], "-n", "-I", "-P", "-L", "-d", "-s", "-a", "-E", "-l", "-i")
+			args = skipOpts(args[1:], "-n", "-I", "-P", "-L", "-d", "-s", "-a", "-E",
+				"--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file")
 		default:
 			return args
 		}
@@ -406,18 +461,62 @@ func programName(word string) string {
 // skipOpts drops leading options; those named in withValue also consume the next word.
 func skipOpts(args []string, withValue ...string) []string {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") && args[0] != "-" {
-		takes := false
-		for _, v := range withValue {
-			if args[0] == v {
-				takes = true
-			}
-		}
+		takes := takesValue(args[0], withValue...)
 		args = args[1:]
 		if takes && len(args) > 0 {
 			args = args[1:]
 		}
 	}
 	return args
+}
+
+// takesValue reports whether option opt takes the next word as its value. A
+// short-option cluster counts when the letter that takes a value comes last
+// (-iu NAME); `-uNAME` carries its value inside the word.
+func takesValue(opt string, withValue ...string) bool {
+	if strings.HasPrefix(opt, "--") {
+		return slices.Contains(withValue, opt)
+	}
+	for i := 1; i < len(opt); i++ {
+		if slices.Contains(withValue, "-"+opt[i:i+1]) {
+			return i == len(opt)-1
+		}
+	}
+	return false
+}
+
+// envSplit finds the string given to `env -S` (also --split-string) at the
+// front of args and returns it with the number of words it took, or 0 if none.
+func envSplit(args []string) (string, int) {
+	a := args[0]
+	switch {
+	case takesValue(a, "-S", "--split-string"):
+		if len(args) > 1 {
+			return args[1], 2
+		}
+	case strings.HasPrefix(a, "--split-string="):
+		return strings.TrimPrefix(a, "--split-string="), 1
+	case strings.HasPrefix(a, "-S") && len(a) > 2:
+		return a[2:], 1
+	}
+	return "", 0
+}
+
+// splitWords breaks a string into shell words; it is nil if the text is not valid shell.
+func splitWords(src string) []string {
+	f, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(src), "")
+	if err != nil || len(f.Stmts) == 0 {
+		return nil
+	}
+	call, ok := f.Stmts[0].Cmd.(*syntax.CallExpr)
+	if !ok {
+		return nil
+	}
+	words := make([]string, 0, len(call.Args))
+	for _, a := range call.Args {
+		words = append(words, wordString(a))
+	}
+	return words
 }
 
 func fetchesNetwork(s *syntax.Stmt) bool {
