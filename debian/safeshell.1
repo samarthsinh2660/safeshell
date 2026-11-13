@@ -17,6 +17,11 @@ Run
 once to add the hook to your shell startup file. After that every command you
 press Enter on in bash or zsh is checked first.
 .SH COMMANDS
+Every command accepts
+.B \-h
+or
+.BR \-\-help ,
+which prints its help and does nothing else.
 .TP
 .BI "check [--json] " command
 Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 means R4.
@@ -27,8 +32,12 @@ Rate a command, run it in the sandbox, and report the real files, processes and 
 .BI "simulate [--json] [--verbose] [--cwd " DIR "] [--timeout " DURATION "] " command
 Run a command in the sandbox and show what it changed. Real files are never touched.
 .TP
-.BI explain " command"
+.BI "explain [--why] " command
 Analysis plus a plain-English explanation. Needs an AI model.
+With
+.B \-\-why
+it instead shows which rule and which evidence (ESTIMATED, INSPECTED, PREVIEWED or OBSERVED)
+set the final level; this works without an AI, and the explanation is added when one is set.
 .TP
 .BI ask " request"
 Turn a request written in English into a command, which is then checked like any other.

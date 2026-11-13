@@ -1,0 +1,14 @@
+R3 Irreversible: it is blocked, and you can override
+$ make clean
+
+1. The rules (they read the command text)
+   R1  Runs a build tool.
+   Rule level: R1
+
+2. What it would really do (how sure, least to most: estimated, inspected, previewed, observed)
+   INSPECTED  processes: no matching process (does not raise the level)
+   OBSERVED  files: would delete 4,312 files (2.0 GiB) (raises the level to R3)
+       deleted /home/me/src/ (4,312 files)
+
+3. Final level: R3
+   Set by the files effect (OBSERVED): it raised the level from R1 to R3.

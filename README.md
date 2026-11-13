@@ -113,6 +113,7 @@ Without the hook you can use the pieces directly:
 safeshell check 'rm -rf ~/projects'      # rate a command without running it
 safeshell analyze 'make clean'           # sandbox run + processes, disks and safer options
 safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
+safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
 safeshell snapshots                      # what undo can restore
 ```
 

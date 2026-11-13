@@ -163,8 +163,8 @@ func TestHelpTopicsAreCompleteAndUnknownOnesAreExplained(t *testing.T) {
 			t.Errorf("topic %s: %d", tp.name, c)
 		}
 	}
-	if c, o, _ := runSS("help", "nonsense"); c != 2 || !strings.Contains(o, "No help topic") || !strings.Contains(o, "start") {
-		t.Errorf("%d %q", c, o)
+	if c, o, e := runSS("help", "nonsense"); c != 2 || o != "" || !strings.Contains(e, "No help topic") || !strings.Contains(e, "start") {
+		t.Errorf("%d %q %q", c, o, e)
 	}
 	if c, o, _ := runSS("--help"); c != 0 || !strings.Contains(o, "safeshell help start") {
 		t.Errorf("%d %q", c, o)
