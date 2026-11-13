@@ -103,10 +103,29 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 	if ne, ok := report.NetEffect(res.Net); ok {
 		a.Effects = append(a.Effects, ne)
 	}
+	if why := a.mirrorGap(res.Warnings); why != "" {
+		a.Effects = append(a.Effects, a.estimated(why))
+	}
 	if res.TimedOut {
 		a.SimNote = "the sandbox run timed out; changes made before then are shown"
 		a.Effects = append(a.Effects, a.estimated(fmt.Sprintf("the run did not finish within %s, so its full effect is unknown", res.Duration.Round(1e8))))
 	}
+}
+
+// mirrorGap explains why an empty diff cannot be trusted for a command the
+// rules did not recognise, or returns "" when it can. A warning is a part of the
+// filesystem the sandbox could not see; only where the user can write could a
+// change there have gone unrecorded.
+func (a *Analysis) mirrorGap(ws []sandbox.Warning) string {
+	if len(a.Verdict.Unclassified) == 0 {
+		return ""
+	}
+	for _, w := range ws {
+		if len(w.Writable) > 0 {
+			return "part of a folder you can write to was not visible in the sandbox, so \"no changes\" can't be trusted"
+		}
+	}
+	return ""
 }
 
 // estimated is an effect with no proof, which keeps the command from running unattended.

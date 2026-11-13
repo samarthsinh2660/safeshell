@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -26,7 +27,10 @@ type analyzeParams struct {
 func runDaemon(args []string, stdout, stderr io.Writer) int {
 	path := ipc.SocketPath()
 	if len(args) == 1 && args[0] == "stop" {
-		if err := ipc.Call(context.Background(), path, "shutdown", nil, nil); err != nil {
+		if err := ipc.Call(context.Background(), path, "shutdown", nil, nil); errors.Is(err, ipc.ErrUntrusted) {
+			warnUntrusted(stderr, path)
+			return 1
+		} else if err != nil {
 			fmt.Fprintln(stdout, "The SafeShell daemon is not running.")
 			return 0
 		}
@@ -36,6 +40,10 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 	if len(args) != 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
+	}
+	if path == "" {
+		fmt.Fprintln(stderr, "safeshell daemon: no private runtime folder was found (XDG_RUNTIME_DIR is not set to a full path), so the daemon cannot start. Commands are still checked directly, just a little slower.")
+		return 1
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -91,17 +99,25 @@ func daemonHandlers(shutdown func()) map[string]ipc.Handler {
 // socketPath is replaced in tests.
 var socketPath = ipc.SocketPath
 
+// warnUntrusted says a socket that is not ours was ignored.
+func warnUntrusted(w io.Writer, path string) {
+	fmt.Fprintf(w, "Warning: %s is not your SafeShell daemon, so it was ignored and the command was checked directly. Delete it to stop this warning.\n", path)
+}
+
 // analyzeFast asks the daemon when one is running and falls back to doing the
-// work in this process, so the hook works with or without it.
-func analyzeFast(ctx context.Context, line, cwd string) engine.Analysis {
+// work in this process, so the hook works with or without it. A socket that
+// does not belong to the user is never used; a short warning says so.
+func analyzeFast(ctx context.Context, line, cwd string, stderr io.Writer) engine.Analysis {
 	if os.Getenv("SAFESHELL_NODAEMON") == "" {
-		if _, err := os.Stat(socketPath()); err == nil {
-			var a engine.Analysis
-			c, cancel := context.WithTimeout(ctx, 3*time.Minute)
-			defer cancel()
-			if err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ()}, &a); err == nil {
-				return a
-			}
+		var a engine.Analysis
+		c, cancel := context.WithTimeout(ctx, 3*time.Minute)
+		defer cancel()
+		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ()}, &a)
+		if err == nil {
+			return a
+		}
+		if errors.Is(err, ipc.ErrUntrusted) {
+			warnUntrusted(stderr, socketPath())
 		}
 	}
 	return analyze(ctx, line, cwd)

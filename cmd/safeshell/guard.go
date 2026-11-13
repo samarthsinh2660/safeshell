@@ -73,7 +73,7 @@ opts:
 
 // guardLine analyses one command line, asks if needed, and prints what to run.
 func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed bool) int {
-	a := analyzeFast(context.Background(), line, cwd)
+	a := analyzeFast(context.Background(), line, cwd, stderr)
 	aiReview(&a, stderr)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)

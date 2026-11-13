@@ -138,8 +138,9 @@ Invariants (a PR that breaks one will not be merged):
 flowchart LR
     I[Issue or idea] --> B[Branch from latest main<br/>feat/ fix/ docs/ ...]
     B --> W[Write code + tests]
-    W --> L[make check locally]
-    L --> PR[Open pull request<br/>fill in the template]
+    W --> L[make check locally<br/>100% coverage of changed lines]
+    L --> SR[Review your own diff:<br/>architecture, consistency, safety]
+    SR --> PR[Open pull request<br/>fill in the template]
     PR --> CI{CI green?}
     CI -->|no| W
     CI -->|yes| RV[Review]
@@ -154,7 +155,7 @@ Step by step:
 git switch main && git pull --ff-only origin main
 git switch -c fix/short-description          # prefixes: feat/ fix/ docs/ chore/ refactor/ test/
 # ...work...
-cd safeshell && make check                   # add make integration if you touched sandbox/hook/daemon/snapshots
+make check                                   # add make integration if you touched sandbox/hook/daemon/snapshots
 git add -A && git commit -m "fix(classify): rate xargs rm as R3"
 git push -u origin fix/short-description     # then open the PR on GitHub
 ```
@@ -175,6 +176,9 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
 ## Tests
 
 - Every behaviour change has a test. A bug fix has a test that **failed before** the fix.
+- A pull request covers **100% of the lines it adds or changes**. Codecov checks this on every PR
+  (`codecov.yml`). Check locally with `go test -coverprofile=c.out ./...` and `go tool cover -func=c.out`.
+  The only exception is code that runs only inside the real sandbox child; say so in the PR.
 - Classifier rules use table tests. `eval/corpus` is the development set; `eval/heldout` is an
   independent set that only grows with new, unseen commands. `TestHeldoutReport` enforces
   accuracy floors: fix the rule, never lower a floor.
@@ -187,6 +191,10 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
 - Commit messages are short and conventional: `feat(ai): ...`, `fix(sandbox): ...`, `docs: ...`, `chore: ...`, `test: ...`, `refactor: ...`.
 - Prefer a few meaningful commits to many tiny ones.
 - Fill in the PR template: what and why, how you checked it, anything the reviewer should look at closely.
+- Before you open the PR, review your own diff for the architecture rules, consistency with the
+  existing code and docs, the safety invariants and the business logic.
+- CI shows each part as its own check: format and vet, unit tests and coverage, installer script,
+  fuzz, integration, and package build. `check` passes only when all of them pass.
 - Reviewers look for: the safety invariants above, tests, plain-English messages, and a diff that matches the description.
 
 ## Releases

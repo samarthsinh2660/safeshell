@@ -88,3 +88,32 @@ func Shq(s string) string {
 	}
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
+
+var harmlessTargets = map[string]bool{"/dev/null": true, "/dev/stdout": true, "/dev/stderr": true, "/dev/tty": true, "/dev/zero": true}
+
+// WriteTarget rates writing (or appending) to the file t on behalf of the
+// command line cmd. appendAlt, when set, is suggested as the safer form of a
+// plain overwrite. ok is false when t is harmless to write to.
+func WriteTarget(cmd, t string, appending bool, appendAlt string) (f Finding, ok bool) {
+	t = Norm(t)
+	switch {
+	case harmlessTargets[t] || strings.HasPrefix(t, "/dev/fd/"):
+		return Finding{}, false
+	case IsBlockDevice(t) || t == "/dev/mem" || t == "/dev/kmem":
+		return Finding{Level: R4, Command: cmd, Reason: "Writes raw data onto " + t + ", destroying what is stored there."}, true
+	case strings.HasPrefix(t, "/proc/") || strings.HasPrefix(t, "/sys/"):
+		return Finding{Level: R4, Command: cmd, Reason: "Writes to a live kernel control file (" + t + "), which can crash or reboot the machine."}, true
+	case UnderSystem(t) && !appending:
+		f = Finding{Level: R3, Command: cmd, Reason: "Overwrites the system file " + t + "."}
+		return f.WithAlt("cp "+Shq(t)+" "+Shq(t)+".bak", "make a backup of the file first"), true
+	case UnderSystem(t):
+		return Finding{Level: R2, Command: cmd, Reason: "Appends to the system file " + t + "."}, true
+	case appending:
+		return Finding{Level: R1, Command: cmd, Reason: "Appends to " + t + "."}, true
+	}
+	f = Finding{Level: R2, Command: cmd, Reason: "Overwrites " + t + " if it already exists."}
+	if appendAlt != "" {
+		f = f.WithAlt(appendAlt, "appends instead of overwriting")
+	}
+	return f, true
+}

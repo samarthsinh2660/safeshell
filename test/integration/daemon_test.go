@@ -16,6 +16,9 @@ import (
 func startDaemon(t *testing.T) string {
 	t.Helper()
 	rt := t.TempDir()
+	if err := os.Chmod(rt, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	cmd := exec.Command(ssBin, "daemon")
 	cmd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+rt)
 	if err := cmd.Start(); err != nil {

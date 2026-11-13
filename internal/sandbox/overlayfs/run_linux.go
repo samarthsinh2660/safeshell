@@ -119,7 +119,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	default:
 		res.ExitCode = out.Exit
 	}
-	res.Warnings = out.Warnings
+	res.Warnings = markWritable(out.Warnings)
 
 	if len(out.Layers) > 0 {
 		layers = out.Layers
@@ -233,4 +233,17 @@ func superviseNetwork(sock *os.File, pid int) []sandbox.NetAttempt {
 		return nil
 	}
 	return netwatch.Supervise(f)
+}
+
+// markWritable records which warning paths the real user can write to. It runs
+// here, as that user, not inside the sandbox.
+func markWritable(ws []sandbox.Warning) []sandbox.Warning {
+	for i := range ws {
+		for _, p := range ws[i].Paths {
+			if syscall.Access(p, 2 /* W_OK */) == nil {
+				ws[i].Writable = append(ws[i].Writable, p)
+			}
+		}
+	}
+	return ws
 }

@@ -160,3 +160,51 @@ func TestUnparsableLineDoesNotCrash(t *testing.T) {
 		t.Errorf("called=%v level=%s", called, a.Verdict.Level)
 	}
 }
+
+func gap(writable ...string) []sandbox.Warning {
+	return []sandbox.Warning{{Paths: []string{"/home/me", "/boot"}, Text: "loose files are not visible in the sandbox", Writable: writable}}
+}
+
+func estimatedCount(a Analysis) int {
+	n := 0
+	for _, f := range a.Effects {
+		if f.Evidence == domain.Estimated {
+			n++
+		}
+	}
+	return n
+}
+
+func TestMirrorGapOnlyCountsWritableGapsForUnknownCommands(t *testing.T) {
+	tests := []struct {
+		name, line string
+		ws         []sandbox.Warning
+		wantEst    int
+		want       domain.Decision
+	}{
+		{"unknown command, writable gap", "./t.sh", gap("/home/me"), 1, domain.Confirm},
+		{"unknown command, gaps but none writable", "./t.sh", gap(), 0, domain.Allow},
+		{"unknown command, no gaps", "./t.sh", nil, 0, domain.Allow},
+		{"known command, writable gap", "rm a.txt", gap("/home/me"), 0, domain.Confirm},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sim := &fakeSim{res: sandbox.Result{Warnings: tc.ws}}
+			a := (&Engine{Sim: sim}).Analyze(context.Background(), tc.line, "/home/me/proj")
+			if got := estimatedCount(a); got != tc.wantEst || a.Decision != tc.want {
+				t.Errorf("estimated=%d decision=%s, want %d %s", got, a.Decision, tc.wantEst, tc.want)
+			}
+		})
+	}
+}
+
+func TestMirrorGapKeepsTheObservedEffectAndLevel(t *testing.T) {
+	sim := &fakeSim{res: sandbox.Result{Warnings: gap("/home/me")}}
+	a := (&Engine{Sim: sim}).Analyze(context.Background(), "./t.sh", "/home/me/proj")
+	if a.Level != domain.R1 || a.Decision != domain.Confirm {
+		t.Errorf("level %s decision %s", a.Level, a.Decision)
+	}
+	if e := find(a, domain.EffectFS); e == nil || e.Evidence != domain.Observed {
+		t.Errorf("the observed file effect should stay: %+v", e)
+	}
+}
