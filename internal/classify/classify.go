@@ -80,6 +80,10 @@ func commandFindings(c shellparse.Command) ([]Finding, bool) {
 		fs, known = rules.Rate(c)
 		unknown = !known
 	}
+	if c.AliasWord {
+		fs = slices.DeleteFunc(fs, func(f Finding) bool { return f.Level < R3 })
+		unknown = false
+	}
 	fs = append(fs, redirectFindings(c)...)
 	if c.Sudo {
 		for i := range fs {

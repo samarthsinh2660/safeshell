@@ -52,7 +52,7 @@ This document is the "so we stay consistent" contract for a two-person team: whe
 | Step | Where | Output |
 |---|---|---|
 | 1. Capture line | shell hook | raw text |
-| 2. Parse | `shellparse` | pipelines of commands, wrappers stripped, nested `sh -c` / `ssh` / `find -exec` expanded |
+| 2. Parse | `shellparse` | pipelines of commands, wrappers stripped, nested `sh -c` / `ssh` / `find -exec` expanded, plus code that runs later (alias values, trap actions, PROMPT_COMMAND, crontab lines, text appended to shell startup files) |
 | 3. Classify | `classify` | `Verdict` (level R0-R4, findings, alternatives, unclassified list) |
 | 4. Fast decision | `policy` | R0/R1: allow. Everything else continues |
 | 5. Simulate | `sandbox` (via engine) | observed file diff + per-effect results with evidence levels |
@@ -367,7 +367,7 @@ Splitting by *package boundary* means few merge conflicts and each person can te
 Phase 0 and Phase 1 are done in code; run `make check`.
 
 - `domain`: Level, Finding, Alternative, Verdict (done, tested).
-- `shellparse`: pipelines, wrappers (sudo, env, xargs, ...), nested `sh -c` / `eval` / `ssh` / `find -exec`, fork bomb detection. Table tests plus a fuzz target (40 s, about 570k executions, found and fixed one nil panic).
+- `shellparse`: pipelines, wrappers (sudo, env, xargs, ...), nested `sh -c` / `eval` / `ssh` / `find -exec`, code that runs later (alias, trap, PROMPT_COMMAND, crontab input, text written to `~/.bashrc` and other startup files; a `cd` inside it never leaks out), fork bomb detection. Table tests plus a fuzz target (40 s, about 570k executions, found and fixed one nil panic).
 - `classify` and `classify/rules`: `classify.Classify(line)` returns a Verdict; per-tool rules live in `rules/` one file per family and are reached through `rules.Rate`. Fuzz clean (about 2.4M executions).
 - `eval`: labelled corpus `eval/corpus/commands.tsv` (231 rated rows plus 3 known-gap rows). All rated rows pass and there are no dangerous false negatives. **Caveat:** the corpus was written together with the rules, so 100 % is expected; the real measure is a held-out set written by someone who has not seen the rules (to do in Phase 7).
 - `cmd/safeshell`: `safeshell check [--json] <command>` with exit codes 0 (R0-R2), 3 (R3), 4 (R4).

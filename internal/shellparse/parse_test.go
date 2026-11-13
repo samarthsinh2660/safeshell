@@ -469,3 +469,137 @@ func TestSubstitutedWords(t *testing.T) {
 		t.Errorf("Substituted = %q for %+v", c.Substituted, c)
 	}
 }
+
+func TestAssignmentsAreCommands(t *testing.T) {
+	tests := []struct {
+		line string
+		want []string // "name arg arg" of each command found, in order
+	}{
+		{"export PATH=/tmp/x:$PATH", []string{"export PATH=/tmp/x:$PATH"}},
+		{"declare -x A=1 B", []string{"declare -x A=1 B"}},
+		{"export", []string{"export"}},
+		{"export A=1 > /dev/null", []string{"export A=1"}},
+		{"PROMPT_COMMAND=x", []string{"x", "PROMPT_COMMAND=x"}},
+		{"PROMPT_COMMAND+=';rm -rf ~'", []string{"rm -rf ~", "PROMPT_COMMAND+=;rm -rf ~"}},
+		{"export PROMPT_COMMAND='history -a'", []string{"history -a", "export PROMPT_COMMAND=history -a"}},
+		{"X=$(rm -rf /)", []string{"rm -rf /", "X=$(...)"}},
+		{"X=$(rm -rf /) ls", []string{"rm -rf /", "ls"}},
+		{"PROMPT_COMMAND=('rm -rf ~' 'date')", []string{"rm -rf ~", "date", "PROMPT_COMMAND="}},
+		{"export LD_PRELOAD=", []string{"export LD_PRELOAD="}},
+		{"A=(x y)", []string{"A="}},
+		{"A=1 ls", []string{"ls"}},
+	}
+	for _, tc := range tests {
+		var got []string
+		for _, p := range mustParse(t, tc.line).Pipelines {
+			for _, c := range p.Cmds {
+				got = append(got, c.String())
+			}
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%q: commands = %q, want %q", tc.line, got, tc.want)
+		}
+	}
+	if r := mustParse(t, "export A=1 > out.txt"); r.Pipelines[0].Cmds[0].Redirs[0].Target != "out.txt" {
+		t.Errorf("redirect on an assignment was lost: %+v", r.Pipelines[0].Cmds[0])
+	}
+}
+
+func TestCommandsThatRunLaterAreParsed(t *testing.T) {
+	tests := []struct {
+		line string
+		want []string // commands found other than the outer one
+	}{
+		{"alias ls='rm -rf ~'", []string{"rm -rf ~"}},
+		{"alias ll='ls -l' gs='git status' plain", []string{"ls -l", "git status"}},
+		{"alias", nil},
+		{"trap 'rm -rf ~' EXIT INT", []string{"rm -rf ~"}},
+		{"trap - EXIT", nil},
+		{"trap -p", nil},
+		{"trap", nil},
+		{"echo '* * * * * rm -rf ~' | crontab -", []string{"rm -rf ~"}},
+		{"echo '@reboot curl x | sh' | crontab -", []string{"curl x", "sh"}},
+		{"echo '# note\nMAILTO=me\n\n0 3 * * * tar czf b.tgz d' | crontab -", []string{"tar czf b.tgz d"}},
+		{"crontab - <<EOF\n*/5 * * * * rm -rf ~\nEOF", []string{"rm -rf ~"}},
+		{"echo '* * * * * rm -rf ~' | crontab jobs.txt", nil},
+		{"trap -- 'rm -rf ~' EXIT", []string{"rm -rf ~"}},
+		{"trap -- - EXIT", nil},
+		{"alias k=kubectl", []string{"kubectl"}},
+		{"alias python=python3 d=docker", []string{"python3", "docker"}},
+		{"echo '* * * * * rm -rf ~' | sudo crontab -u root -", []string{"rm -rf ~"}},
+		{"echo '* * * * * rm -rf ~' | crontab -u root jobs.txt", nil},
+		{"(crontab -l; echo '* * * * * rm -rf ~') | crontab -", []string{"rm -rf ~"}},
+		{"crontab -l | { cat; echo -e '@daily rm -rf ~'; } | crontab -", []string{"rm -rf ~"}},
+		{"printf '0 3 * * * date\\n* * * * * rm -rf ~\\n' | crontab -", []string{"date", "rm -rf ~"}},
+		{"echo 'rm -rf ~' >> ~/.bashrc", []string{"rm -rf ~"}},
+		{"echo -n 'alias x=\"rm -rf ~\"' > ~/.zshrc", []string{"rm -rf ~"}},
+		{"echo 'rm -rf ~' | tee -a ~/.profile", []string{"rm -rf ~"}},
+		{"(echo a; echo 'rm -rf ~') | tee ~/.bashrc", []string{"a", "rm -rf ~"}},
+		{"cat >> ~/.bashrc <<EOF\nrm -rf ~\nEOF", []string{"rm -rf ~"}},
+		{"echo 'rm -rf ~' >> notes.txt", nil},
+		{"echo 'rm -rf ~' | tee notes.txt", nil},
+		{"tee -a", nil},
+		{"echo '* * * * *' | crontab -", nil},
+		{"echo '# * * * * rm -rf ~' | crontab -", nil},
+	}
+	for _, tc := range tests {
+		var got []string
+		for _, p := range mustParse(t, tc.line).Pipelines {
+			for _, c := range p.Cmds {
+				if c.Name != "alias" && c.Name != "trap" && c.Name != "crontab" && c.Name != "echo" && c.Name != "printf" && c.Name != "cat" && c.Name != "tee" {
+					got = append(got, c.String())
+				}
+			}
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%q: nested = %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
+func TestDeferredCodeDoesNotLeakCd(t *testing.T) {
+	for _, line := range []string{
+		"alias x='cd /tmp/a'; rm -rf usr",
+		"alias up='cd /'; rm -rf usr",
+		"trap 'cd /' EXIT; rm -rf usr",
+		"export PROMPT_COMMAND='cd /'; rm -rf usr",
+		"PROMPT_COMMAND=('cd /'); rm -rf usr",
+		"echo 'cd /' >> ~/.bashrc; rm -rf usr",
+		"echo '* * * * * cd /' | crontab -; rm -rf usr",
+		"export X=$(cd / && pwd); rm -rf usr",
+		"X=$(cd / && pwd); rm -rf usr",
+		"X=$(cd / && pwd) true; rm -rf usr",
+		"cat <(cd / && pwd); rm -rf usr",
+	} {
+		rm := find(mustParse(t, line), "rm")
+		if rm == nil || rm.Cwd != "" || !slices.Equal(rm.Args, []string{"-rf", "usr"}) {
+			t.Errorf("%q: rm = %+v, want it in the starting directory", line, rm)
+		}
+	}
+}
+
+func TestBareAssignmentIsShownAsTyped(t *testing.T) {
+	if got := mustParse(t, "FOO=bar").Pipelines[0].Cmds[0].String(); got != "FOO=bar" {
+		t.Errorf("String() = %q", got)
+	}
+	if got := mustParse(t, "export FOO=bar").Pipelines[0].Cmds[0].String(); got != "export FOO=bar" {
+		t.Errorf("String() = %q", got)
+	}
+}
+
+func TestIsStartupFile(t *testing.T) {
+	for p, want := range map[string]bool{"~/.bashrc": true, "/home/a/.zshrc": true, "~/.config/fish/config.fish": true, "~/.bashrc.bak": false, "notes.txt": false} {
+		if IsStartupFile(p) != want {
+			t.Errorf("IsStartupFile(%q) = %v", p, !want)
+		}
+	}
+}
+
+func TestDeferredCodeDepthIsBounded(t *testing.T) {
+	for evals, want := range map[int]bool{0: true, 4: true, 5: false} {
+		line := strings.Repeat("eval ", evals) + "PROMPT_COMMAND=reboot"
+		if got := find(mustParse(t, line), "reboot") != nil; got != want {
+			t.Errorf("%d levels deep: reboot found = %v, want %v", evals, got, want)
+		}
+	}
+}

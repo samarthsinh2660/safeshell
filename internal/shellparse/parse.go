@@ -35,6 +35,13 @@ type Command struct {
 	// FetchedArgs are the indexes in Args of words holding a $(...) that
 	// downloads, as in  eval "$(curl ...)"  or  sh -c "$(curl ...)".
 	FetchedArgs []int
+	// AliasWord marks the command an alias gives as its whole value, such as
+	// `alias k=kubectl`. It is only another name, so it is rated only when
+	// the word alone does harm.
+	AliasWord bool
+	// Bare marks a plain NAME=value line. It is a command named export for the
+	// rules, but is shown as typed.
+	Bare bool
 	// Substituted are the words of the commands inside $(...) and <(...) in
 	// the arguments, so a file read there can still be seen.
 	Substituted []string
@@ -50,6 +57,9 @@ type Command struct {
 // String renders the command roughly as typed, for use in reports.
 func (c Command) String() string {
 	parts := append([]string{c.Name}, c.Args...)
+	if c.Bare {
+		parts = slices.Clone(c.Args)
+	}
 	if c.Sudo {
 		parts = append([]string{"sudo"}, parts...)
 	}
@@ -89,6 +99,8 @@ type walker struct {
 	res    *Result
 	remote string
 	cwd    string
+	// aliasWord is set while reading an alias whose value is one bare word.
+	aliasWord bool
 }
 
 func (w *walker) parseString(src string, depth int) error {
@@ -124,7 +136,14 @@ func (w *walker) stmt(s *syntax.Stmt, depth int) {
 			if cmd.Name == "cd" {
 				w.cd(cmd.Args)
 			}
+		} else if len(c.Args) == 0 && len(c.Assigns) > 0 {
+			w.assign("export", true, c.Assigns, s, depth)
 		}
+	case *syntax.DeclClause:
+		w.assign(c.Variant.Value, false, c.Args, s, depth)
+		saved := w.cwd
+		w.children(c, depth)
+		w.cwd = saved
 	case *syntax.BinaryCmd:
 		if c.Op == syntax.Pipe || c.Op == syntax.PipeAll {
 			w.pipeline(s, depth)
@@ -187,6 +206,7 @@ func (w *walker) pipeline(s *syntax.Stmt, depth int) {
 	}
 	flat(s)
 	var p Pipeline
+	var carried string // lines echoed by an earlier ( ... ) or { ...; } stage
 	for _, st := range stmts {
 		if call, ok := st.Cmd.(*syntax.CallExpr); ok {
 			cmd, ok := w.build(call, st, depth)
@@ -195,12 +215,18 @@ func (w *walker) pipeline(s *syntax.Stmt, depth int) {
 			}
 			cmd.Background = s.Background
 			if n := len(p.Cmds); n > 0 && (p.Cmds[n-1].Name == "echo" || p.Cmds[n-1].Name == "printf") {
-				cmd.Stdin += " " + strings.Join(p.Cmds[n-1].Args, " ")
-				w.stdinCode(&cmd, depth)
+				carried += echoText(p.Cmds[n-1].Args)
 			}
+			if carried != "" {
+				cmd.Stdin += carried
+				w.stdinCode(&cmd, depth)
+				w.startupText(&cmd, depth)
+			}
+			carried = ""
 			p.Cmds = append(p.Cmds, cmd)
 			continue
 		}
+		carried += echoed(st)
 		w.stmt(st, depth)
 	}
 	if len(p.Cmds) > 0 {
@@ -215,16 +241,16 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 	downloads := false
 	var fetched []int // indexes in words
 	var substituted []string
-	for _, a := range call.Args {
-		words = append(words, wordString(a))
-		idx := len(words) - 1
+	walk := func(a syntax.Node, idx int) { // idx is the argument holding a, or -1 for an assignment
 		syntax.Walk(a, func(n syntax.Node) bool {
 			switch x := n.(type) {
 			case *syntax.CmdSubst:
-				substituted = append(substituted, substWords(x)...)
+				if idx >= 0 {
+					substituted = append(substituted, substWords(x)...)
+				}
 				saved := w.cwd
 				for _, s := range x.Stmts {
-					if fetchesNetwork(s) && !slices.Contains(fetched, idx) {
+					if idx >= 0 && fetchesNetwork(s) && !slices.Contains(fetched, idx) {
 						fetched = append(fetched, idx)
 					}
 					w.stmt(s, depth)
@@ -232,22 +258,33 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 				w.cwd = saved
 				return false
 			case *syntax.ProcSubst:
-				substituted = append(substituted, substWords(x)...)
+				if idx >= 0 {
+					substituted = append(substituted, substWords(x)...)
+				}
+				saved := w.cwd
 				for _, s := range x.Stmts {
-					if fetchesNetwork(s) {
+					if idx >= 0 && fetchesNetwork(s) {
 						downloads = true
 					}
 					w.stmt(s, depth)
 				}
+				w.cwd = saved
 				return false
 			}
 			return true
 		})
 	}
+	for _, a := range call.Assigns {
+		walk(a, -1)
+	}
+	for _, a := range call.Args {
+		words = append(words, wordString(a))
+		walk(a, len(words)-1)
+	}
 	if len(words) == 0 {
 		return Command{}, false
 	}
-	cmd := Command{Background: st.Background, Remote: w.remote, Downloads: downloads, Redirs: redirects(st.Redirs), Cwd: w.cwd, Stdin: hereText(st.Redirs), Substituted: substituted}
+	cmd := Command{Background: st.Background, Remote: w.remote, Downloads: downloads, Redirs: redirects(st.Redirs), Cwd: w.cwd, Stdin: hereText(st.Redirs), Substituted: substituted, AliasWord: w.aliasWord}
 	rest := unwrap(words, &cmd)
 	if len(rest) == 0 {
 		// `exec > file` has no command left, but the redirect still happens.
@@ -262,6 +299,7 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 	if depth < maxDepth {
 		w.nested(&cmd, depth)
 		w.stdinCode(&cmd, depth)
+		w.startupText(&cmd, depth)
 	}
 	return cmd, true
 }
@@ -278,9 +316,64 @@ func substWords(n syntax.Node) []string {
 	return ws
 }
 
+// assign records an assignment that changes the running shell, such as
+// `export PATH=...` or a bare `PROMPT_COMMAND=...`, as a command named name with
+// NAME=value arguments. PROMPT_COMMAND runs its value before every prompt, so
+// that text is queued as code.
+func (w *walker) assign(name string, bare bool, as []*syntax.Assign, s *syntax.Stmt, depth int) {
+	cmd := Command{Name: name, Redirs: redirects(s.Redirs), Remote: w.remote, Cwd: w.cwd, Bare: bare}
+	for _, a := range as {
+		var arg string
+		switch {
+		case a.Name == nil:
+			arg = wordString(a.Value)
+		case a.Naked:
+			arg = a.Name.Value
+		default:
+			op := "="
+			if a.Append {
+				op = "+="
+			}
+			arg = a.Name.Value + op
+			if a.Value != nil {
+				val := wordString(a.Value)
+				arg += val
+				if a.Name.Value == "PROMPT_COMMAND" {
+					w.deferred(strings.TrimLeft(val, "; \t\n"), depth)
+				}
+			}
+			if a.Array != nil && a.Name.Value == "PROMPT_COMMAND" { // PROMPT_COMMAND=('cmd' ...)
+				for _, el := range a.Array.Elems {
+					if el.Value != nil {
+						w.deferred(strings.TrimLeft(wordString(el.Value), "; \t\n"), depth)
+					}
+				}
+			}
+		}
+		cmd.Args = append(cmd.Args, arg)
+	}
+	w.single(cmd)
+}
+
 // nested queues code embedded in the arguments of c.
 func (w *walker) nested(c *Command, depth int) {
 	switch c.Name {
+	case "alias": // the value runs whenever the alias is used
+		for _, a := range c.Args {
+			if _, val, ok := strings.Cut(a, "="); ok {
+				w.aliasWord = len(strings.Fields(val)) == 1
+				w.deferred(val, depth)
+				w.aliasWord = false
+			}
+		}
+	case "trap": // the action runs when the signal or EXIT arrives
+		args := c.Args
+		if len(args) > 0 && args[0] == "--" {
+			args = args[1:]
+		}
+		if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+			w.deferred(args[0], depth)
+		}
 	case "sh", "bash", "zsh", "dash", "ksh":
 		if code, ok := shellCode(c.Args); ok {
 			_ = w.parseString(code, depth+1)
@@ -359,7 +452,32 @@ func (w *walker) stdinCode(c *Command, depth int) {
 			}
 		}
 		_ = w.parseString(c.Stdin, depth+1)
+	case "crontab": // each job line is a command that runs later
+		for i := 0; i < len(c.Args); i++ {
+			if c.Args[i] == "-u" {
+				i++ // the user name
+			} else if !strings.HasPrefix(c.Args[i], "-") {
+				return // installs a named file, not stdin
+			}
+		}
+		for _, line := range strings.Split(strings.ReplaceAll(c.Stdin, `\n`, "\n"), "\n") {
+			w.deferred(cronCommand(line), depth)
+		}
 	}
+}
+
+// cronCommand returns the command of one crontab line: the text after the five
+// time fields (or after @reboot, @daily, ...). Comments and variable lines give "".
+func cronCommand(line string) string {
+	fields := strings.Fields(line)
+	skip := 5
+	if len(fields) > 0 && strings.HasPrefix(fields[0], "@") {
+		skip = 1
+	}
+	if len(fields) <= skip || strings.HasPrefix(fields[0], "#") {
+		return ""
+	}
+	return strings.Join(fields[skip:], " ")
 }
 
 // cd updates the tracked working directory after `cd args`.
