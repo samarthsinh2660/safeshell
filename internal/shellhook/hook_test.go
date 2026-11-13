@@ -46,42 +46,42 @@ func TestScriptsBindVoice(t *testing.T) {
 	}
 }
 
-func TestBashBindsEveryKeymapAndDisablesEditAndExecute(t *testing.T) {
+func TestBashBindsEveryKeymapAndDisablesEditingKeys(t *testing.T) {
 	s, _ := Script("bash")
 	for _, want := range []string{
 		"for __ss_k in emacs vi-insert vi-command",
-		`bind -m $__ss_k '"\C-m": "\C-x\C-s\C-x\C-a"'`,
-		`bind -m $__ss_k '"\C-j": "\C-x\C-s\C-x\C-a"'`,
-		`bind -m $__ss_k '"\C-o": "\C-x\C-s\C-x\C-o"'`,
+		`bind -m $__ss_k '"\C-m": "\C-x\C-s\e[9001~"'`,
+		`bind -m $__ss_k '"\C-j": "\C-x\C-s\e[9001~"'`,
+		`bind -m $__ss_k '"\C-o": "\C-x\C-s\e[9002~"'`,
 		`bind -m $__ss_k -x '"\C-x\C-e": __ss_noedit'`,
+		`bind -m $__ss_k -x '"\e#": __ss_noedit'`,
 		`bind -m vi-command -x '"v": __ss_noedit'`,
+		`bind -m vi-command -x '"#": __ss_noedit'`,
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("bash hook is missing %q", want)
 		}
 	}
+	if strings.Contains(s, `"\C-x\C-a"`) || strings.Contains(s, `"\C-x\C-o"`) {
+		t.Error("the helper bindings must not be keys a person can press by accident")
+	}
 }
 
-func TestHooksSurviveNounsetAndWarnOnUnexpectedFailure(t *testing.T) {
+func TestHooksSurviveNounsetAndFinishWithTheBuiltinWidget(t *testing.T) {
 	b, _ := Script("bash")
 	z, _ := Script("zsh")
-	for _, c := range []struct{ name, script, bad string }{
-		{"bash", b, `"$SAFESHELL_OFF"`},
-		{"zsh", z, `"$SAFESHELL_OFF"`},
-	} {
-		if strings.Contains(c.script, c.bad) {
-			t.Errorf("%s hook reads SAFESHELL_OFF without a default, which breaks under nounset", c.name)
+	for name, script := range map[string]string{"bash": b, "zsh": z} {
+		if strings.Contains(script, `"$SAFESHELL_OFF"`) {
+			t.Errorf("%s hook reads SAFESHELL_OFF without a default, which breaks under nounset", name)
 		}
 	}
-	for _, want := range []string{"__ss_guard_run ||", "__ss_voice_run ||", "NOT checked"} {
-		if !strings.Contains(b, want) {
-			t.Errorf("bash hook is missing %q", want)
-		}
-	}
-	for _, want := range []string{"emulate -L zsh", "*) print -u2", "zle .${WIDGET}"} {
+	for _, want := range []string{"emulate -L zsh", "zle .$1", `__ss_submit $__ss_w`, "zle -I; print -u2"} {
 		if !strings.Contains(z, want) {
 			t.Errorf("zsh hook is missing %q", want)
 		}
+	}
+	if strings.Contains(z, "WIDGET") && !strings.Contains(z, "whatever name") {
+		t.Error("zsh must not finish with $WIDGET, which is the user's widget name when theirs calls accept-line")
 	}
 	if strings.Count(z, "emulate -L zsh") < 3 {
 		t.Error("every zsh function must run under emulate -L zsh")

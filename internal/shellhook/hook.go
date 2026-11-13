@@ -9,7 +9,7 @@ import "fmt"
 const bash = `# SafeShell hook for bash. Add to ~/.bashrc:  eval "$(safeshell hook bash)"
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
 # Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
-__ss_voice_run() {
+__ss_voice() {
   [[ -n "${SAFESHELL_OFF-}" ]] && return 0
   local out tty rc
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
@@ -20,8 +20,7 @@ __ss_voice_run() {
   READLINE_LINE=$out
   READLINE_POINT=${#READLINE_LINE}
 }
-__ss_voice() { __ss_voice_run || printf '\nSafeShell voice hit an error. Nothing was put on the line.\n' >/dev/tty; }
-__ss_guard_run() {
+__ss_guard() {
   [[ -n "${SAFESHELL_OFF-}" || -z "${READLINE_LINE//[[:space:]]/}" ]] && return 0
   local out rc tty t first unknown=()
   t=${READLINE_LINE#"${READLINE_LINE%%[![:space:]]*}"}; first=${t%%[[:space:]]*}
@@ -39,22 +38,23 @@ __ss_guard_run() {
   esac
   READLINE_POINT=${#READLINE_LINE}
 }
-__ss_guard() { __ss_guard_run || printf '\nSafeShell hit an error, so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' >/dev/tty; }
-__ss_noedit() { printf '\nSafeShell: edit-and-run is off because it would run the line unchecked. Edit the line here and press Enter.\n' >/dev/tty; }
+__ss_noedit() { printf '\nOpening the line in an editor is turned off by SafeShell, because the edited line would run without a check. Edit it here and press Enter.\n' >/dev/tty; }
 if [[ $- == *i* ]]; then
   shopt -s histverify   # !! and !$ are expanded into the line first, so the guard sees what would really run
   # Bind every keymap, so the guard also works in vi mode, whether it is switched on before or after this runs.
   for __ss_k in emacs vi-insert vi-command; do
     bind -m $__ss_k -x '"\C-x\C-s": __ss_guard'
     bind -m $__ss_k -x '"\C-x\C-v": __ss_voice'
-    bind -m $__ss_k '"\C-x\C-a": accept-line'
-    bind -m $__ss_k '"\C-m": "\C-x\C-s\C-x\C-a"'
-    bind -m $__ss_k '"\C-j": "\C-x\C-s\C-x\C-a"'   # Ctrl-J also accepts a line, and a pasted newline is one
-    bind -m $__ss_k '"\C-x\C-o": operate-and-get-next'
-    bind -m $__ss_k '"\C-o": "\C-x\C-s\C-x\C-o"'   # Ctrl-O runs the line and brings up the next one: guard it too
+    bind -m $__ss_k '"\e[9001~": accept-line'   # a sequence nobody types, so the guard cannot be skipped by accident
+    bind -m $__ss_k '"\C-m": "\C-x\C-s\e[9001~"'
+    bind -m $__ss_k '"\C-j": "\C-x\C-s\e[9001~"'   # Ctrl-J also accepts a line, and a pasted newline is one
+    bind -m $__ss_k '"\e[9002~": operate-and-get-next'
+    bind -m $__ss_k '"\C-o": "\C-x\C-s\e[9002~"'   # Ctrl-O runs the line and brings up the next one: guard it too
     bind -m $__ss_k -x '"\C-x\C-e": __ss_noedit'   # edit-and-execute-command runs the edited line unchecked
+    bind -m $__ss_k -x '"\e#": __ss_noedit'   # insert-comment with a number removes the # and runs the line unchecked
   done
   bind -m vi-command -x '"v": __ss_noedit'
+  bind -m vi-command -x '"#": __ss_noedit'
   unset __ss_k
 fi
 `
@@ -90,24 +90,20 @@ __ss_check() {   # returns 1 when the line was cancelled
   case $rc in
     0) BUFFER=$out ;;
     1) BUFFER=; return 1 ;;
-    *) print -u2 "\nSafeShell failed (exit $rc), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this." ;;
+    *) zle -I; print -u2 "\nSafeShell failed (exit $rc), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this." ;;
   esac
   return 0
 }
 setopt hist_verify   # expand !! into the line first so the guard sees what would really run
 # Every widget that submits a line is wrapped, not just accept-line, so every keymap (viins, vicmd, emacs) is covered.
-__ss_submit() {
+__ss_submit() {   # $1 is the built-in widget to finish with, whatever name the user's own widget was called by
   emulate -L zsh
-  __ss_check
-  case $? in
-    0) ;;
-    1) zle .accept-line; return ;;
-    *) print -u2 "\nSafeShell hit an error, so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this." ;;
-  esac
-  zle .${WIDGET}
+  __ss_check || { zle .accept-line; return }
+  zle .$1
 }
 for __ss_w in accept-line accept-and-hold accept-line-and-down-history accept-and-infer-next-history; do
-  zle -N ${__ss_w} __ss_submit
+  eval "__ss_${__ss_w//-/_}() { __ss_submit $__ss_w }"
+  zle -N ${__ss_w} __ss_${__ss_w//-/_}
 done
 unset __ss_w
 `

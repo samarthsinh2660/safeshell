@@ -105,6 +105,8 @@ func TestEditAndExecuteCannotRunALineUnchecked(t *testing.T) {
 		{"emacs Ctrl-X Ctrl-E", false, []string{"\x18\x05"}},
 		{"vi insert Ctrl-X Ctrl-E", true, []string{"\x18\x05"}},
 		{"vi command v", true, []string{"\x1b", "v"}},
+		{"emacs insert-comment with a number", false, []string{"\x1b1", "\x1b#"}},
+		{"vi command insert-comment with a number", true, []string{"\x1b", "1", "#"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			sh, marker, hook := guardedShell(t, "bash", bashArgv)
@@ -114,7 +116,7 @@ func TestEditAndExecuteCannotRunALineUnchecked(t *testing.T) {
 			}
 			press(sh, "touch "+marker)
 			press(sh, c.keys...)
-			sh.waitFor(t, "edit-and-run is off")
+			sh.waitFor(t, "turned off by SafeShell")
 			press(sh, "\x03") // drop the unsent line
 			stopped(t, sh, marker, "editor")
 			if _, err := os.Stat(filepath.Join(filepath.Dir(marker), "edited")); err == nil {
@@ -158,4 +160,21 @@ func TestZshViCommandModeCannotBypassTheGuard(t *testing.T) {
 	press(sh, ". "+hook+"\r", "bindkey -v\r", "touch "+marker, "\x1b", "\r")
 	sh.waitFor(t, "GUARD-STOPPED")
 	stopped(t, sh, marker, "zsh-vicmd")
+}
+
+func TestTheHelperKeysCannotRunALineUnchecked(t *testing.T) {
+	sh, marker, hook := guardedShell(t, "bash", bashArgv)
+	press(sh, ". "+hook+"\r", "touch "+marker, "\x18\x01") // Ctrl-X Ctrl-A used to accept the line as is
+	press(sh, "\x03")
+	stopped(t, sh, marker, "ctrlx")
+}
+
+func TestZshCustomEnterWidgetStillRunsLinesAndIsGuarded(t *testing.T) {
+	sh, marker, hook := guardedShell(t, "zsh", zshArgv)
+	press(sh, ". "+hook+"\r", "my-enter() { zle accept-line }; zle -N my-enter; bindkey '^M' my-enter\r")
+	press(sh, "echo safe-line-ran\r")
+	sh.waitFor(t, "safe-line-ran\r\n")
+	press(sh, "touch "+marker+"\r")
+	sh.waitFor(t, "GUARD-STOPPED")
+	stopped(t, sh, marker, "zsh-custom")
 }
