@@ -80,13 +80,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	defer netParent.Close()
 	cmd.ExtraFiles = []*os.File{rw, netChild}
 	cmd.WaitDelay = 2 * time.Second
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWUSER | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID |
-			syscall.CLONE_NEWNET | syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC,
-		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}},
-		GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}},
-		Pdeathsig:   syscall.SIGKILL,
-	}
+	cmd.SysProcAttr = initProcAttr()
 	start := time.Now()
 	if err := cmd.Start(); err != nil {
 		rw.Close()
@@ -233,6 +227,20 @@ func superviseNetwork(sock *os.File, pid int) []sandbox.NetAttempt {
 		return nil
 	}
 	return netwatch.Supervise(f)
+}
+
+// initProcAttr is how the sandbox's first process is started: in new
+// namespaces, killed with its parent, and in its own session so it has no
+// controlling terminal and cannot reach the user's real one.
+func initProcAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWUSER | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID |
+			syscall.CLONE_NEWNET | syscall.CLONE_NEWUTS | syscall.CLONE_NEWIPC,
+		UidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}},
+		GidMappings: []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}},
+		Pdeathsig:   syscall.SIGKILL,
+		Setsid:      true,
+	}
 }
 
 // markWritable records which warning paths the real user can write to. It runs

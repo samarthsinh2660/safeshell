@@ -5,6 +5,7 @@ package overlayfs
 import (
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
@@ -30,6 +31,21 @@ func TestCapBufferUnderTheLimitIsNotCut(t *testing.T) {
 	c.Write([]byte("hi"))
 	if c.cut || c.String() != "hi" {
 		t.Errorf("%q cut=%v", c.String(), c.cut)
+	}
+}
+
+func TestSandboxGetsNoTerminalDevice(t *testing.T) {
+	for _, d := range devices {
+		if d == "tty" {
+			t.Fatal("/dev/tty must not be bound into the sandbox")
+		}
+	}
+}
+
+func TestInitStartsInItsOwnSession(t *testing.T) {
+	a := initProcAttr()
+	if !a.Setsid || a.Pdeathsig != syscall.SIGKILL || a.Cloneflags&syscall.CLONE_NEWNS == 0 || a.Cloneflags&syscall.CLONE_NEWNET == 0 {
+		t.Errorf("session, parent-death signal and namespaces must all be set: %+v", a)
 	}
 }
 
