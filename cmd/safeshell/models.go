@@ -99,6 +99,9 @@ func (m *modelMenu) render(c config.Config) {
 		if config.Key(p) != "" {
 			key = "key saved"
 		}
+		if envKeyName(p) != "" {
+			key = "key from environment"
+		}
 		model := p.DefaultModel
 		if c.AI.Cloud.Provider == p.ID && c.AI.Cloud.Model != "" {
 			model = c.AI.Cloud.Model
@@ -227,7 +230,21 @@ func (m *modelMenu) connect(ctx context.Context, c config.Config, p providers.Pr
 	if c.AI.Mode != ai.Hybrid {
 		c.AI.Mode = ai.Cloud
 	}
-	m.save(c, p.Title+" ("+p.Maker+") is connected and in use.")
+	msg := p.Title + " (" + p.Maker + ") is connected and in use."
+	if env := envKeyName(p); env != "" {
+		msg += " Note: " + env + " is set in the environment, and it takes precedence over the saved key. Unset it to use the saved key."
+	}
+	m.save(c, msg)
+}
+
+// envKeyName is the environment variable that supplies p's key, or "" if none is set.
+func envKeyName(p providers.Provider) string {
+	for _, e := range p.Env {
+		if strings.TrimSpace(os.Getenv(e)) != "" {
+			return e
+		}
+	}
+	return ""
 }
 
 // current is the cloud model in use for p: the saved one, or the provider's default.
