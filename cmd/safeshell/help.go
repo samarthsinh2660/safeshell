@@ -74,6 +74,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell analyze <cmd>           the full picture: rating, sandbox result, what it would hit
    safeshell simulate <cmd>          run in the sandbox and list the changes (nothing real is touched)
    safeshell explain <cmd>           the analysis plus a plain-English explanation (needs AI)
+   safeshell explain --why <cmd>     which rule and evidence set the level (works without AI)
    safeshell ask <english>           turn English into a checked command
    safeshell undo / safeshell snapshots     restore / list
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini

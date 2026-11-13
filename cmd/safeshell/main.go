@@ -41,7 +41,8 @@ Usage:
                                             the real files are never touched
   safeshell guard [--cwd DIR] -- <command...>
                                             what the shell hook runs: analyse, ask, print the command to run
-  safeshell explain <command...>            the analysis plus a plain-English explanation (needs AI)
+  safeshell explain [--why] <command...>    the analysis plus a plain-English explanation (needs AI);
+                                            --why shows which rule and evidence set the level (no AI needed)
   safeshell ask <what you want in English>
                                             AI proposes a command; it is checked like any other
   safeshell models [list]                   choose the AI model (menu), or list the models your cloud key offers

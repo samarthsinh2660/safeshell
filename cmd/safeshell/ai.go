@@ -53,24 +53,43 @@ func firstErrLine(err error) string {
 	return s
 }
 
-// runExplain prints the analysis and a plain-English explanation.
+// runExplain prints the analysis and a plain-English explanation. With --why
+// it prints how the level was set instead, which needs no AI; the explanation
+// is added when an AI is set up.
 func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
+	why := len(args) > 0 && args[0] == "--why"
+	if why {
+		args = args[1:]
+	}
 	args, ok := endOptions("explain", args, stderr)
 	if !ok {
 		return 2
 	}
-	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
+	line := strings.TrimSpace(strings.Join(args, " "))
+	if line == "" {
+		fmt.Fprintln(stderr, "safeshell explain: give a command to explain, for example  safeshell explain --why 'rm -rf build'")
 		return 2
 	}
 	b, err := backend()
-	if err != nil || b == nil {
+	off := err != nil || b == nil
+	if off && !why {
 		fmt.Fprintln(stderr, "safeshell explain: AI is off.", aiOffHint)
+		fmt.Fprintln(stderr, "To see why a command got its level without the AI, run  safeshell explain --why <command>")
 		return 1
 	}
 	cwd := cwdOr("")
 	a := analyze(context.Background(), strings.Join(args, " "), cwd)
-	printAnalysis(stdout, a, cwd, color, true)
+	if why && !off {
+		aiReview(&a, stderr) // the same review the hook runs, so the level shown is the one it would use
+	}
+	if why {
+		fmt.Fprint(stdout, report.Why(a.Line, a.Verdict, a.Effects, a.Level, a.Decision))
+	} else {
+		printAnalysis(stdout, a, cwd, color, true)
+	}
+	if off {
+		return 0
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	text, err := ai.Explain(ctx, b, facts(a))
