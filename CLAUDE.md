@@ -110,7 +110,7 @@ Go module `github.com/samarthsinh2660/safeshell` is at the repository root. Read
 - Every behaviour change has a test; every bug fix has a test that failed before. Table tests for classifier rules.
 - Classifier: edit `eval/corpus` (dev) freely; `eval/heldout` is independent and only grows from new, unseen cases. `TestHeldoutReport` enforces the accuracy floors; never lower a floor to pass.
 - Integration tests (`test/integration`) use the real binary and kernel and skip themselves when the sandbox is unavailable. `SS_SWEEP=1 go test ./test/integration -run Sweep` pushes every labelled command through the real binary.
-- AI: `safeshell ai bench` (49 requests, fixed `eval.BenchEnv`) is the accuracy measure; cloud scores vary (about 95-100% Gemini flash-lite, 97% local Qwen 3B). Unit tests use fake backends, never the network.
+- AI: `safeshell ai bench` (49 requests, fixed `eval.BenchEnv`) is the accuracy measure; cloud scores vary (about 95-100%, measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default; local Qwen 3B 49/49). Unit tests use fake backends, never the network.
 - Live provider tests are opt-in and take keys from env vars only.
 
 ## Security and secrets

@@ -179,7 +179,7 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
   independent set that only grows with new, unseen commands. `TestHeldoutReport` enforces
   accuracy floors: fix the rule, never lower a floor.
 - AI code is unit-tested with fake backends, never the network. `safeshell ai bench` measures real
-  accuracy on 49 fixed requests (local Qwen 3B about 97%, Gemini flash-lite about 95-100%).
+  accuracy on 49 fixed requests (local Qwen 3B 49/49; cloud about 95-100%, measured on gemini-flash-lite-latest, so re-run `safeshell ai bench` for the current default).
 - Live tests against a provider are opt-in and take keys from environment variables only.
 
 ## Commits and pull requests

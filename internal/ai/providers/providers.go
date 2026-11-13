@@ -59,10 +59,9 @@ func (p Provider) Backend(key, model string) ai.Backend {
 	case "anthropic":
 		return ai.Redacting(cloud.Anthropic{Key: key, Model: model})
 	case "openai":
-		return ai.Redacting(openai.Client{Label: "gpt:" + model, URL: "https://api.openai.com/v1", Key: key, Model: model, Tokens: "max_completion_tokens"})
+		return ai.Redacting(openai.Client{Label: "gpt:" + model, URL: "https://api.openai.com/v1", Key: key, Model: model, Tokens: "max_completion_tokens", Reasoning: "low"})
 	default:
-		zero := 0.0
-		return ai.Redacting(openai.Client{Label: "gemini:" + model, URL: "https://generativelanguage.googleapis.com/v1beta/openai", Key: key, Model: model, Temperature: &zero})
+		return ai.Redacting(openai.Client{Label: "gemini:" + model, URL: "https://generativelanguage.googleapis.com/v1beta/openai", Key: key, Model: model})
 	}
 }
 

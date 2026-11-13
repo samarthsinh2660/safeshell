@@ -24,7 +24,9 @@ type Client struct {
 	Tokens string // name of the length parameter: "max_tokens" (default) or "max_completion_tokens"
 	// Temperature is sent only when set; some hosted models accept just their default.
 	Temperature *float64
-	Client      *http.Client
+	// Reasoning is sent as reasoning_effort when set, so a reasoning model leaves room for its answer.
+	Reasoning string
+	Client    *http.Client
 }
 
 func (c Client) Name() string { return c.Label }
@@ -40,6 +42,9 @@ func (c Client) Complete(ctx context.Context, system, user string) (string, erro
 	}
 	if c.Temperature != nil {
 		req["temperature"] = *c.Temperature
+	}
+	if c.Reasoning != "" {
+		req["reasoning_effort"] = c.Reasoning
 	}
 	body, _ := json.Marshal(req)
 	cl := c.Client
