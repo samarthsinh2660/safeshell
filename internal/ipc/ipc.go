@@ -117,9 +117,10 @@ func checkPeer(c net.Conn, uid int) error {
 	return nil
 }
 
-// maxSocketPath is the longest socket path in bytes the system accepts: the
-// sun_path field is 104 bytes on macOS and 108 on Linux, and one is the NUL.
-const maxSocketPath = 103
+// maxSocketPath is the longest socket path in bytes the system accepts. SafeShell
+// supports Linux only, where the sun_path field is 108 bytes including the NUL
+// terminator, so the longest path is 107 bytes.
+const maxSocketPath = 107
 
 // ErrPathTooLong means the socket path is longer than the system allows. The
 // message says which folder to shorten.
@@ -131,7 +132,7 @@ func checkLength(path string) error {
 	if len(path) <= maxSocketPath {
 		return nil
 	}
-	return fmt.Errorf("%w (%d bytes, the limit is %d): %s. Set XDG_RUNTIME_DIR to a shorter folder, for example one under /tmp, and try again",
+	return fmt.Errorf("%w (%d bytes, the limit is %d): %s. Commands are still checked, just without the background daemon. To use the daemon, set XDG_RUNTIME_DIR to a shorter folder that only you can write to (for example: mkdir -m 700 /tmp/ss-$USER)",
 		ErrPathTooLong, len(path), maxSocketPath, path)
 }
 
