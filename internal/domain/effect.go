@@ -23,14 +23,15 @@ func (e Evidence) String() string {
 type EffectKind string
 
 const (
-	EffectFS       EffectKind = "files"
-	EffectProcess  EffectKind = "processes"
-	EffectDisk     EffectKind = "disk"
-	EffectNetwork  EffectKind = "network"
-	EffectReview   EffectKind = "review"
-	EffectPackages EffectKind = "packages"
-	EffectServices EffectKind = "services"
-	EffectGit      EffectKind = "git"
+	EffectFS         EffectKind = "files"
+	EffectProcess    EffectKind = "processes"
+	EffectDisk       EffectKind = "disk"
+	EffectNetwork    EffectKind = "network"
+	EffectReview     EffectKind = "review"
+	EffectPackages   EffectKind = "packages"
+	EffectServices   EffectKind = "services"
+	EffectGit        EffectKind = "git"
+	EffectContainers EffectKind = "containers"
 )
 
 // Effect is one thing a command would do, with how sure we are.

@@ -113,16 +113,16 @@ func (g gitQuery) resolves(rev string) bool {
 	return err == nil
 }
 
-// gitArgs are the words after the git subcommand, split the way the rules read them.
-type gitArgs struct {
+// parsedArgs are the words after a subcommand, split the way the rules read them.
+type parsedArgs struct {
 	short map[rune]bool
 	long  map[string]bool
 	pos   []string // words before any --
 	paths []string // words after --
 }
 
-func parseGitArgs(args []string) gitArgs {
-	a := gitArgs{short: map[rune]bool{}, long: map[string]bool{}}
+func parseArgs(args []string) parsedArgs {
+	a := parsedArgs{short: map[rune]bool{}, long: map[string]bool{}}
 	dashed := false
 	for _, w := range args {
 		switch {
@@ -360,7 +360,7 @@ func (g gitQuery) branch() (string, error) {
 // reset: git reset --hard [target] throws away tracked changes, and the commits
 // the branch leaves behind when nothing else points at them.
 func (g gitQuery) reset(rest []string) ([]domain.Effect, error) {
-	a := parseGitArgs(rest)
+	a := parseArgs(rest)
 	if !a.long["hard"] {
 		return nil, nil
 	}
@@ -399,7 +399,7 @@ func (g gitQuery) reset(rest []string) ([]domain.Effect, error) {
 
 // discard: git checkout -- paths and git restore paths overwrite edited files with the saved version.
 func (g gitQuery) discard(sub string, rest []string) ([]domain.Effect, error) {
-	a := parseGitArgs(rest)
+	a := parseArgs(rest)
 	var paths []string
 	switch {
 	case sub == "checkout" && len(a.pos) == 0:
@@ -438,7 +438,7 @@ func (g gitQuery) discard(sub string, rest []string) ([]domain.Effect, error) {
 
 // clean: git clean -f deletes untracked files; git's own dry run lists them.
 func (g gitQuery) clean(rest []string) ([]domain.Effect, error) {
-	a := parseGitArgs(rest)
+	a := parseArgs(rest)
 	if a.short['n'] || a.long["dry-run"] || a.short['e'] || a.long["exclude"] || a.short['i'] || a.long["interactive"] {
 		return nil, nil
 	}
@@ -486,7 +486,7 @@ func forces(args []string) int {
 // push: a forced push replaces the remote branch, so the commits on it that
 // you do not have are lost. Nothing is fetched; this reads the last-fetched state.
 func (g gitQuery) push(rest []string) ([]domain.Effect, error) {
-	a := parseGitArgs(rest)
+	a := parseArgs(rest)
 	var specs []string
 	remote := ""
 	if words := append(a.pos, a.paths...); len(words) > 0 {
@@ -554,7 +554,7 @@ func (g gitQuery) push(rest []string) ([]domain.Effect, error) {
 
 // deleteBranch: git branch -D drops a branch even if its commits are merged nowhere.
 func (g gitQuery) deleteBranch(rest []string) ([]domain.Effect, error) {
-	a := parseGitArgs(rest)
+	a := parseArgs(rest)
 	forced := a.short['D'] || ((a.short['d'] || a.long["delete"]) && (a.short['f'] || a.long["force"]))
 	if !forced || a.short['r'] || a.long["remotes"] {
 		return nil, nil
@@ -583,7 +583,7 @@ var (
 
 // stash: drop deletes one saved stash and clear deletes them all.
 func (g gitQuery) stash(rest []string) ([]domain.Effect, error) {
-	a := parseGitArgs(rest)
+	a := parseArgs(rest)
 	if len(a.pos) == 0 || (a.pos[0] != "drop" && a.pos[0] != "clear") {
 		return nil, nil
 	}

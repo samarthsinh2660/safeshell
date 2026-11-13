@@ -171,6 +171,44 @@ func TestSimulateVerboseShowsEveryNote(t *testing.T) {
 	}
 }
 
+func TestAnalyzeAsksDockerAndKubectlWhatWouldBeRemoved(t *testing.T) {
+	old := toolRunner
+	t.Cleanup(func() { toolRunner = old })
+	var gotEnv []string
+	var gotDir string
+	toolRunner = func(_ context.Context, env []string, dir, name string, args ...string) (string, error) {
+		gotEnv, gotDir = env, dir
+		if name == "docker" {
+			return "/web running nginx\n", nil
+		}
+		return "pod/a\n", nil
+	}
+	for line, want := range map[string]string{"docker rm web": "docker rm would remove 1 container", "kubectl delete pod a": "kubectl delete would remove 1 object"} {
+		dir := t.TempDir()
+		a := analyze(engine.WithEnv(context.Background(), []string{"DOCKER_HOST=tcp://theirs", "KUBECONFIG=/theirs"}), line, dir)
+		found := false
+		for _, e := range a.Effects {
+			found = found || (e.Kind == domain.EffectContainers && strings.Contains(e.Summary, want))
+		}
+		if !found || !envHas(gotEnv, "DOCKER_HOST") || !envHas(gotEnv, "KUBECONFIG") || gotDir != dir {
+			t.Errorf("%s: env %v, dir %q, effects %+v", line, gotEnv, gotDir, a.Effects)
+		}
+	}
+}
+
+func TestRealToolRunnerRunsInTheCallersFolderWithTheCallersPath(t *testing.T) {
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "mytool"), []byte("#!/bin/sh\npwd\necho $KUBECONFIG $LC_ALL\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"PATH=" + bin, "KUBECONFIG=/theirs"}
+	dir := t.TempDir()
+	out, err := realToolRunner(context.Background(), env, dir, "mytool")
+	if err != nil || strings.TrimSpace(out) != dir+"\n/theirs C" || len(env) != 2 {
+		t.Errorf("%q %v", out, err)
+	}
+}
+
 func TestRealGitRunnerRunsInTheGivenFolderWithACleanEnvironment(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")

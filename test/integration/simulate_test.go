@@ -499,6 +499,32 @@ func TestAnalyzeListsWhatAGitCommandWouldLose(t *testing.T) {
 	}
 }
 
+func TestAnalyzeListsWhatADockerRemovalWouldTake(t *testing.T) {
+	if _, err := os.Stat(ssBin); err != nil {
+		t.Skip("bin/safeshell not built (run: make build)")
+	}
+	// A stand-in docker that answers listings and fails on anything that would change a container.
+	bin := t.TempDir()
+	script := "#!/bin/sh\nif [ \"$1 $2\" = \"container inspect\" ]; then echo '/web running nginx'; exit 0; fi\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(bin, "docker"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(ssBin, "analyze", "--json", "docker rm -f web")
+	c.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	out, err := c.Output()
+	if _, ok := err.(*exec.ExitError); err != nil && !ok {
+		t.Fatal(err)
+	}
+	var a analysis
+	if err := json.Unmarshal(out, &a); err != nil {
+		t.Fatalf("bad JSON: %v\n%s", err, out)
+	}
+	e, ok := a.effect("containers")
+	if !ok || e.Evidence != "INSPECTED" || !strings.Contains(strings.Join(e.Details, "\n"), "web (running, image nginx)") {
+		t.Fatalf("container effect: %+v", e)
+	}
+}
+
 func TestSandboxNotesOnlyConcernWhatTheCommandTouches(t *testing.T) {
 	needSandbox(t)
 	d := fixture(t)

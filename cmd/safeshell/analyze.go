@@ -25,6 +25,11 @@ import (
 // It is a test seam: tests replace it with a fake.
 var gitRunner = realGitRunner
 
+// toolRunner runs the read-only docker and kubectl queries in the caller's
+// folder and environment, so DOCKER_HOST, KUBECONFIG and the like are the
+// user's. It is a test seam: tests replace it with a fake.
+var toolRunner = realToolRunner
+
 // inspectBudget is the most time one inspector may spend asking other programs.
 const inspectBudget = 15 * time.Second
 
@@ -40,7 +45,16 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 		run := func(dir string, args ...string) (string, error) { return gitRunner(bctx, env, dir, args...) }
 		return effects.InspectGit(run, cwd, cmds)
 	}
-	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices, inspectRepo}}
+	// Each of the two gets its own budget, which also ends with the request.
+	tool := func(f func(effects.Runner, []shellparse.Command) []domain.Effect) engine.Inspector {
+		return func(cmds []shellparse.Command) []domain.Effect {
+			bctx, cancel := context.WithTimeout(ctx, inspectBudget)
+			defer cancel()
+			return f(func(name string, args ...string) (string, error) { return toolRunner(bctx, env, cwd, name, args...) }, cmds)
+		}
+	}
+	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+		tool(effects.InspectDocker), tool(effects.InspectKubectl)}}
 	return e.Analyze(ctx, line, cwd)
 }
 
@@ -150,6 +164,11 @@ func realGitRunner(ctx context.Context, env []string, dir string, args ...string
 	}
 	clean = append(clean, "LC_ALL=C", "LANG=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1")
 	return runLimited(ctx, toolTimeout, clean, dir, "git", args...)
+}
+
+// realToolRunner runs a read-only query in dir with the caller's environment and a plain locale.
+func realToolRunner(ctx context.Context, env []string, dir, name string, args ...string) (string, error) {
+	return runLimited(ctx, toolTimeout, append(env[:len(env):len(env)], "LC_ALL=C", "LANG=C"), dir, name, args...)
 }
 
 func inspectPackages(cmds []shellparse.Command) []domain.Effect {
