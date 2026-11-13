@@ -55,6 +55,10 @@ func firstErrLine(err error) string {
 
 // runExplain prints the analysis and a plain-English explanation.
 func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
+	args, ok := endOptions("explain", args, stderr)
+	if !ok {
+		return 2
+	}
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -80,6 +84,10 @@ func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
 
 // runAsk is `safeshell ask <english>`: translate, then treat the result like a typed command.
 func runAsk(args []string, stdout, stderr io.Writer, color bool) int {
+	args, ok := endOptions("ask", args, stderr)
+	if !ok {
+		return 2
+	}
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2

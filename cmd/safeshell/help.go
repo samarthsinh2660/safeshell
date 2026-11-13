@@ -96,8 +96,8 @@ English is not recognised     start the line with ?   or run  safeshell ask "...
 Disable for one terminal      SAFESHELL_OFF=1        Turn AI off: /models then  off`},
 }
 
-// runHelp prints the overview, or one topic.
-func runHelp(args []string, w io.Writer) int {
+// runHelp prints the overview, or one topic; an unknown topic goes to stderr.
+func runHelp(args []string, w, stderr io.Writer) int {
 	if len(args) > 0 {
 		want := strings.ToLower(args[0])
 		for _, t := range helpTopics {
@@ -106,6 +106,7 @@ func runHelp(args []string, w io.Writer) int {
 				return 0
 			}
 		}
+		w = stderr // an unknown topic is an error
 		fmt.Fprintf(w, "No help topic called %q.\n\n", args[0])
 	}
 	fmt.Fprint(w, "SafeShell stops dangerous commands before they run, shows what would happen, and lets you undo.\n\nTopics (safeshell help <topic>, or /help <topic> in your terminal):\n")

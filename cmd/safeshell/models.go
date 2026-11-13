@@ -321,6 +321,10 @@ func runModels(args []string, in io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 1 && args[0] == "list" {
 		return runModelsList(context.Background(), stdout, stderr, listCloud)
 	}
+	if len(args) > 0 {
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
 	newModelMenu(in, stdout).Run(context.Background())
 	return 0
 }

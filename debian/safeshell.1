@@ -17,6 +17,11 @@ Run
 once to add the hook to your shell startup file. After that every command you
 press Enter on in bash or zsh is checked first.
 .SH COMMANDS
+Every command accepts
+.B \-h
+or
+.BR \-\-help ,
+which prints its help and does nothing else.
 .TP
 .BI "check [--json] " command
 Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 means R4.
