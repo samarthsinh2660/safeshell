@@ -2,6 +2,31 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.1.1 - 2026-11-13
+
+A safety release: it closes the worst classifier and hook bypasses and hardens the sandbox, the daemon socket and printing.
+
+### Added
+- `/models` → `choose N` and `safeshell models list` show the models your own API key can use and save your pick. (#131, #133)
+- `safeshell explain --why <command>` shows which rule and which evidence set the level, without the AI. (#87)
+- `safeshell voice setup` offers to install what it needs (`cmake`, `g++`, `make`, and `pipewire-bin` when there is no recorder) with `sudo apt-get`, after asking. `--yes` skips the question. (#136)
+
+### Changed
+- Cloud defaults: OpenAI `gpt-6-luna`, Gemini `gemini-3.5-flash-lite`; Claude is unchanged. The prompt ignores filler words, reads typos as the intended word, and asks instead of guessing a deletion for a vague "clean up". `safeshell ai bench` has 49 requests. (#131)
+- An AI-proposed line that changes your shell (alias, trap, export, function, source, ...) asks `[y/N]` even when it is otherwise allowed. Lines you type yourself are unchanged. (#132)
+- Commands in the sandbox have no terminal: `/dev/tty` is gone and they start in their own session. Ctrl-C no longer reaches them; the timeout still ends them. (#130)
+- Without an absolute `XDG_RUNTIME_DIR` there is no daemon; commands are checked directly and `safeshell daemon` says why. (#83)
+- CI runs one check per part and requires 100% coverage of changed lines. (#68)
+- Internal clean-up: shared helpers, consistent messages, more tests. `internal/ai/cloud` is now `internal/ai/anthropic`. (#136)
+
+### Fixed
+- Every subcommand answers `-h`/`--help` with its help and does nothing else; `safeshell uninstall --help` used to uninstall. `--` ends the options, and an unknown option exits 2 and says what to run. (#63)
+- Global options before a subcommand no longer hide it (`git -C repo reset --hard`), and `cp`/`tee` are rated by their target (`cp /dev/zero /dev/sda`). (#39, #40)
+- `exec > /etc/passwd`, `bash -lc '...'`, `find -exec sh -c '...'` and wrapper options such as `exec -a ls rm -rf /` are looked into. (#36, #37, #38, #41)
+- "Changes no files" is no longer trusted when the sandbox could not see a folder you can write to. (#50)
+- The bash hook checks lines in vi mode and from Ctrl-X Ctrl-E, and keeps working under `set -u` / `setopt nounset`. (#58, #59)
+- Security: the hook only talks to a daemon socket you own (checked with the peer's user id). File names, command output and AI text are printed with control and invisible characters shown as escapes, and an AI command with hidden characters is refused. Sandboxed commands can't reach your real terminal. (#83, #130, #132)
+
 ## 1.1.0 - 2026-11-12
 
 ### Added
