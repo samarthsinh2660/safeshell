@@ -2,12 +2,14 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/samarthsinh2660/safeshell/eval"
 	"github.com/samarthsinh2660/safeshell/internal/ai"
@@ -185,6 +187,17 @@ func TestAIStopStopsARunningEngine(t *testing.T) {
 		t.Skip("no sleep:", err)
 	}
 	t.Cleanup(func() { _ = sleep.Process.Kill(); _ = sleep.Wait() })
+	// Start returns before the child has exec'd sleep; until then its
+	// cmdline is this test binary and ai stop rightly ignores it.
+	cmdline := fmt.Sprintf("/proc/%d/cmdline", sleep.Process.Pid)
+	for end := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if b, _ := os.ReadFile(cmdline); strings.HasPrefix(string(b), "sleep\x00") {
+			break
+		}
+		if time.Now().After(end) {
+			t.Fatal("sleep did not start")
+		}
+	}
 	d := runtime.DefaultDirs()
 	if err := os.MkdirAll(d.State, 0o700); err != nil {
 		t.Fatal(err)
