@@ -150,7 +150,7 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 	c := newPalette(color)
 	col := [...]string{c.green, c.green, c.yellow, c.red, c.red}[a.Level]
 	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, a.Level, a.Level.Label(), c.reset, decisionText[a.Decision])
-	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, a.Line, c.reset)
+	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, report.Printable(a.Line), c.reset)
 	if a.Level > a.Verdict.Level {
 		fmt.Fprintf(w, "%sThe command text alone looked like %s; what it would really do raised it to %s.%s\n", c.dim, a.Verdict.Level, a.Level, c.reset)
 	}
@@ -164,28 +164,28 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 			fmt.Fprintf(w, "\n%sWhy%s\n", c.bold, c.reset)
 			shown = true
 		}
-		fmt.Fprintf(w, "  %s  %s\n", f.Level, f.Reason)
+		fmt.Fprintf(w, "  %s  %s\n", f.Level, report.Printable(f.Reason))
 	}
 	for _, e := range a.Effects {
-		fmt.Fprintf(w, "\n%s%s%s  %s: %s\n", c.bold, e.Evidence, c.reset, e.Kind, e.Summary)
+		fmt.Fprintf(w, "\n%s%s%s  %s: %s\n", c.bold, e.Evidence, c.reset, e.Kind, report.Printable(e.Summary))
 		for _, d := range e.Details {
-			fmt.Fprintf(w, "      %s\n", d)
+			fmt.Fprintf(w, "      %s\n", report.Printable(d))
 		}
 	}
 	if a.SimNote != "" {
-		fmt.Fprintf(w, "\n%s%s%s\n", c.dim, a.SimNote, c.reset)
+		fmt.Fprintf(w, "\n%s%s%s\n", c.dim, report.Printable(a.SimNote), c.reset)
 	}
 	if a.Sim != nil {
 		shown, hidden := sandboxNotes(a.Sim.Warnings, a.Line, cwd, a.Sim.Diff.Changes, verbose)
 		for _, wn := range shown {
-			fmt.Fprintf(w, "%sSandbox note: %s%s\n", c.dim, wn.Text, c.reset)
+			fmt.Fprintf(w, "%sSandbox note: %s%s\n", c.dim, report.Printable(wn.Text), c.reset)
 		}
 		hiddenNotes(w, hidden, c.dim, c.reset)
 	}
 	if len(a.Verdict.Alternatives) > 0 {
 		fmt.Fprintf(w, "\n%sSafer options%s\n", c.bold, c.reset)
 		for i, alt := range a.Verdict.Alternatives {
-			fmt.Fprintf(w, "  %d) %s%s%s\n     %s\n", i+1, c.green, alt.Command, c.reset, alt.Note)
+			fmt.Fprintf(w, "  %d) %s%s%s\n     %s\n", i+1, c.green, report.Printable(alt.Command), c.reset, report.Printable(alt.Note))
 		}
 	}
 }

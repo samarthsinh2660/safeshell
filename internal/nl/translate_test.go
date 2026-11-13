@@ -44,6 +44,9 @@ func TestTranslateRefusesUnusableAnswers(t *testing.T) {
 	for name, reply := range map[string]string{
 		"empty":      `{"command":"","note":"unclear"}`,
 		"multi-line": `{"command":"ls\nrm -rf /","note":""}`,
+		"escape":     `{"command":"ls\u001b[2K; rm x","note":""}`,
+		"c1":         `{"command":"ls \u009b","note":""}`,
+		"bidi":       `{"command":"ls \u202etxt.sh","note":""}`,
 		"not json":   `rm -rf /`,
 		"huge":       `{"command":"` + strings.Repeat("a", 2000) + `"}`,
 	} {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -71,6 +72,9 @@ opts:
 	return guardLine(line, cwd, stdout, stderr, color, false)
 }
 
+// changesShell matches a line that sets up the shell itself (aliases, functions, traps, variables, eval).
+var changesShell = regexp.MustCompile(`(?:^|[\s;&|(])(?:alias|function|trap|export|eval)(?:$|[\s;&|)])`)
+
 // guardLine analyses one command line, asks if needed, and prints what to run.
 func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed bool) int {
 	a := analyzeFast(context.Background(), line, cwd, stderr)
@@ -81,7 +85,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true
 	if proposed && a.Decision == domain.Allow {
-		ok = ui.Proceed(in, stderr) // the assistant wrote it, so the person always sees it first
+		ok = ui.Proceed(in, stderr, !changesShell.MatchString(line)) // the assistant wrote it, so the person always sees it first
 	} else {
 		cmd, ok = ui.Choose(in, stderr, line, a.Decision, a.Verdict.Alternatives)
 	}

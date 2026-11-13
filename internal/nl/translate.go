@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
+	"github.com/samarthsinh2660/safeshell/internal/report"
 )
 
 const system = `You are the assistant built into SafeShell, a safety layer inside the user's Linux terminal.
@@ -123,7 +124,7 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		return Result{Note: r.Note, Question: q}, nil
 	case cmd == "":
 		return Result{Note: r.Note}, ErrNoCommand
-	case strings.ContainsAny(cmd, "\n\r\x00") || len(cmd) > 1000:
+	case report.ContainsUnsafe(cmd) || len(cmd) > 1000:
 		return Result{}, errors.New("the model proposed a command that is not a single line")
 	case !Runnable(cmd): // e.g. ":q" for "how do I quit vim": that is advice, not a command
 		r.Answer, r.Command = cmd, ""
