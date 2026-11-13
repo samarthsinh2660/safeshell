@@ -92,6 +92,16 @@ func TestHookPrintsScript(t *testing.T) {
 	}
 }
 
+// privateDir is a temporary folder only we can write to, whatever the umask.
+func privateDir(t *testing.T) string {
+	t.Helper()
+	d := t.TempDir()
+	if err := os.Chmod(d, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
 func TestMain(m *testing.M) { // never write the real audit log from tests
 	d, _ := os.MkdirTemp("", "ss-audit")
 	auditPath = func() string { return filepath.Join(d, "audit.jsonl") }
@@ -186,7 +196,7 @@ func withDaemon(t *testing.T, a engine.Analysis, seenEnv *[]string) {
 		}
 		return a
 	}
-	path := filepath.Join(t.TempDir(), "d.sock")
+	path := filepath.Join(privateDir(t), "d.sock")
 	socketPath = func() string { return path }
 	l, err := ipc.Listen(path)
 	if err != nil {
@@ -205,20 +215,22 @@ func TestAnalyzeFastUsesTheDaemonWhenItIsRunningAndFallsBackWhenNot(t *testing.T
 	local := sampleAnalysis()
 	local.Line = "ran-locally"
 	fakeAnalyze(t, local)
+	oldSocket := socketPath
+	t.Cleanup(func() { socketPath = oldSocket })
 	socketPath = func() string { return filepath.Join(t.TempDir(), "nothing.sock") }
-	if a := analyzeFast(context.Background(), "x", "/"); a.Line != "ran-locally" {
+	if a := analyzeFast(context.Background(), "x", "/", io.Discard); a.Line != "ran-locally" {
 		t.Errorf("no daemon: %q", a.Line)
 	}
 	remote := sampleAnalysis()
 	remote.Line = "ran-in-daemon"
 	withDaemon(t, remote, nil)
-	got := analyzeFast(context.Background(), "x", "/")
+	got := analyzeFast(context.Background(), "x", "/", io.Discard)
 	if got.Line != "ran-in-daemon" || got.Level != domain.R3 || got.Decision != domain.Block || len(got.Effects) != 1 || got.Effects[0].Evidence != domain.Observed {
 		t.Errorf("through the daemon: %+v", got)
 	}
 	t.Setenv("SAFESHELL_NODAEMON", "1")
 	fakeAnalyze(t, local)
-	if a := analyzeFast(context.Background(), "x", "/"); a.Line != "ran-locally" {
+	if a := analyzeFast(context.Background(), "x", "/", io.Discard); a.Line != "ran-locally" {
 		t.Error("SAFESHELL_NODAEMON must bypass the daemon")
 	}
 }
@@ -243,8 +255,9 @@ func TestDaemonMethods(t *testing.T) {
 }
 
 func TestDaemonCommandUsageAndStopWhenNotRunning(t *testing.T) {
+	oldSocket := socketPath
+	t.Cleanup(func() { socketPath = oldSocket })
 	socketPath = func() string { return "/nonexistent/none.sock" }
-	t.Cleanup(func() { socketPath = ipc.SocketPath })
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 	if code, out, _ := runSS("daemon", "stop"); code != 0 || !strings.Contains(out, "not running") {
 		t.Errorf("%d %q", code, out)
