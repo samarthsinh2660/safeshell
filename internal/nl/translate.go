@@ -4,7 +4,6 @@ package nl
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -112,7 +111,7 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 	}
 	prompt := env.render() + "<request>" + request + "</request>"
 	raw, err := ask(ctx, b, prompt)
-	if errors.Is(err, errNotJSON) { // small models sometimes ramble; one firm reminder usually fixes it
+	if errors.Is(err, ai.ErrNotJSON) { // small models sometimes ramble; one firm reminder usually fixes it
 		raw, err = ask(ctx, b, prompt+"\nReply with the JSON object only.")
 	}
 	if err != nil {
@@ -172,8 +171,6 @@ var ErrBackend = errors.New("could not ask the model")
 // is how a small model usually declines a request it should not fulfil.
 var ErrNoCommand = errors.New("the model could not turn that into a command")
 
-var errNotJSON = errors.New("the model did not return the expected JSON")
-
 type reply struct{ Command, Note, Answer, Question string }
 
 func ask(ctx context.Context, b ai.Backend, prompt string) (reply, error) {
@@ -181,10 +178,9 @@ func ask(ctx context.Context, b ai.Backend, prompt string) (reply, error) {
 	if err != nil {
 		return reply{}, fmt.Errorf("%w: %w", ErrBackend, err)
 	}
-	i, j := strings.Index(out, "{"), strings.LastIndex(out, "}")
 	var r reply
-	if i < 0 || j < i || json.Unmarshal([]byte(out[i:j+1]), &r) != nil {
-		return reply{}, errNotJSON
+	if err := ai.DecodeJSON(out, &r); err != nil {
+		return reply{}, err
 	}
 	return r, nil
 }

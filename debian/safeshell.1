@@ -37,12 +37,13 @@ Turn a request written in English into a command, which is then checked like any
 Manage the optional built-in AI. Nothing is downloaded until you run
 .BR "ai setup" .
 .TP
-.B voice [setup|status|\-\-text]
+.B voice [setup [\-\-yes]|status|\-\-text]
 Speak a request. The speech is turned into text on this machine and then handled like
 typed English. Run
 .B voice setup
-once to build the speech engine and download the model. Recording needs pipewire-bin,
-pulseaudio-utils or alsa-utils.
+once to install the tools it needs (cmake, g++ and a recorder, with apt-get after asking;
+.B \-\-yes
+skips the question), build the speech engine and download the model.
 .TP
 .RB "undo [" ID ]
 Put back what the last approved command changed, and verify it.

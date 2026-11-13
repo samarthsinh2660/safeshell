@@ -292,3 +292,10 @@ func TestCallHonoursItsContext(t *testing.T) {
 		t.Errorf("%v after %v", err, time.Since(start))
 	}
 }
+
+func TestErrorTextHasMessageAndCode(t *testing.T) {
+	e := &Error{Code: CodeBadParams, Message: "need {line}"}
+	if got := e.Error(); !strings.Contains(got, "need {line}") || !strings.Contains(got, "code") {
+		t.Error(got)
+	}
+}

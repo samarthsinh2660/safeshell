@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/samarthsinh2660/safeshell/internal/domain"
+	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
 // Entry is one decision. Outcome is "allowed", "cancelled", "ran", or
@@ -19,13 +22,25 @@ type Entry struct {
 	Outcome  string    `json:"outcome"`
 }
 
+// Outcome names what happened to a command: the Outcome of its Entry, and the
+// replacement command that ran instead (empty unless the outcome is "replaced").
+// d is the decision, line the command as typed, cmd the command that was run
+// (when ran is true).
+func Outcome(d domain.Decision, ran bool, line, cmd string) (outcome, run string) {
+	switch {
+	case ran && d == domain.Allow:
+		return "allowed", ""
+	case ran && cmd != line:
+		return "replaced", cmd
+	case ran:
+		return "ran", ""
+	}
+	return "cancelled", ""
+}
+
 // DefaultPath is $XDG_STATE_HOME/safeshell/audit.jsonl (or ~/.local/state/...).
 func DefaultPath() string {
-	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
-		return filepath.Join(d, "safeshell", "audit.jsonl")
-	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".local", "state", "safeshell", "audit.jsonl")
+	return filepath.Join(xdg.Dir("XDG_STATE_HOME", ".local", "state"), "audit.jsonl")
 }
 
 // Append writes one line. Failure to log must never stop a command, so errors

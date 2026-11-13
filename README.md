@@ -140,7 +140,7 @@ Observed effects and the AI can only raise a rating, never lower it. More in
   Nothing is downloaded until you ask.
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
-- **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup` (needs cmake, a C++ compiler and a recorder: `pipewire-bin`, `pulseaudio-utils` or `alsa-utils`).
+- **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
   The words then go through the same path as typed English, so the usual checks apply.
 
 `safeshell ai bench` measures the active model on 49 labelled requests: local Qwen 3B scores 100% (49 of 49),

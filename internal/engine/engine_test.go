@@ -208,3 +208,47 @@ func TestMirrorGapKeepsTheObservedEffectAndLevel(t *testing.T) {
 		t.Errorf("the observed file effect should stay: %+v", e)
 	}
 }
+
+func TestTheCallersEnvironmentReachesTheSandbox(t *testing.T) {
+	sim := &fakeSim{res: del("x", 1)}
+	e := &Engine{Sim: sim}
+	env := []string{"PATH=/venv/bin", "HOME=/home/me"}
+	e.Analyze(WithEnv(context.Background(), env), "rm -rf x", "/w")
+	if len(sim.calls) != 1 || strings.Join(sim.calls[0].Env, ",") != strings.Join(env, ",") {
+		t.Errorf("env %v", sim.calls)
+	}
+	e.Analyze(context.Background(), "rm -rf x", "/w")
+	if sim.calls[1].Env != nil {
+		t.Errorf("no env was attached, got %v", sim.calls[1].Env)
+	}
+}
+
+func TestNetworkAttemptsInTheSandboxBecomeAnEffect(t *testing.T) {
+	res := del("x", 1)
+	res.Net = []sandbox.NetAttempt{{Syscall: "connect", Family: "inet", Addr: "203.0.113.7", Port: 443, Count: 1}}
+	a := (&Engine{Sim: &fakeSim{res: res}}).Analyze(context.Background(), "rm -rf x", "/w")
+	ne := find(a, domain.EffectNetwork)
+	if ne == nil || ne.Evidence != domain.Observed || ne.MinLevel != domain.R2 || len(ne.Details) != 1 {
+		t.Fatalf("%+v", a.Effects)
+	}
+	res.Net = []sandbox.NetAttempt{{Syscall: "connect", Family: "unix", Addr: "/run/nscd/socket", Count: 1}}
+	a = (&Engine{Sim: &fakeSim{res: res}}).Analyze(context.Background(), "rm -rf x", "/w")
+	if find(a, domain.EffectNetwork) != nil {
+		t.Error("a libc name-service lookup is not worth showing")
+	}
+}
+
+func TestAddEffectCanOnlyRaiseTheLevel(t *testing.T) {
+	a := (&Engine{}).Analyze(context.Background(), "ls", "/w")
+	if a.Level != domain.R0 || a.Decision != domain.Allow {
+		t.Fatalf("%s %s", a.Level, a.Decision)
+	}
+	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R3})
+	if a.Level != domain.R3 || a.Decision != domain.Block || len(a.Effects) != 1 {
+		t.Errorf("raise: %s %s %v", a.Level, a.Decision, a.Effects)
+	}
+	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R0})
+	if a.Level != domain.R3 || a.Decision != domain.Block {
+		t.Errorf("a lower opinion lowered it: %s %s", a.Level, a.Decision)
+	}
+}

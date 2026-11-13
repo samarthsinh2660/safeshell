@@ -75,6 +75,17 @@ func (d Decision) String() string {
 	return [...]string{"allow", "confirm", "block", "hard-block"}[d]
 }
 
+// ExitCode is the process exit status for d: 4 for a hard block, 3 for a block, otherwise 0.
+func (d Decision) ExitCode() int {
+	switch d {
+	case HardBlock:
+		return 4
+	case Block:
+		return 3
+	}
+	return 0
+}
+
 // MarshalJSON writes the decision as its name.
 func (d Decision) MarshalJSON() ([]byte, error) { return []byte(`"` + d.String() + `"`), nil }
 

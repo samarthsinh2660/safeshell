@@ -65,22 +65,6 @@ func transient(code int) bool {
 	return false
 }
 
-// StatusError explains an HTTP failure in words a person can act on, without
-// quoting the response body (which can echo the prompt).
-func StatusError(label string, code int) error {
-	switch code {
-	case 400:
-		return fmt.Errorf("%s rejected the request (HTTP 400): the model name may be wrong. In /models use  model N NAME", label)
-	case 401, 403:
-		return fmt.Errorf("%s rejected the API key (HTTP %d): check it with  key N  in /models", label, code)
-	case 404:
-		return fmt.Errorf("%s does not know this model (HTTP 404): it may have been retired. In /models use  model N NAME", label)
-	case 429:
-		return fmt.Errorf("%s says you are over your rate or quota limit (HTTP 429)", label)
-	}
-	return fmt.Errorf("%s answered HTTP %d", label, code)
-}
-
 // retryAfter reads the server's own advice on how long to wait (seconds), capped
 // so a bad value cannot stall the terminal.
 func retryAfter(resp *http.Response) time.Duration {
