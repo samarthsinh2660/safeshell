@@ -84,7 +84,7 @@ func TestGuardUsageErrors(t *testing.T) {
 
 func TestHookPrintsScript(t *testing.T) {
 	code, out, _ := runSS("hook", "bash")
-	if code != 0 || !strings.Contains(out, "bind -x") {
+	if code != 0 || !strings.Contains(out, "-x '\"\\C-x\\C-s\": __ss_guard'") {
 		t.Errorf("code %d out %q", code, out)
 	}
 	if _, out, _ := runSS("hook", "zsh"); !strings.Contains(out, "zle -N ${__ss_w}") {
