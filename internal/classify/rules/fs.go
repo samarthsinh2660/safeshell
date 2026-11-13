@@ -90,12 +90,16 @@ func ruleMv(c shellparse.Command, f flags) []Finding {
 
 func ruleCp(c shellparse.Command, f flags) []Finding {
 	if n := len(f.pos); n > 1 {
-		// Emptying a file with /dev/null is the same as `>`; copying real
-		// content onto a system file stays R2 (see the heldout set).
-		if fd, ok := WriteTarget(c.String(), f.pos[n-1], false, ""); ok && (fd.Level == R4 || f.pos[0] == "/dev/null") {
+		// Only raw devices and kernel files, and emptying a system file with
+		// /dev/null, rate like `>`. Copying or teeing real content onto a
+		// system file is one level lower (see the heldout set).
+		fd, ok := WriteTarget(c.String(), f.pos[n-1], false, "")
+		switch {
+		case ok && fd.Level == R4, ok && fd.Level == R3 && f.pos[0] == "/dev/null":
 			return one(fd)
-		}
-		if UnderSystem(Norm(f.pos[n-1])) {
+		case f.pos[0] == "/dev/null":
+			return one(fnd(R2, c, "Empties the target file."))
+		case UnderSystem(Norm(f.pos[n-1])):
 			return one(fnd(R2, c, "Overwrites a system file with this one. A wrong file here can stop a service from starting."))
 		}
 	}
@@ -123,6 +127,9 @@ func ruleTee(c shellparse.Command, f flags) []Finding {
 	var fs []Finding
 	for _, t := range f.pos {
 		if fd, ok := WriteTarget(c.String(), t, f.has('a', "append"), ""); ok {
+			if fd.Level < R4 && UnderSystem(t) { // one below `>`, like cp
+				fd.Level--
+			}
 			fs = append(fs, fd)
 		}
 	}

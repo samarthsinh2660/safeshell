@@ -322,6 +322,10 @@ R4	echo x | tee /dev/sda
 R4	echo 1 | tee /proc/sys/kernel/sysrq	
 R3	cp /dev/null /etc/passwd	
 R0	echo x | tee /dev/null	
-R4	echo x | sudo tee /etc/hosts	
-R2	echo x | tee -a /etc/hosts	
+R3	echo x | sudo tee /etc/hosts	
+R1	echo x | tee -a /etc/hosts	
 R0	git --no-pager status	
+R3	docker --log-level debug system prune -af	
+R3	kubectl --server x delete ns y	
+R3	git --namespace foo push -f	
+R2	echo x | tee /etc/hosts	

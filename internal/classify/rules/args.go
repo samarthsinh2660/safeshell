@@ -60,10 +60,10 @@ func (f flags) hasAny(words ...string) bool {
 // globalOpts are the options of a few tools that take a value and may come
 // before the sub-command, such as `git -C repo status`.
 var globalOpts = map[string][]string{
-	"git":     {"-C", "-c", "--git-dir", "--work-tree"},
-	"docker":  {"-H", "--context", "-c", "--config", "-l"},
-	"podman":  {"-H", "--context", "-c", "--config", "-l"},
-	"kubectl": {"-n", "--namespace", "--context", "--kubeconfig", "-s"},
+	"git":     {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env"},
+	"docker":  {"-H", "--host", "--context", "-c", "--config", "-l", "--log-level", "--tlscacert", "--tlscert", "--tlskey"},
+	"podman":  {"--url", "--connection", "--root", "--runroot", "--log-level"},
+	"kubectl": {"-n", "--namespace", "--context", "--kubeconfig", "-s", "--server", "--token", "--cluster", "--user", "--as", "-v", "--request-timeout"},
 }
 
 // skipGlobals drops the options (and their values) that come before the

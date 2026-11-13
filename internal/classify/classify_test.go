@@ -271,6 +271,9 @@ func TestGlobalOptionsDoNotHideTheSubcommand(t *testing.T) {
 		{"docker --context prod volume prune -f", R3},
 		{"kubectl -n prod delete ns prod", R3},
 		{"kubectl -n prod get pods", R0},
+		{"docker --log-level debug system prune -af", R3},
+		{"kubectl --server x delete ns y", R3},
+		{"git --namespace foo push -f", R3},
 	} {
 		if got := Classify(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
@@ -288,8 +291,10 @@ func TestCpAndTeeRateLikeRedirectToTheSameTarget(t *testing.T) {
 		{"echo 1 | tee /proc/sys/kernel/sysrq", R4},
 		{"cp /dev/null /etc/passwd", R3},
 		{"echo x | tee /dev/null", R0},
-		{"echo x | tee /etc/hosts", R3},
-		{"echo x | tee -a /etc/hosts", R2},
+		{"echo x | tee /etc/hosts", R2},
+		{"echo x | sudo tee /etc/hosts", R3},
+		{"cp /dev/null notes.txt", R2},
+		{"echo x | tee -a /etc/hosts", R1},
 		{"echo x | tee -a log.txt", R1},
 		{"echo x | tee out.txt /dev/null", R2},
 		{"echo x | tee", R2},

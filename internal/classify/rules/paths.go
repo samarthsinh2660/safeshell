@@ -4,8 +4,6 @@ import (
 	"os"
 	"path"
 	"strings"
-
-	"github.com/samarthsinh2660/safeshell/internal/domain"
 )
 
 var systemDirs = []string{"/etc", "/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/boot", "/var", "/opt", "/sys", "/proc", "/dev", "/root", "/home", "/srv", "/run"}
@@ -98,25 +96,22 @@ var harmlessTargets = map[string]bool{"/dev/null": true, "/dev/stdout": true, "/
 // plain overwrite. ok is false when t is harmless to write to.
 func WriteTarget(cmd, t string, appending bool, appendAlt string) (f Finding, ok bool) {
 	t = Norm(t)
-	mk := func(l domain.Level, reason string) (Finding, bool) {
-		return Finding{Level: l, Command: cmd, Reason: reason}, true
-	}
 	switch {
 	case harmlessTargets[t] || strings.HasPrefix(t, "/dev/fd/"):
 		return Finding{}, false
 	case IsBlockDevice(t) || t == "/dev/mem" || t == "/dev/kmem":
-		return mk(R4, "Writes raw data onto "+t+", destroying what is stored there.")
+		return Finding{Level: R4, Command: cmd, Reason: "Writes raw data onto " + t + ", destroying what is stored there."}, true
 	case strings.HasPrefix(t, "/proc/") || strings.HasPrefix(t, "/sys/"):
-		return mk(R4, "Writes to a live kernel control file ("+t+"), which can crash or reboot the machine.")
+		return Finding{Level: R4, Command: cmd, Reason: "Writes to a live kernel control file (" + t + "), which can crash or reboot the machine."}, true
 	case UnderSystem(t) && !appending:
-		f, _ = mk(R3, "Overwrites the system file "+t+".")
+		f = Finding{Level: R3, Command: cmd, Reason: "Overwrites the system file " + t + "."}
 		return f.WithAlt("cp "+Shq(t)+" "+Shq(t)+".bak", "make a backup of the file first"), true
 	case UnderSystem(t):
-		return mk(R2, "Appends to the system file "+t+".")
+		return Finding{Level: R2, Command: cmd, Reason: "Appends to the system file " + t + "."}, true
 	case appending:
-		return mk(R1, "Appends to "+t+".")
+		return Finding{Level: R1, Command: cmd, Reason: "Appends to " + t + "."}, true
 	}
-	f, _ = mk(R2, "Overwrites "+t+" if it already exists.")
+	f = Finding{Level: R2, Command: cmd, Reason: "Overwrites " + t + " if it already exists."}
 	if appendAlt != "" {
 		f = f.WithAlt(appendAlt, "appends instead of overwriting")
 	}
