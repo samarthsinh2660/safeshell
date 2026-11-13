@@ -249,6 +249,7 @@ type analysis struct {
 		Details  []string
 	}
 	Verdict struct{ Level string }
+	Sim     struct{ Warnings []struct{ Writable []string } }
 }
 
 func analyze(t *testing.T, args ...string) analysis {
@@ -471,5 +472,25 @@ func TestSandboxNotesOnlyConcernWhatTheCommandTouches(t *testing.T) {
 		if out := analyze("rm -rf /var/lib/docker/x"); !strings.Contains(out, "Sandbox note: /var/lib/docker") {
 			t.Errorf("the note about the folder being touched is missing:\n%s", out)
 		}
+	}
+}
+
+func TestAnUnknownScriptIsStillAllowedWhenTheGapsDoNotMatter(t *testing.T) {
+	needSandbox(t)
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "noop.sh"), []byte("#!/bin/sh\ntrue\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := analyze(t, "--cwd", d, "./noop.sh")
+	if len(a.Sim.Warnings) == 0 {
+		t.Skip("the sandbox mirrors everything here, so there is no gap to ignore")
+	}
+	for _, w := range a.Sim.Warnings {
+		if len(w.Writable) > 0 {
+			t.Skip("a gap here is writable, so the script is rightly not allowed unattended")
+		}
+	}
+	if a.Decision != "allow" || a.Level != "R1" {
+		t.Errorf("decision %s level %s", a.Decision, a.Level)
 	}
 }

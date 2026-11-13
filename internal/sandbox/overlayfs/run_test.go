@@ -69,3 +69,17 @@ func TestScratchBase(t *testing.T) {
 		t.Error("a missing runtime dir must be skipped")
 	}
 }
+
+func TestMarkWritableKeepsOnlyPathsTheUserCanWrite(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root can write everywhere")
+	}
+	open, shut := t.TempDir(), t.TempDir()
+	if err := os.Chmod(shut, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	got := markWritable([]sandbox.Warning{{Paths: []string{open, shut}}, {Paths: []string{shut, "/definitely/not/here"}}})
+	if len(got[0].Writable) != 1 || got[0].Writable[0] != open || len(got[1].Writable) != 0 {
+		t.Errorf("writable = %q, %q", got[0].Writable, got[1].Writable)
+	}
+}

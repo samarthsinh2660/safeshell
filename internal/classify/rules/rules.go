@@ -87,7 +87,7 @@ func Rate(c shellparse.Command) (fs []Finding, known bool) {
 		name = "mkfs"
 	}
 	if r, ok := table[name]; ok {
-		return r(c, parseFlags(c.Args)), true
+		return r(c, parseFlags(skipGlobals(name, c.Args))), true
 	}
 	if slices.Contains(readOnly, c.Name) {
 		return one(fnd(R0, c, "Only reads information.")), true

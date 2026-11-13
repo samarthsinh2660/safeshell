@@ -1,27 +1,97 @@
 name: ci
 on:
   push:
+    branches: [main]
   pull_request:
 
+# Each job is its own check on the pull request, so a failure shows exactly which part broke.
+# Branch protection requires only "check", which passes when every other job passed.
 jobs:
-  check:
+  format-and-vet:
+    name: Format and vet (amd64, arm64, riscv64)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Vet, format, race-detector tests, cross-architecture vet
-        run: make check
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; exit 1; }
+      - name: go vet (amd64)
+        run: go vet ./...
+      - name: go vet (arm64)
+        run: GOOS=linux GOARCH=arm64 go vet ./...
+      - name: go vet (riscv64)
+        run: GOOS=linux GOARCH=riscv64 go vet ./...
+
+  unit-tests:
+    name: Unit tests (race detector) and coverage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go test -race
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
-      - name: Short fuzz runs
-        run: make fuzz FUZZTIME=15s
+
+  install-script:
+    name: Installer script test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash test/scripts/install_test.sh
+
+  fuzz:
+    name: Fuzz parser and classifier
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make fuzz FUZZTIME=15s
+
+  integration:
+    name: Integration tests (real binary)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
       # The sandbox needs user namespaces, which GitHub's runners restrict under
       # AppArmor; those tests skip themselves there and run locally via `make integration`.
-      - name: Integration tests (skip without a sandbox)
-        run: make integration
+      - run: make integration
+
+  packages:
+    name: Build tarballs and .debs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make dist deb VERSION=v0.0.0-ci
+
+  check:
+    name: check
+    if: always()
+    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, packages]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: A job failed or was skipped
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: exit 1
+      - name: Every job passed
+        run: echo "all jobs passed"

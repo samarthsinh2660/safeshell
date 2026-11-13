@@ -99,34 +99,16 @@ func commandFindings(c shellparse.Command) ([]Finding, bool) {
 	return fs, unknown
 }
 
-var harmlessTargets = map[string]bool{"/dev/null": true, "/dev/stdout": true, "/dev/stderr": true, "/dev/tty": true, "/dev/zero": true}
-
 func redirectFindings(c shellparse.Command) []Finding {
 	var fs []Finding
 	for _, r := range c.Redirs {
 		if r.Op != ">" && r.Op != ">>" && r.Op != ">|" && r.Op != "&>" && r.Op != "&>>" && r.Op != "<>" {
 			continue
 		}
-		t := rules.Norm(r.Target)
-		appending := strings.HasSuffix(r.Op, ">>")
-		base := c.String()
-		cmd := strings.TrimSpace(base + " " + r.Op + " " + r.Target)
-		switch {
-		case harmlessTargets[t] || strings.HasPrefix(t, "/dev/fd/"):
-		case rules.IsBlockDevice(t) || t == "/dev/mem" || t == "/dev/kmem":
-			fs = append(fs, finding(R4, cmd, "Writes raw data onto "+t+", destroying what is stored there."))
-		case strings.HasPrefix(t, "/proc/") || strings.HasPrefix(t, "/sys/"):
-			fs = append(fs, finding(R4, cmd, "Writes to a live kernel control file ("+t+"), which can crash or reboot the machine."))
-		case rules.UnderSystem(t) && !appending:
-			fs = append(fs, finding(R3, cmd, "Overwrites the system file "+t+".").
-				WithAlt("cp "+rules.Shq(t)+" "+rules.Shq(t)+".bak", "make a backup of the file first"))
-		case rules.UnderSystem(t):
-			fs = append(fs, finding(R2, cmd, "Appends to the system file "+t+"."))
-		case appending:
-			fs = append(fs, finding(R1, cmd, "Appends to "+t+"."))
-		default:
-			fs = append(fs, finding(R2, cmd, "Overwrites "+t+" if it already exists.").
-				WithAlt(strings.TrimSpace(base+" >> "+r.Target), "appends instead of overwriting"))
+		cmd := strings.TrimSpace(c.String() + " " + r.Op + " " + r.Target)
+		alt := strings.TrimSpace(c.String() + " >> " + r.Target)
+		if f, ok := rules.WriteTarget(cmd, r.Target, strings.HasSuffix(r.Op, ">>"), alt); ok {
+			fs = append(fs, f)
 		}
 	}
 	return fs
