@@ -247,18 +247,8 @@ func (w *walker) build(call *syntax.CallExpr, st *syntax.Stmt, depth int) (Comma
 func (w *walker) nested(c *Command, depth int) {
 	switch c.Name {
 	case "sh", "bash", "zsh", "dash", "ksh":
-		for i, a := range c.Args {
-			if !isCFlag(a) {
-				continue
-			}
-			j := i + 1
-			if j < len(c.Args) && c.Args[j] == "--" {
-				j++
-			}
-			if j < len(c.Args) {
-				_ = w.parseString(c.Args[j], depth+1)
-			}
-			return
+		if code, ok := shellCode(c.Args); ok {
+			_ = w.parseString(code, depth+1)
 		}
 	case "eval":
 		_ = w.parseString(strings.Join(c.Args, " "), depth+1)
@@ -279,6 +269,36 @@ func (w *walker) nested(c *Command, depth int) {
 	}
 }
 
+// shellCode returns the code a shell runs for `-c`: the first operand after
+// its options. Options may sit before or after the -c cluster, and -o / -O
+// take a value of their own (bash -Oc extglob CODE).
+func shellCode(args []string) (string, bool) {
+	hasC := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--":
+			i++
+			return operand(args, i, hasC)
+		case strings.HasPrefix(a, "--"):
+		case strings.HasPrefix(a, "-") && len(a) > 1:
+			hasC = hasC || strings.Contains(a, "c")
+			i += strings.Count(a, "o") + strings.Count(a, "O")
+		default:
+			return operand(args, i, hasC)
+		}
+	}
+	return "", false
+}
+
+// operand returns args[i] when the shell was given -c.
+func operand(args []string, i int, hasC bool) (string, bool) {
+	if hasC && i < len(args) {
+		return args[i], true
+	}
+	return "", false
+}
+
 // isCFlag reports whether a is `-c` or a short-option cluster holding it,
 // such as -lc, -xc or -ec.
 func isCFlag(a string) bool {
@@ -293,6 +313,9 @@ func (w *walker) stdinCode(c *Command, depth int) {
 	switch c.Name {
 	case "sh", "bash", "zsh", "dash", "ksh":
 		for _, a := range c.Args {
+			if a == "-s" || a == "--" {
+				break // what follows are arguments for the script read from stdin
+			}
 			if !strings.HasPrefix(a, "-") {
 				return // runs a named script, not stdin
 			}
@@ -329,23 +352,24 @@ func (w *walker) cd(args []string) {
 }
 
 func (w *walker) findExec(c *Command, depth int) {
-	for i, a := range c.Args {
+	for i := 0; i < len(c.Args); i++ {
+		a := c.Args[i]
 		if a != "-exec" && a != "-execdir" && a != "-ok" && a != "-okdir" {
 			continue
 		}
-		var inner []string
-		for _, b := range c.Args[i+1:] {
-			if b == ";" || b == "+" || b == `\;` {
-				break
-			}
-			inner = append(inner, b)
+		end := i + 1
+		for end < len(c.Args) && c.Args[end] != ";" && c.Args[end] != "+" && c.Args[end] != `\;` {
+			end++
 		}
 		sub := Command{Remote: c.Remote, ViaFind: true}
-		inner = unwrap(inner, &sub)
+		inner := unwrap(slices.Clone(c.Args[i+1:end]), &sub)
+		i = end // inner -exec words belong to the inner command, not to this find
 		if len(inner) > 0 {
 			sub.Name, sub.Args = inner[0], inner[1:]
 			w.single(sub)
-			w.nested(&sub, depth+1)
+			if depth+1 < maxDepth {
+				w.nested(&sub, depth+1)
+			}
 		}
 	}
 }
@@ -374,13 +398,19 @@ func unwrap(args []string, cmd *Command) []string {
 		switch args[0] {
 		case "sudo", "doas":
 			cmd.Sudo = true
-			args = skipOpts(args[1:], "-u", "-g", "-h", "-p", "-C", "-r", "-t", "-U", "-D",
-				"--user", "--group", "--host", "--prompt", "--close-from", "--role", "--type", "--other-user", "--chdir")
+			args = skipOpts(args[1:], "-u", "-g", "-p", "-C", "-r", "-t", "-U", "-D", "-T", "-R", "-c", "-a",
+				"--user", "--group", "--host", "--prompt", "--close-from", "--role", "--type", "--other-user", "--chdir",
+				"--chroot", "--command-timeout", "--login-class")
 		case "env":
+			whole := args
 			args = args[1:]
 			for len(args) > 0 && (strings.Contains(args[0], "=") || strings.HasPrefix(args[0], "-")) {
 				if src, n := envSplit(args); n > 0 {
-					args = append(splitWords(src), args[n:]...)
+					words := splitWords(strings.ReplaceAll(src, `\_`, " "))
+					if words == nil {
+						return whole // not one plain command: leave env as the command, do not hide the rest
+					}
+					args = append(words, args[n:]...)
 					continue
 				}
 				if takesValue(args[0], "-u", "-C", "--unset", "--chdir") {
@@ -397,7 +427,7 @@ func unwrap(args []string, cmd *Command) []string {
 		case "stdbuf":
 			args = skipOpts(args[1:], "-i", "-o", "-e", "--input", "--output", "--error")
 		case "nice", "ionice":
-			args = skipOpts(args[1:], "-n", "-c")
+			args = skipOpts(args[1:], "-n", "-c", "--adjustment", "--class", "--classdata")
 		case "timeout":
 			args = skipOpts(args[1:], "-s", "-k", "--signal", "--kill-after")
 			if len(args) > 0 { // the DURATION operand
@@ -405,7 +435,7 @@ func unwrap(args []string, cmd *Command) []string {
 			}
 		case "xargs":
 			cmd.ViaXargs = true
-			args = skipOpts(args[1:], "-n", "-I", "-P", "-L", "-d", "-s", "-a", "-E", "-l", "-i",
+			args = skipOpts(args[1:], "-n", "-I", "-P", "-L", "-d", "-s", "-a", "-E",
 				"--max-args", "--max-procs", "--max-lines", "--max-chars", "--delimiter", "--arg-file")
 		default:
 			return args
@@ -460,7 +490,7 @@ func takesValue(opt string, withValue ...string) bool {
 func envSplit(args []string) (string, int) {
 	a := args[0]
 	switch {
-	case a == "-S" || a == "--split-string":
+	case takesValue(a, "-S", "--split-string"):
 		if len(args) > 1 {
 			return args[1], 2
 		}

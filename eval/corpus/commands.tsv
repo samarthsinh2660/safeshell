@@ -326,3 +326,26 @@ R4	timeout --signal KILL 5 rm -rf /
 R4	stdbuf -o 0 rm -rf /	
 R3	xargs --max-args 1 rm -rf	
 R4	env -S 'rm -rf /'	
+R4	echo 'rm -rf ~' | bash -s -- -lc	
+R4	echo 'rm -rf ~' | bash -s -- -c	
+R3	xargs -ri rm -rf {}	
+R3	xargs -i rm -rf {}	
+R3	xargs -l rm -rf	
+R4	bash -c -e 'rm -rf ~'	
+R4	bash -c -x 'rm -rf ~'	
+R4	bash -Oc extglob 'rm -rf ~'	
+R4	bash -co posix 'rm -rf ~'	
+R4	bash -oc posix 'rm -rf ~'	
+R4	env -iS 'rm -rf /'	
+R4	env -vS 'rm -rf /'	
+R4	env -S 'rm\_-rf\_/'	
+R4	sudo -T 5 rm -rf /	
+R4	sudo -R /srv rm -rf /	
+R4	sudo -c cls rm -rf /	
+R4	sudo -a bsd rm -rf /	
+R4	sudo --chroot /srv rm -rf /	
+R4	sudo --command-timeout 5 rm -rf /	
+R4	sudo --login-class c rm -rf /	
+R4	nice --adjustment 5 rm -rf /	
+R4	ionice --class 2 rm -rf /	
+R4	ionice --classdata 4 rm -rf /	
