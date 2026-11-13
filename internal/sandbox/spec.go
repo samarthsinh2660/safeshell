@@ -31,6 +31,9 @@ type Result struct {
 type Warning struct {
 	Paths []string `json:"paths"` // the directories it concerns
 	Text  string   `json:"text"`
+	// Writable lists the paths the real user can write to. A change there that
+	// the sandbox could not see would go unrecorded; elsewhere it cannot happen.
+	Writable []string `json:"writable,omitempty"`
 }
 
 // Defaults fills in the zero values of s.

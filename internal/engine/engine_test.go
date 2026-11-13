@@ -161,8 +161,8 @@ func TestUnparsableLineDoesNotCrash(t *testing.T) {
 	}
 }
 
-func gap(paths ...string) []sandbox.Warning {
-	return []sandbox.Warning{{Paths: paths, Text: "loose files are not visible in the sandbox"}}
+func gap(writable ...string) []sandbox.Warning {
+	return []sandbox.Warning{{Paths: []string{"/home/me", "/boot"}, Text: "loose files are not visible in the sandbox", Writable: writable}}
 }
 
 func estimatedCount(a Analysis) int {
@@ -175,21 +175,17 @@ func estimatedCount(a Analysis) int {
 	return n
 }
 
-func TestMirrorGap(t *testing.T) {
+func TestMirrorGapOnlyCountsWritableGapsForUnknownCommands(t *testing.T) {
 	tests := []struct {
 		name, line string
 		ws         []sandbox.Warning
 		wantEst    int
 		want       domain.Decision
 	}{
-		{"unknown command, gap covers cwd", "./t.sh", gap("/home/me"), 1, domain.Confirm},
-		{"unknown command, gap elsewhere", "mystery-tool", gap("/mnt/disk"), 1, domain.Confirm},
-		{"unknown command, no gap", "mystery-tool", nil, 0, domain.Allow},
-		{"known command, gap covers cwd", "rm a.txt", gap("/home/me"), 1, domain.Confirm},
-		{"known command, gap covers a named path", "rm /mnt/disk/a.txt", gap("/mnt/disk"), 1, domain.Confirm},
-		{"known command, gap elsewhere", "rm /home/me/proj/a.txt", gap("/mnt/disk"), 0, domain.Confirm},
-		{"known command, paths unknowable", "rm ~/a.txt", gap("/mnt/disk"), 1, domain.Confirm},
-		{"known command, no gap", "rm a.txt", nil, 0, domain.Confirm},
+		{"unknown command, writable gap", "./t.sh", gap("/home/me"), 1, domain.Confirm},
+		{"unknown command, gaps but none writable", "./t.sh", gap(), 0, domain.Allow},
+		{"unknown command, no gaps", "./t.sh", nil, 0, domain.Allow},
+		{"known command, writable gap", "rm a.txt", gap("/home/me"), 0, domain.Confirm},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
