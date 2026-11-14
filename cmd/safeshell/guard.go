@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io"
 	"os"
@@ -80,7 +79,14 @@ func changesShell(line string) bool {
 
 // guardLine analyses one command line, asks if needed, and prints what to run.
 func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed bool) int {
-	a := analyzeFast(context.Background(), line, cwd, stderr)
+	ctx, stop := interruptible()
+	a := analyzeFast(ctx, line, cwd, stderr)
+	interrupted := ctx.Err() != nil
+	stop() // the questions below read the terminal, where Ctrl-C must keep its usual effect
+	if interrupted {
+		fmt.Fprintln(stderr, cancelledMsg)
+		return 1 // nothing goes to stdout, so the hook runs nothing
+	}
 	aiReview(&a, stderr)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)
