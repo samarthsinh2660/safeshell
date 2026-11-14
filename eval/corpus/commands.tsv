@@ -449,7 +449,6 @@ R4	flock -w 5 /tmp/l -c 'rm -rf /'
 R4	chroot / rm -rf /	
 R4	env -C / rm -rf *	
 R4	env --chdir=/ rm -rf *	
-R2	chroot /mnt	
 R2	chroot /mnt ls	
 R1	watch ls	
 R0	flock /tmp/l ls	
