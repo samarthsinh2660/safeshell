@@ -100,7 +100,9 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell undo / safeshell snapshots     restore / list
    safeshell history [-n 20] [--json]       the decisions SafeShell recorded, newest first
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
-   safeshell ai setup|status|stop    manage the built-in AI
+   safeshell ai setup|status|stop|bench    manage the built-in AI / measure it
+   safeshell daemon [stop]           keep SafeShell warm in the background for faster checks
+   safeshell guard -- <cmd>          what the shell hook runs for each command you type
    safeshell voice [setup|status]    speak a request (Ctrl-X Ctrl-V in your terminal)
    safeshell install / safeshell uninstall  add or remove the hook in your shell startup file
    safeshell hook bash|zsh           print the shell hook

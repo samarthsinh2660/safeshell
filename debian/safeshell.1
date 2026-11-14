@@ -1,4 +1,4 @@
-.TH SAFESHELL 1 "November 2026" "safeshell 1.0" "User Commands"
+.TH SAFESHELL 1 "November 2026" "safeshell" "User Commands"
 .SH NAME
 safeshell \- a safety layer for your terminal
 .SH SYNOPSIS
@@ -41,6 +41,9 @@ set the final level; this works without an AI, and the explanation is added when
 .TP
 .BI ask " request"
 Turn a request written in English into a command, which is then checked like any other.
+.TP
+.RB "models [" list ]
+Choose the AI model from a menu, or list the models your cloud key offers.
 .TP
 .B ai setup|status|stop|bench
 Manage the optional built-in AI. Nothing is downloaded until you run
@@ -85,6 +88,13 @@ Check every part and say what to fix: sandbox, hook (installed and active in thi
 A one-minute walk-through in a throwaway folder: an R0 command, a blocked rm -rf, a snapshot and an undo. Nothing is left behind.
 The hook mentions the tour once per user, in a terminal.
 .TP
+.BI "guard [--cwd " DIR "] \-\- " command
+What the shell hook runs for each command line: analyse it, ask if needed, and print the command to run.
+Exit status 0 means run the printed command, 1 means it was cancelled, 2 means wrong usage.
+.TP
+.RB "help [" topic ]
+Short guides: start, safety, english, models, voice, learn, pause, undo, commands, privacy and trouble.
+.TP
 .B version
 Print the version.
 .SH FILES
@@ -100,13 +110,36 @@ Log of decisions.
 .TP
 .I ~/.local/state/safeshell/off
 Exists while checking is paused (safeshell deactivate).
+.TP
+.I ~/.local/share/safeshell/snapshots/
+Snapshots that safeshell undo restores from.
+.PP
+The folders follow
+.BR XDG_CONFIG_HOME ", " XDG_STATE_HOME " and " XDG_DATA_HOME
+when they are set.
 .SH ENVIRONMENT
+.TP
+.B SAFESHELL_OFF
+When set to anything, even 0, the hook in that terminal does not check commands. Unset it to check again.
+.TP
+.B SAFESHELL_NODAEMON
+When set, checks never use the background daemon and run directly.
 .TP
 .B SAFESHELL_AI
 Override the AI mode: auto, off, local, cloud or hybrid.
 .TP
 .BR ANTHROPIC_API_KEY ", " OPENAI_API_KEY ", " GEMINI_API_KEY
 Cloud model keys, used instead of the key file.
+.SH EXIT STATUS
+.TP
+.BR check ", " analyze
+0 for R0 to R2, 3 for R3, 4 for R4.
+.TP
+.B guard
+0 run the printed command, 1 cancelled, 2 wrong usage.
+.TP
+.B other commands
+0 on success, 1 on failure, 2 for wrong usage.
 .SH NOTES
 The program is called
 .B safeshell

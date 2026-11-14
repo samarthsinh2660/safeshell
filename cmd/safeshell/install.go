@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/install"
 )
@@ -81,7 +80,7 @@ func runUninstall(stdout, stderr io.Writer) int {
 		return 0
 	}
 	fmt.Fprintf(stdout, "Removed the SafeShell hook from %s. New terminals are no longer guarded.\n", sh.RC)
-	if !strings.Contains(os.Getenv("SAFESHELL_OFF"), "1") {
+	if os.Getenv("SAFESHELL_OFF") == "" {
 		fmt.Fprintln(stdout, "This terminal still has it until you close it. Your snapshots and settings were kept.")
 	}
 	return 0
