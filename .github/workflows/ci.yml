@@ -68,6 +68,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install zsh, so the zsh hook tests run too
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
       - run: make build
       # Ubuntu 24.04 lets a binary use user namespaces only with an AppArmor profile;
       # install the same profile the .deb ships, for the binary just built.
