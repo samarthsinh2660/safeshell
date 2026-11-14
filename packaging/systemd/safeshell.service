@@ -1,11 +1,12 @@
 # Optional: keeps the SafeShell daemon running for your user.
 #   mkdir -p ~/.config/systemd/user && cp safeshell.service ~/.config/systemd/user/
 #   systemctl --user enable --now safeshell
+# Uses ~/.local/bin/safeshell (scripts/install.sh, tarball) when it is there, else /usr/bin (the .deb).
 [Unit]
 Description=SafeShell daemon (keeps command checks fast)
 
 [Service]
-ExecStart=%h/.local/bin/safeshell daemon
+ExecStart=/bin/sh -c 'if [ -x %h/.local/bin/safeshell ]; then exec %h/.local/bin/safeshell daemon; fi; exec /usr/bin/safeshell daemon'
 Restart=on-failure
 
 [Install]

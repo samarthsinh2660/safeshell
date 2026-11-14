@@ -5,7 +5,7 @@ include /usr/share/dpkg/pkg-info.mk
 # Files the Go code embeds or reads in tests are not .go files, so dh-golang must be told.
 export CGO_ENABLED := 0
 export DH_GOLANG_EXCLUDES := test/integration
-export DH_GOLANG_INSTALL_EXTRA := eval/corpus eval/heldout eval/requests.tsv internal/shellparse/testdata
+export DH_GOLANG_INSTALL_EXTRA := eval/corpus eval/heldout eval/requests.tsv internal/shellparse/testdata debian/safeshell.1
 
 %:
 	dh $@ --builddirectory=_build --buildsystem=golang --with=golang

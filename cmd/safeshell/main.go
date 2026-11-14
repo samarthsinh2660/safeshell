@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/platform"
@@ -61,13 +62,16 @@ Usage:
   safeshell uninstall                       remove the hook
   safeshell hook bash|zsh                   print the shell hook; add  eval "$(safeshell hook bash)"  to your rc file
   safeshell version                         which release this is
+  safeshell help [topic]                    short guides: start, safety, models, undo, commands and more
   safeshell doctor                          check every part: sandbox, hook, daemon, snapshots, AI; says what to fix
   safeshell tour                            a one-minute walk-through in a throwaway folder (nothing is left behind)
 
 Quote the command so your shell passes it through untouched:
   safeshell check 'rm -rf ~/projects'
 
-Exit status of 'safeshell check': 0 = R0-R2, 3 = R3 (irreversible), 4 = R4 (catastrophic).
+Exit status of 'safeshell check' and 'analyze': 0 = R0-R2, 3 = R3 (irreversible), 4 = R4 (catastrophic).
+Exit status of 'safeshell guard': 0 = run the printed command, 1 = cancelled, 2 = wrong usage.
+Ctrl-C during 'analyze' or 'simulate' stops it with status 130; nothing is run.
 `
 
 func main() {
@@ -146,7 +150,7 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		if !unexpectedArgs("version", args[1:], stderr) {
 			return 2
 		}
-		fmt.Fprintln(stdout, "safeshell", version)
+		fmt.Fprintln(stdout, "safeshell", strings.TrimPrefix(version, "v")) // same form for make, .deb and release builds
 		return 0
 	case "tour":
 		if !unexpectedArgs("tour", args[1:], stderr) {
