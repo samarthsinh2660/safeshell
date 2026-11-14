@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
@@ -244,6 +245,29 @@ func TestNetworkAttemptsInTheSandboxBecomeAnEffect(t *testing.T) {
 	a = (&Engine{Sim: &fakeSim{res: res}}).Analyze(context.Background(), "rm -rf x", "/w")
 	if find(a, domain.EffectNetwork) != nil {
 		t.Error("a libc name-service lookup is not worth showing")
+	}
+}
+
+func TestTeamPolicyBlocksAndSurvivesLaterEffects(t *testing.T) {
+	rules := []policy.Rule{{Match: []string{"docker", "system", "prune"}, Block: "Ask the platform team."}}
+	a := (&Engine{Rules: rules}).Analyze(context.Background(), "docker system prune -af", "/w")
+	if a.Team.Block != "Ask the platform team." || a.Decision < domain.Block {
+		t.Fatalf("%+v %s", a.Team, a.Decision)
+	}
+	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R0})
+	if a.Decision < domain.Block {
+		t.Error("an AI review must not lift a policy block")
+	}
+	if b := (&Engine{Rules: rules}).Analyze(context.Background(), "docker ps", "/w"); b.Team.Block != "" || b.Decision != domain.Allow {
+		t.Errorf("an unrelated command is untouched: %+v %s", b.Team, b.Decision)
+	}
+}
+
+func TestTeamPolicyMinimumLevelRaisesTheDecision(t *testing.T) {
+	rules := []policy.Rule{{Match: []string{"ls"}, MinLevel: domain.R3}}
+	a := (&Engine{Rules: rules}).Analyze(context.Background(), "ls", "/w")
+	if a.Level != domain.R3 || a.Decision != domain.Block || a.Verdict.Level != domain.R0 {
+		t.Errorf("%s %s (rules said %s)", a.Level, a.Decision, a.Verdict.Level)
 	}
 }
 
