@@ -192,6 +192,19 @@ func TestRestoreRebuildsAReadOnlyFolderAndItsContents(t *testing.T) {
 	}
 }
 
+func TestCreateTightensALooseStore(t *testing.T) {
+	store := filepath.Join(t.TempDir(), "snaps")
+	if err := os.Mkdir(store, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Create(store, "ls", nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(store); st.Mode().Perm() != 0o700 {
+		t.Errorf("mode %v", st.Mode())
+	}
+}
+
 func TestCreateSavesACreatedPathThatAlreadyExists(t *testing.T) {
 	root, store := t.TempDir(), t.TempDir()
 	late := filepath.Join(root, "late")

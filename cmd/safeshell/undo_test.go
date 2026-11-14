@@ -8,6 +8,7 @@ import (
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
+	"github.com/samarthsinh2660/safeshell/internal/snapshot"
 )
 
 func useStore(t *testing.T) {
@@ -116,5 +117,19 @@ func TestSnapshotDirFollowsXDG(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", "/data")
 	if got := snapshotDir(); got != "/data/safeshell/snapshots" {
 		t.Error(got)
+	}
+}
+
+func TestSnapshotManifestMasksSecrets(t *testing.T) {
+	useStore(t)
+	f := filepath.Join(t.TempDir(), "x.txt")
+	os.WriteFile(f, []byte("x"), 0o644)
+	a := sampleAnalysis()
+	a.Line = "API_KEY=abc123 rm x.txt"
+	a.Sim = &sandbox.Result{Diff: sandbox.FileDiff{Changes: []sandbox.Change{{Path: strings.TrimPrefix(f, "/"), Kind: sandbox.Deleted}}}}
+	protect(a)
+	ms, _ := snapshot.List(snapshotDir())
+	if len(ms) != 1 || ms[0].Line != "API_KEY=*** rm x.txt" {
+		t.Errorf("manifests %+v", ms)
 	}
 }

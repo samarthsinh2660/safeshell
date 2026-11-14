@@ -45,11 +45,21 @@ func DefaultPath() string {
 	return filepath.Join(xdg.Dir("XDG_STATE_HOME", ".local", "state"), "audit.jsonl")
 }
 
+// maxBytes is how big the log may get before it moves to audit.jsonl.old.
+const maxBytes = 5 << 20
+
 // Append writes one line. Failure to log must never stop a command, so errors
 // are returned for the caller to ignore or report.
 func Append(path string, e Entry) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
+	}
+	_ = os.Chmod(dir, 0o700) // MkdirAll leaves an existing folder as it was; a folder that is not ours stays
+	if fi, err := os.Stat(path); err == nil && fi.Size() >= maxBytes {
+		if err := os.Rename(path, path+".old"); err != nil { // replaces the previous old file
+			return err
+		}
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
