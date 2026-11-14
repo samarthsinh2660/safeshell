@@ -336,3 +336,21 @@ func TestAnalyzeAsksTheRepositoryWhatWouldBeLost(t *testing.T) {
 		t.Errorf("a repository chosen by the environment must not be looked at (asked %q)", gotDir)
 	}
 }
+
+func TestAnalyzeCountsTheRowsASQLChangeWouldTouch(t *testing.T) {
+	old := toolRunner
+	t.Cleanup(func() { toolRunner = old })
+	var gotArgs []string
+	toolRunner = func(_ context.Context, _ []string, _, name string, args ...string) (string, error) {
+		gotArgs = append([]string{name}, args...)
+		return "42\n", nil
+	}
+	a := analyze(context.Background(), `psql -d shop -c "DELETE FROM orders WHERE id < 5"`, t.TempDir())
+	found := false
+	for _, e := range a.Effects {
+		found = found || (e.Kind == domain.EffectDatabase && e.Summary == "would delete 42 rows from orders")
+	}
+	if !found || strings.Contains(strings.Join(gotArgs, " "), "DELETE") {
+		t.Errorf("args %v, effects %+v", gotArgs, a.Effects)
+	}
+}
