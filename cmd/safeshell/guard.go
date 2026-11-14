@@ -43,7 +43,7 @@ opts:
 		case args[0] == "--cwd" && len(args) >= 2:
 			cwd, args = args[1], args[2:]
 		case strings.HasPrefix(args[0], "-"):
-			fmt.Fprintf(stderr, "safeshell guard: bad option %s\n", args[0])
+			unknownOption("guard", args, stderr)
 			return 2
 		default:
 			break opts
@@ -53,9 +53,7 @@ opts:
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	if cwd == "" {
-		cwd, _ = os.Getwd()
-	}
+	cwd = cwdOr(cwd)
 	line := strings.Join(args, " ")
 	if code, ok := slashCommand(line, stderr); ok {
 		return code
@@ -100,7 +98,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 		}
 	}
 	if !ok {
-		fmt.Fprintln(stderr, "Cancelled. Nothing was run.")
+		fmt.Fprintln(stderr, cancelledMsg)
 		return 1
 	}
 	fmt.Fprintln(stdout, cmd)
@@ -125,15 +123,8 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 var auditPath = audit.DefaultPath
 
 func record(a engine.Analysis, cmd string, ran bool) {
-	e := audit.Entry{Time: time.Now().UTC(), Line: a.Line, Level: a.Level.String(), Decision: a.Decision.String(), Outcome: "cancelled"}
-	switch {
-	case ran && a.Decision == domain.Allow:
-		e.Outcome = "allowed"
-	case ran && cmd != a.Line:
-		e.Outcome, e.Run = "replaced", cmd
-	case ran:
-		e.Outcome = "ran"
-	}
+	outcome, run := audit.Outcome(a.Decision, ran, a.Line, cmd)
+	e := audit.Entry{Time: time.Now().UTC(), Line: a.Line, Run: run, Level: a.Level.String(), Decision: a.Decision.String(), Outcome: outcome}
 	_ = audit.Append(auditPath(), e) // a full disk must not stop a command
 }
 
@@ -146,9 +137,9 @@ func slashCommand(line string, w io.Writer) (code int, ok bool) {
 	}
 	switch f[0] {
 	case "/models":
-		runModels(guardInput(), w)
+		runModels(nil, guardInput(), w, w)
 	case "/help":
-		runHelp(f[1:], w)
+		runHelp(f[1:], w, w)
 	default:
 		return 0, false
 	}

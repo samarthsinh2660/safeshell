@@ -34,7 +34,7 @@ const (
 	modelSHA  = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
 )
 
-const errNoBuildTools = "Building the speech engine needs cmake and a C++ compiler. On Ubuntu:  sudo apt install build-essential cmake  then run this again."
+const errNoBuildTools = "Building the speech engine needs cmake, make and a C++ compiler. On Debian or Ubuntu:  sudo apt-get install cmake g++ make  then run  safeshell voice setup  again."
 
 const retry = "Check your internet connection and disk space, then run  safeshell voice setup  again."
 
@@ -45,6 +45,8 @@ type Setup struct {
 	Client   *http.Client
 	Out      io.Writer
 	Run      Runner // runs cmake and returns stdout and stderr together; exec when nil
+	// RunTTY runs a program attached to the terminal (sudo apt-get); use RunTTY.
+	RunTTY func(ctx context.Context, name string, args ...string) error
 }
 
 // EnginePath is where the built whisper-cli is kept.
@@ -94,7 +96,7 @@ func (s Setup) EnsureEngine(ctx context.Context) (string, error) {
 	if st := s.Status(); st.EngineBin != "" {
 		return st.EngineBin, nil
 	}
-	if _, err := s.LookPath("cmake"); err != nil || !s.hasCompiler() {
+	if len(s.missingBuildTools()) > 0 {
 		return "", errors.New(errNoBuildTools)
 	}
 	fmt.Fprintf(s.Out, "Downloading the speech engine source (whisper.cpp %s)...\n", whisperVersion)

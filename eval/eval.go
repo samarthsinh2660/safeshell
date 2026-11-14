@@ -66,7 +66,7 @@ func load(dir string) ([]Row, error) {
 			if len(parts) < 2 {
 				return nil, fmt.Errorf("%s:%d: want level<TAB>command", f.Name(), n)
 			}
-			lvl, ok := parseLevel(parts[0])
+			lvl, ok := domain.ParseLevel(parts[0])
 			if !ok {
 				return nil, fmt.Errorf("%s:%d: bad level %q", f.Name(), n, parts[0])
 			}
@@ -80,15 +80,6 @@ func load(dir string) ([]Row, error) {
 		fh.Close()
 	}
 	return rows, nil
-}
-
-func parseLevel(s string) (domain.Level, bool) {
-	for l := domain.R0; l <= domain.R4; l++ {
-		if l.String() == s {
-			return l, true
-		}
-	}
-	return 0, false
 }
 
 // Evaluate classifies every row and gathers the metrics.

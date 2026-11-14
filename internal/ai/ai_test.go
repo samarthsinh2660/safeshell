@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
-	"github.com/samarthsinh2660/safeshell/internal/engine"
 )
 
 type fake struct {
@@ -22,12 +21,12 @@ func (f *fake) Complete(_ context.Context, _, user string) (string, error) {
 	return f.reply, f.err
 }
 
-func analysis(level domain.Level) engine.Analysis {
-	return engine.Analysis{
-		Line:    "rm -rf proj",
-		Verdict: domain.Verdict{Level: level, Findings: []domain.Finding{{Level: level, Reason: "Deletes folders."}}},
-		Effects: []domain.Effect{{Kind: domain.EffectFS, Evidence: domain.Observed, Summary: "would delete 3 files", Details: []string{"deleted /home/me/proj/thesis.pdf"}}},
-		Level:   level,
+func analysis(level domain.Level) Facts {
+	return Facts{
+		Line:     "rm -rf proj",
+		Findings: []domain.Finding{{Level: level, Reason: "Deletes folders."}},
+		Effects:  []domain.Effect{{Kind: domain.EffectFS, Evidence: domain.Observed, Summary: "would delete 3 files", Details: []string{"deleted /home/me/proj/thesis.pdf"}}},
+		Level:    level,
 	}
 }
 

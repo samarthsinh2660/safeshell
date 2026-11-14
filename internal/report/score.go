@@ -1,5 +1,10 @@
 // Package report turns observed effects into a risk level and readable
 // content. Everything here is pure: the same diff always gives the same score.
+//
+// One exception to the layering: report reads the data types of package sandbox
+// (FileDiff, Change, NetAttempt, Warning). They are plain data with no
+// behaviour that touches the system, so report stays free of file, process and
+// network access.
 package report
 
 import (
@@ -54,7 +59,7 @@ func Score(d sandbox.FileDiff) Impact {
 	var system, notable []string
 	for _, c := range d.Changes {
 		if isSystemPath(c.Path) && c.Kind != sandbox.Created {
-			system = append(system, "/"+c.Path)
+			system = append(system, c.Abs())
 		}
 		if c.Kind == sandbox.Deleted || c.Kind == sandbox.Replaced {
 			notable = append(notable, c.Notable...)

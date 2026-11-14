@@ -25,6 +25,13 @@ func Decide(level domain.Level, effects []domain.Effect) domain.Decision {
 	return d
 }
 
+// WorthReview is true for levels where an AI review can still change the
+// outcome and is worth its delay: R2 and R3. Below R2 nothing is asked; at R4
+// the answer is already the strictest.
+func WorthReview(level domain.Level) bool {
+	return level >= domain.R2 && level < domain.R4
+}
+
 // FinalLevel is the highest of the rule level and what any effect justifies.
 func FinalLevel(rule domain.Level, effects []domain.Effect) domain.Level {
 	l := rule

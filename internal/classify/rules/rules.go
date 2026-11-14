@@ -71,6 +71,7 @@ func init() {
 		"visudo": fixed(R2, "Edits who is allowed to use sudo."),
 		"sh":     ruleShell, "bash": ruleShell, "zsh": ruleShell, "dash": ruleShell, "ksh": ruleShell, "fish": ruleShell, "eval": ruleShell,
 		"ssh": ruleSsh, "scp": fixed(R1, "Copies files to or from another machine. Existing files may be overwritten."),
+		"export": ruleExport, "declare": ruleExport, "typeset": ruleExport, "readonly": ruleExport, "local": ruleExport, "nameref": ruleExport,
 		"gpg": ruleGpg, "gpg2": ruleGpg, "tar": ruleTar, "unzip": ruleUnzip, "npm": ruleNpm,
 	}
 }

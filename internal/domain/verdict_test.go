@@ -59,3 +59,48 @@ func TestEvidenceAndDecisionNames(t *testing.T) {
 		t.Error("evidence must be ordered strongest last")
 	}
 }
+
+func TestParseLevel(t *testing.T) {
+	for i, s := range []string{"R0", "R1", "R2", "R3", "R4"} {
+		if l, ok := ParseLevel(s); !ok || l != Level(i) {
+			t.Errorf("ParseLevel(%q) = %v, %v", s, l, ok)
+		}
+	}
+	for _, s := range []string{"", "r3", "R5", " R3", "3"} {
+		if _, ok := ParseLevel(s); ok {
+			t.Errorf("ParseLevel(%q) accepted", s)
+		}
+	}
+}
+
+func TestExitCodes(t *testing.T) {
+	levels := []struct {
+		l    Level
+		want int
+	}{{R0, 0}, {R1, 0}, {R2, 0}, {R3, 3}, {R4, 4}}
+	for _, c := range levels {
+		if got := c.l.ExitCode(); got != c.want {
+			t.Errorf("%s.ExitCode() = %d, want %d", c.l, got, c.want)
+		}
+	}
+	decisions := []struct {
+		d    Decision
+		want int
+	}{{Allow, 0}, {Confirm, 0}, {Block, 3}, {HardBlock, 4}}
+	for _, c := range decisions {
+		if got := c.d.ExitCode(); got != c.want {
+			t.Errorf("%s.ExitCode() = %d, want %d", c.d, got, c.want)
+		}
+	}
+}
+
+func TestUnmarshalRejectsNonString(t *testing.T) {
+	var l Level
+	var e Evidence
+	var d Decision
+	for _, v := range []any{&l, &e, &d} {
+		if json.Unmarshal([]byte(`3`), v) == nil {
+			t.Errorf("a number was accepted as %T", v)
+		}
+	}
+}

@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,5 +98,39 @@ func TestListModelsKeepsOnlyGeminiChatModels(t *testing.T) {
 func TestListModelsReportsFailures(t *testing.T) {
 	if _, err := listFrom(t, "openai", "secret", 401); err == nil || strings.Contains(err.Error(), "secret") {
 		t.Errorf("%v", err)
+	}
+}
+
+type fakeBackend struct{ err error }
+
+func (fakeBackend) Name() string { return "fake" }
+func (f fakeBackend) Complete(context.Context, string, string) (string, error) {
+	return "ok", f.err
+}
+
+func TestCheckReportsWhetherTheBackendAnswers(t *testing.T) {
+	if err := Check(fakeBackend{}); err != nil {
+		t.Error(err)
+	}
+	if err := Check(fakeBackend{err: errors.New("down")}); err == nil || err.Error() != "down" {
+		t.Error(err)
+	}
+}
+
+func TestKeyFromEnvTriesEachVariableInOrder(t *testing.T) {
+	g, _ := Find("gemini")
+	t.Setenv("GEMINI_API_KEY", "  ")
+	t.Setenv("GOOGLE_API_KEY", " second ")
+	if got := g.KeyFromEnv(); got != "second" {
+		t.Errorf("%q", got)
+	}
+	t.Setenv("GEMINI_API_KEY", "first")
+	if got := g.KeyFromEnv(); got != "first" {
+		t.Errorf("%q", got)
+	}
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	if got := g.KeyFromEnv(); got != "" {
+		t.Errorf("%q", got)
 	}
 }

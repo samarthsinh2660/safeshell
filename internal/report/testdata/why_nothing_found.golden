@@ -1,0 +1,12 @@
+R0 Read-only: it runs without asking
+$ ls
+
+1. The rules (they read the command text)
+   R0  Only reads.
+   Rule level: R0
+
+2. What it would really do (how sure, least to most: estimated, inspected, previewed, observed)
+   Nothing seen here can lower the level.
+
+3. Final level: R0
+   Set by the rule: Only reads.

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
-	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/report"
 )
 
@@ -21,7 +21,7 @@ import (
 func aiReview(a *engine.Analysis, stderr io.Writer) {
 	// Only commands that already need a decision are worth a model call: it can
 	// take a second or more, and it can only raise a level that matters.
-	if a.Level < domain.R2 || a.Level >= domain.R4 {
+	if !policy.WorthReview(a.Level) {
 		return
 	}
 	b, err := backend()
@@ -34,7 +34,7 @@ func aiReview(a *engine.Analysis, stderr io.Writer) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	v, raised, err := ai.Review(ctx, b, *a)
+	v, raised, err := ai.Review(ctx, b, facts(*a))
 	switch {
 	case err != nil:
 		fmt.Fprintln(stderr, "AI review unavailable:", firstErrLine(err))
@@ -43,28 +43,56 @@ func aiReview(a *engine.Analysis, stderr io.Writer) {
 	}
 }
 
+// facts is what the AI is shown of an analysis.
+func facts(a engine.Analysis) ai.Facts {
+	return ai.Facts{Line: a.Line, Level: a.Level, Findings: a.Verdict.Findings, Effects: a.Effects}
+}
+
 func firstErrLine(err error) string {
 	s, _, _ := strings.Cut(err.Error(), "\n")
 	return s
 }
 
-// runExplain prints the analysis and a plain-English explanation.
+// runExplain prints the analysis and a plain-English explanation. With --why
+// it prints how the level was set instead, which needs no AI; the explanation
+// is added when an AI is set up.
 func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
-	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
+	why := len(args) > 0 && args[0] == "--why"
+	if why {
+		args = args[1:]
+	}
+	args, ok := endOptions("explain", args, stderr)
+	if !ok {
+		return 2
+	}
+	line := strings.TrimSpace(strings.Join(args, " "))
+	if line == "" {
+		fmt.Fprintln(stderr, "safeshell explain: give a command to explain, for example  safeshell explain --why 'rm -rf build'")
 		return 2
 	}
 	b, err := backend()
-	if err != nil || b == nil {
-		fmt.Fprintln(stderr, "safeshell explain: AI is off. Type /models to choose a model, or run  safeshell ai setup")
+	off := err != nil || b == nil
+	if off && !why {
+		fmt.Fprintln(stderr, "safeshell explain: AI is off.", aiOffHint)
+		fmt.Fprintln(stderr, "To see why a command got its level without the AI, run  safeshell explain --why <command>")
 		return 1
 	}
-	cwd, _ := os.Getwd()
+	cwd := cwdOr("")
 	a := analyze(context.Background(), strings.Join(args, " "), cwd)
-	printAnalysis(stdout, a, cwd, color, true)
+	if why && !off {
+		aiReview(&a, stderr) // the same review the hook runs, so the level shown is the one it would use
+	}
+	if why {
+		fmt.Fprint(stdout, report.Why(a.Line, a.Verdict, a.Effects, a.Level, a.Decision))
+	} else {
+		printAnalysis(stdout, a, cwd, color, true)
+	}
+	if off {
+		return 0
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	text, err := ai.Explain(ctx, b, a)
+	text, err := ai.Explain(ctx, b, facts(a))
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell explain:", firstErrLine(err))
 		return 1
@@ -75,12 +103,15 @@ func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
 
 // runAsk is `safeshell ask <english>`: translate, then treat the result like a typed command.
 func runAsk(args []string, stdout, stderr io.Writer, color bool) int {
+	args, ok := endOptions("ask", args, stderr)
+	if !ok {
+		return 2
+	}
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	cwd, _ := os.Getwd()
-	code, _ := askLine(strings.Join(args, " "), cwd, stdout, stderr, color)
+	code, _ := askLine(strings.Join(args, " "), cwdOr(""), stdout, stderr, color)
 	return code
 }
 
@@ -90,7 +121,7 @@ func runAsk(args []string, stdout, stderr io.Writer, color bool) int {
 func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code int, available bool) {
 	b, err := backend()
 	if err != nil || b == nil {
-		fmt.Fprintln(stderr, "SafeShell AI is off. Type /models to choose a model, or run  safeshell ai setup")
+		fmt.Fprintln(stderr, "SafeShell AI is off.", aiOffHint)
 		return 1, false
 	}
 	env := gatherEnv(cwd)
@@ -115,7 +146,7 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 			fmt.Fprintf(stderr, "The AI asks: %s\n> ", report.Printable(r.Question))
 			reply, err := readLine(in)
 			if err != nil || reply == "" {
-				fmt.Fprintln(stderr, "Cancelled. Nothing was run.")
+				fmt.Fprintln(stderr, cancelledMsg)
 				return 1, true
 			}
 			replies = append(replies, reply)

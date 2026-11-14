@@ -1,0 +1,13 @@
+R1 Reversible: it asks you first
+$ mytool --go
+
+1. The rules (they read the command text)
+   R1  Not a command SafeShell recognises yet. It will be tested in the sandbox before it runs.
+   Rule level: R1
+
+2. What it would really do (how sure, least to most: estimated, inspected, previewed, observed)
+   ESTIMATED  review: could not be tested (does not raise the level)
+
+3. Final level: R1
+   Set by the rule: Not a command SafeShell recognises yet. It will be tested in the sandbox before it runs.
+   Part of what it does could only be guessed (for example the sandbox could not run), so SafeShell asks you first.

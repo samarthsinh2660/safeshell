@@ -19,7 +19,7 @@ import (
 type Llama struct {
 	Dirs  runtime.Dirs
 	Model models.Model
-	GPU   string    // auto, on, off
+	GPU   string    // auto, cuda, vulkan, cpu
 	Log   io.Writer // where "starting the model" notices go; may be nil
 }
 

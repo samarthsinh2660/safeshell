@@ -1,5 +1,3 @@
-// Package classify rates a command line by how reversible its effects are.
-// It is pure: no file, process or network access.
 package classify
 
 import (
@@ -82,6 +80,10 @@ func commandFindings(c shellparse.Command) ([]Finding, bool) {
 		fs, known = rules.Rate(c)
 		unknown = !known
 	}
+	if c.AliasWord {
+		fs = slices.DeleteFunc(fs, func(f Finding) bool { return f.Level < R3 })
+		unknown = false
+	}
 	fs = append(fs, redirectFindings(c)...)
 	if c.Sudo {
 		for i := range fs {
@@ -121,9 +123,9 @@ func finding(l Level, cmd, reason string) Finding {
 var fetchers = map[string]bool{"curl": true, "wget": true, "fetch": true, "base64": true, "xxd": true, "openssl": true, "nc": true, "ncat": true}
 
 // pipelineFindings looks for dangerous patterns that only exist across a pipe,
-// such as downloading code and running it unseen.
+// such as downloading code and running it unseen, or sending a secret file out.
 func pipelineFindings(p shellparse.Pipeline) []Finding {
-	var fs []Finding
+	fs := rules.SecretSends(p)
 	for i, c := range p.Cmds {
 		fromNet := rules.RunsFetchedCode(c)
 		if rules.IsInterpreter(c.Name) && rules.ReadsStdin(c) {

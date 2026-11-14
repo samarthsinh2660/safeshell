@@ -334,3 +334,10 @@ func TestSocketPathAtTheLimitIsAccepted(t *testing.T) {
 		t.Errorf("108 bytes accepted: %v", err)
 	}
 }
+
+func TestErrorTextHasMessageAndCode(t *testing.T) {
+	e := &Error{Code: CodeBadParams, Message: "need {line}"}
+	if got := e.Error(); !strings.Contains(got, "need {line}") || !strings.Contains(got, "code") {
+		t.Error(got)
+	}
+}

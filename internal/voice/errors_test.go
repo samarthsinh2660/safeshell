@@ -179,7 +179,7 @@ func TestBuildFileErrors(t *testing.T) {
 func TestDownloadFailuresAreExplained(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
-	s := setup(t, "cmake", "c++")
+	s := setup(t, "cmake", "c++", "make")
 	s.Client = &http.Client{Transport: redirect{srv.URL}}
 	if _, err := s.EnsureEngine(context.Background()); err == nil || !strings.Contains(err.Error(), "could not download the speech engine source") || !strings.Contains(err.Error(), "safeshell voice setup") {
 		t.Errorf("%v", err)

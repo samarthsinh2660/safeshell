@@ -59,8 +59,8 @@ Linux, amd64 or arm64, bash or zsh.
 
 ```bash
 arch=$(dpkg --print-architecture)   # amd64 or arm64
-wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.1.0/safeshell_1.1.0_${arch}.deb
-sudo apt install ./safeshell_1.1.0_${arch}.deb
+wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.1.1/safeshell_1.1.1_${arch}.deb
+sudo apt install ./safeshell_1.1.1_${arch}.deb
 safeshell install          # adds the hook to your shell
 ```
 
@@ -74,8 +74,8 @@ sudo apt install safeshell
 **Any Linux (amd64 or arm64):**
 
 ```bash
-wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.1.0/safeshell-v1.1.0-linux-amd64.tar.gz
-tar -xzf safeshell-v1.1.0-linux-amd64.tar.gz && cd safeshell-v1.1.0-linux-amd64
+wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.1.1/safeshell-v1.1.1-linux-amd64.tar.gz
+tar -xzf safeshell-v1.1.1-linux-amd64.tar.gz && cd safeshell-v1.1.1-linux-amd64
 bash scripts/install.sh    # add --ai to also set up the built-in AI
 ```
 
@@ -113,6 +113,7 @@ Without the hook you can use the pieces directly:
 safeshell check 'rm -rf ~/projects'      # rate a command without running it
 safeshell analyze 'make clean'           # sandbox run + processes, disks and safer options
 safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
+safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
 safeshell snapshots                      # what undo can restore
 ```
 
@@ -140,7 +141,7 @@ Observed effects and the AI can only raise a rating, never lower it. More in
   Nothing is downloaded until you ask.
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
-- **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup` (needs cmake, a C++ compiler and a recorder: `pipewire-bin`, `pulseaudio-utils` or `alsa-utils`).
+- **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
   The words then go through the same path as typed English, so the usual checks apply.
 
 `safeshell ai bench` measures the active model on 49 labelled requests: local Qwen 3B scores 100% (49 of 49),

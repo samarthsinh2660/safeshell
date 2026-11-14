@@ -1,0 +1,12 @@
+R4 Catastrophic: it is hard blocked, and overriding needs a typed phrase
+$ rm -rf /
+
+1. The rules (they read the command text)
+   R4  Erases the whole system.
+   Rule level: R4
+
+2. What it would really do (how sure, least to most: estimated, inspected, previewed, observed)
+   PREVIEWED  disk: touches the root disk (does not raise the level)
+
+3. Final level: R4
+   Set by the rule: Erases the whole system.

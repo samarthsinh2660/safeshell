@@ -198,3 +198,39 @@ func TestTotals(t *testing.T) {
 		t.Errorf("totals = %+v", got)
 	}
 }
+
+func TestChangeAbsAddsTheLeadingSlash(t *testing.T) {
+	if got := (Change{Path: "home/me/a.txt"}).Abs(); got != "/home/me/a.txt" {
+		t.Error(got)
+	}
+}
+
+func TestSpecDefaults(t *testing.T) {
+	d := Spec{Line: "ls"}.Defaults()
+	if d.Timeout != 30*time.Second || d.MaxOutput != 64<<10 || d.Line != "ls" {
+		t.Errorf("%+v", d)
+	}
+	set := Spec{Timeout: time.Second, MaxOutput: 5}.Defaults()
+	if set.Timeout != time.Second || set.MaxOutput != 5 {
+		t.Errorf("values that were set must stay: %+v", set)
+	}
+}
+
+func TestOptionsDefaults(t *testing.T) {
+	o := Options{}.withDefaults()
+	if o.MaxExpand != 500_000 || o.IsWhiteout == nil || o.IsOpaque == nil {
+		t.Fatalf("%+v", o)
+	}
+	dir := t.TempDir()
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.IsWhiteout(dir, fi) || o.IsOpaque(dir) {
+		t.Error("an ordinary directory is neither a whiteout nor opaque")
+	}
+	kept := Options{MaxExpand: 3}.withDefaults()
+	if kept.MaxExpand != 3 {
+		t.Error("a set MaxExpand must stay")
+	}
+}

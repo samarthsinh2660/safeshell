@@ -1,4 +1,4 @@
-package cloud
+package anthropic
 
 import (
 	"context"
@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/samarthsinh2660/safeshell/internal/ai"
 )
 
 func TestAnthropicRequestAndReply(t *testing.T) {
@@ -58,5 +61,49 @@ func TestAnthropicListsModels(t *testing.T) {
 	}
 	if _, err := (Anthropic{}).ListModels(context.Background()); err == nil || !strings.Contains(err.Error(), "API key") {
 		t.Errorf("missing key: %v", err)
+	}
+}
+
+func serveBody(t *testing.T, code int, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(code)
+		w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestCompleteRejectsUnusableReplies(t *testing.T) {
+	for name, body := range map[string]string{"bad JSON": "{nope", "no content": `{"content":[]}`, "no text blocks": `{"content":[{"type":"tool_use"}]}`} {
+		srv := serveBody(t, 200, body)
+		if _, err := (Anthropic{Key: "k", URL: srv.URL}).Complete(context.Background(), "", ""); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	srv := serveBody(t, 500, "secret prompt")
+	old := ai.RetryDelay
+	ai.RetryDelay = time.Millisecond
+	defer func() { ai.RetryDelay = old }()
+	if _, err := (Anthropic{Key: "k", URL: srv.URL}).Complete(context.Background(), "", ""); err == nil || strings.Contains(err.Error(), "secret") {
+		t.Errorf("non-200: %v", err)
+	}
+}
+
+func TestNamesAndDefaults(t *testing.T) {
+	if got := (Anthropic{}).Name(); got != "cloud:claude-haiku-5-5" {
+		t.Error(got)
+	}
+	if got := (Anthropic{Model: "claude-x"}).Name(); got != "cloud:claude-x" {
+		t.Error(got)
+	}
+	if got := (Anthropic{}).base(); got != "https://api.anthropic.com" {
+		t.Error(got)
+	}
+	if got := (Anthropic{URL: "http://h:1/"}).base(); got != "http://h:1" {
+		t.Error(got)
+	}
+	if got := (Anthropic{URL: "/"}).base(); got != "https://api.anthropic.com" {
+		t.Error("a bare slash is no address:", got)
 	}
 }

@@ -53,14 +53,15 @@ Graphics: the engine uses CUDA on a recent NVIDIA driver, otherwise Vulkan, othe
    Force one with "gpu": "cuda" | "vulkan" | "cpu" under ai.local in ~/.config/safeshell/config.json.
 The AI can only make SafeShell MORE careful. It can never let a blocked command through.
 Commands:  safeshell ai setup | safeshell ai status | safeshell ai stop`},
-	{"voice", "Speak a request", `Set up once (builds a small speech engine and downloads a 148 MB English model):
+	{"voice", "Speak a request", `Set up once (installs the tools it needs with apt after asking, builds a small speech engine and
+downloads a 148 MB English model; add --yes to skip the question):
      safeshell voice setup
 Then, in your terminal, press Ctrl-X then Ctrl-V and speak. Press Enter when you are done.
 Your words replace whatever is on the command line so you can read and edit them; press Enter as usual and
 SafeShell turns them into a command and checks it like anything you typed.
      safeshell voice            speak, confirm the words, then run the request
      safeshell voice status     which recorder, engine and model it would use
-Needs a recorder: pipewire-bin, pulseaudio-utils or alsa-utils. The recording is deleted right
+Setup installs cmake, g++ and a recorder (pipewire-bin) if they are missing. The recording is deleted right
 after it is read, and nothing leaves your machine: the speech engine runs locally.`},
 	{"undo", "Undo and snapshots", `When you approve a risky command, SafeShell first saves the files it will change.
      safeshell undo            put back the most recent change and verify every file matches
@@ -73,6 +74,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell analyze <cmd>           the full picture: rating, sandbox result, what it would hit
    safeshell simulate <cmd>          run in the sandbox and list the changes (nothing real is touched)
    safeshell explain <cmd>           the analysis plus a plain-English explanation (needs AI)
+   safeshell explain --why <cmd>     which rule and evidence set the level (works without AI)
    safeshell ask <english>           turn English into a checked command
    safeshell undo / safeshell snapshots     restore / list
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
@@ -95,8 +97,8 @@ English is not recognised     start the line with ?   or run  safeshell ask "...
 Disable for one terminal      SAFESHELL_OFF=1        Turn AI off: /models then  off`},
 }
 
-// runHelp prints the overview, or one topic.
-func runHelp(args []string, w io.Writer) int {
+// runHelp prints the overview, or one topic; an unknown topic goes to stderr.
+func runHelp(args []string, w, stderr io.Writer) int {
 	if len(args) > 0 {
 		want := strings.ToLower(args[0])
 		for _, t := range helpTopics {
@@ -105,6 +107,7 @@ func runHelp(args []string, w io.Writer) int {
 				return 0
 			}
 		}
+		w = stderr // an unknown topic is an error
 		fmt.Fprintf(w, "No help topic called %q.\n\n", args[0])
 	}
 	fmt.Fprint(w, "SafeShell stops dangerous commands before they run, shows what would happen, and lets you undo.\n\nTopics (safeshell help <topic>, or /help <topic> in your terminal):\n")

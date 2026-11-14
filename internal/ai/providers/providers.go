@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
-	"github.com/samarthsinh2660/safeshell/internal/ai/cloud"
+	"github.com/samarthsinh2660/safeshell/internal/ai/anthropic"
 	"github.com/samarthsinh2660/safeshell/internal/ai/openai"
 )
 
@@ -59,7 +59,7 @@ func (p Provider) Backend(key, model string) ai.Backend {
 	}
 	switch p.ID {
 	case "anthropic":
-		return ai.Redacting(cloud.Anthropic{Key: key, Model: model, URL: p.URL})
+		return ai.Redacting(anthropic.Anthropic{Key: key, Model: model, URL: p.URL})
 	case "openai":
 		return ai.Redacting(openai.Client{Label: "gpt:" + model, URL: p.URL, Key: key, Model: model, Tokens: "max_completion_tokens", Reasoning: "low"})
 	default:
@@ -76,7 +76,7 @@ func (p Provider) ListModels(ctx context.Context, key string) ([]ai.ModelInfo, e
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if p.ID == "anthropic" {
-		return cloud.Anthropic{Key: key, URL: p.URL}.ListModels(ctx)
+		return anthropic.Anthropic{Key: key, URL: p.URL}.ListModels(ctx)
 	}
 	all, err := openai.Client{Label: p.ID, URL: p.URL, Key: key}.ListModels(ctx)
 	if err != nil {

@@ -1,3 +1,11 @@
+safeshell (1.1.1-1) unstable; urgency=medium
+
+  * New upstream release: classifier and hook bypass fixes, sandbox and
+    daemon socket hardening, safe printing of untrusted text, cloud model
+    picker, voice setup installs its build tools.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Fri, 13 Nov 2026 18:00:00 +0530
+
 safeshell (1.1.0-1) unstable; urgency=medium
 
   * New upstream release: voice requests, the AI asks when a request is
