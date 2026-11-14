@@ -259,3 +259,57 @@ func TestRestoreWillNotFollowASymlinkedParent(t *testing.T) {
 		t.Error("restore wrote through the link")
 	}
 }
+
+func TestUndoWorksThroughALinkThatWasThereBeforeTheCommand(t *testing.T) {
+	root, store := t.TempDir(), t.TempDir()
+	real := filepath.Join(root, "disk", "projects")
+	write(t, filepath.Join(real, "app/main.go"), "v1", 0o644)
+	link := filepath.Join(root, "projects") // like ~/projects -> /data/projects, or /bin -> usr/bin
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	m, err := Create(store, "x", []Target{{Path: filepath.Join(link, "app/main.go")}, {Path: filepath.Join(link, "app/new/out.txt"), Create: true}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Entries[0].Path != filepath.Join(real, "app/main.go") || m.Entries[1].Path != filepath.Join(real, "app/new/out.txt") {
+		t.Fatalf("paths are not saved resolved: %+v", m.Entries)
+	}
+	write(t, filepath.Join(link, "app/main.go"), "v2", 0o644)
+	write(t, filepath.Join(link, "app/new/out.txt"), "made", 0o644)
+	r, err := Restore(store, m.ID)
+	if err != nil || len(r.Problems) != 0 {
+		t.Fatalf("err=%v problems=%v", err, r.Problems)
+	}
+	if read(t, filepath.Join(real, "app/main.go")) != "v1" {
+		t.Error("main.go was not restored")
+	}
+	if _, err := os.Lstat(filepath.Join(real, "app/new/out.txt")); err == nil {
+		t.Error("the created file was not removed")
+	}
+}
+
+func TestCreateDoesNotMarkAPathItCannotCheckAsAbsent(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read every folder")
+	}
+	root, store := t.TempDir(), t.TempDir()
+	locked := filepath.Join(root, "locked")
+	write(t, filepath.Join(locked, "f"), "keep", 0o644)
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(locked, 0o755)
+	m, _ := Create(store, "x", []Target{{Path: filepath.Join(locked, "f"), Create: true}}, 0)
+	for _, e := range m.Entries {
+		if e.Kind == Absent {
+			t.Fatalf("a path that could not be checked was saved as absent: %+v", e)
+		}
+	}
+}
+
+func TestNoSymlinkParentsAllowsFoldersThatAreGone(t *testing.T) {
+	if err := noSymlinkParents(filepath.Join(t.TempDir(), "gone", "deeper", "f")); err != nil {
+		t.Error(err)
+	}
+}

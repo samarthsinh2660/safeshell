@@ -87,12 +87,15 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 		}
 	}
 	for _, t := range targets {
+		// Paths are saved with their parent folders resolved, so a link found among them at
+		// undo time can only mean something was swapped in since (see noSymlinkParents).
+		path := resolveParents(t.Path)
 		// The path may have appeared since the sandbox looked: save it then, so undo never deletes it.
-		if _, err := os.Lstat(t.Path); t.Create && err != nil {
-			add(Entry{Path: t.Path, Kind: Absent})
+		if _, err := os.Lstat(path); t.Create && errors.Is(err, fs.ErrNotExist) {
+			add(Entry{Path: path, Kind: Absent})
 			continue
 		}
-		werr := filepath.WalkDir(t.Path, func(p string, de fs.DirEntry, werr error) error {
+		werr := filepath.WalkDir(path, func(p string, de fs.DirEntry, werr error) error {
 			if werr != nil {
 				if errors.Is(werr, fs.ErrNotExist) {
 					return nil
@@ -114,6 +117,19 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 	sort.Slice(m.Entries, func(i, j int) bool { return m.Entries[i].Path < m.Entries[j].Path })
 	b, _ := json.MarshalIndent(m, "", "  ")
 	return m, os.WriteFile(filepath.Join(d, "manifest.json"), b, 0o600)
+}
+
+// resolveParents resolves the links in p's parent folders, keeping p's own name (a link
+// there is saved as a link). Parents that don't exist yet are kept as written.
+func resolveParents(p string) string {
+	dir, rest := filepath.Dir(p), []string{filepath.Base(p)}
+	for {
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(append([]string{r}, rest...)...)
+		}
+		rest = append([]string{filepath.Base(dir)}, rest...)
+		dir = filepath.Dir(dir)
+	}
 }
 
 // capture records p, copying file data into the snapshot's blob store.
