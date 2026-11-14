@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"syscall"
 	"time"
@@ -28,6 +29,11 @@ const (
 
 // ErrTooLarge means the files to protect exceed the size limit.
 var ErrTooLarge = errors.New("too much data to snapshot")
+
+// ErrBadID means a snapshot id is not in the format Create produces.
+var ErrBadID = errors.New("not a snapshot id")
+
+var idFormat = regexp.MustCompile(`^\d{8}T\d{6}\.\d{9}Z$`)
 
 // Target is a path the command is expected to change.
 type Target struct {
@@ -81,7 +87,8 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 		}
 	}
 	for _, t := range targets {
-		if t.Create {
+		// The path may have appeared since the sandbox looked: save it then, so undo never deletes it.
+		if _, err := os.Lstat(t.Path); t.Create && err != nil {
 			add(Entry{Path: t.Path, Kind: Absent})
 			continue
 		}
@@ -164,6 +171,9 @@ func copyBlob(snap, src string) (string, error) {
 // Load reads a snapshot's manifest.
 func Load(store, id string) (Manifest, error) {
 	var m Manifest
+	if !idFormat.MatchString(id) {
+		return m, fmt.Errorf("%w: %q", ErrBadID, id)
+	}
 	b, err := os.ReadFile(filepath.Join(dir(store, id), "manifest.json"))
 	if err != nil {
 		return m, err

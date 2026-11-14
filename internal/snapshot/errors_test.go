@@ -133,7 +133,6 @@ func TestRestoreReportsProblemsInsteadOfStopping(t *testing.T) {
 	notRoot(t)
 	root, store := t.TempDir(), t.TempDir()
 	keep := filepath.Join(root, "keep")
-	write(t, filepath.Join(keep, "made"), "x", 0o644)
 	gone := filepath.Join(root, "gone")
 	write(t, filepath.Join(gone, "f"), "x", 0o644)
 	m, err := Create(store, "x", []Target{{Path: gone}, {Path: filepath.Join(keep, "made"), Create: true}}, 0)
@@ -143,6 +142,7 @@ func TestRestoreReportsProblemsInsteadOfStopping(t *testing.T) {
 	if err := os.RemoveAll(gone); err != nil {
 		t.Fatal(err)
 	}
+	write(t, filepath.Join(keep, "made"), "x", 0o644) // created by the command
 	// The created file cannot be removed (read-only folder), and the folder to
 	// restore into is not writable either.
 	readOnly(t, keep)
@@ -157,7 +157,7 @@ func TestRestoreReportsProblemsInsteadOfStopping(t *testing.T) {
 	if !removeFailed {
 		t.Errorf("problems: %v", r.Problems)
 	}
-	if _, err := Restore(store, "no-such-id"); err == nil {
+	if _, err := Restore(store, "20060102T150405.000000000Z"); err == nil {
 		t.Error("a missing snapshot must be an error")
 	}
 }

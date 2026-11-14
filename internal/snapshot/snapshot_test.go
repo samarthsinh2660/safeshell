@@ -1,9 +1,11 @@
 package snapshot
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -187,5 +189,73 @@ func TestRestoreRebuildsAReadOnlyFolderAndItsContents(t *testing.T) {
 	}
 	if read(t, filepath.Join(locked, "inner.txt")) != "keep" {
 		t.Error("contents lost")
+	}
+}
+
+func TestCreateSavesACreatedPathThatAlreadyExists(t *testing.T) {
+	root, store := t.TempDir(), t.TempDir()
+	late := filepath.Join(root, "late")
+	write(t, filepath.Join(late, "f"), "keep me", 0o644)
+	m, err := Create(store, "x", []Target{{Path: late, Create: true}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(late); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Restore(store, m.ID)
+	if err != nil || len(r.Problems) != 0 || r.Removed != 0 {
+		t.Fatalf("restore: %v %+v", err, r)
+	}
+	if got := read(t, filepath.Join(late, "f")); got != "keep me" {
+		t.Errorf("contents %q", got)
+	}
+}
+
+func TestLoadRejectsIdsOutsideTheStore(t *testing.T) {
+	for _, id := range []string{"../x", "..", "", "a/b", "20060102T150405.000000000Z/../x", "nope"} {
+		if _, err := Load(t.TempDir(), id); !errors.Is(err, ErrBadID) {
+			t.Errorf("%q: %v", id, err)
+		}
+	}
+}
+
+func TestRestoreWillNotFollowASymlinkedParent(t *testing.T) {
+	root, store := t.TempDir(), t.TempDir()
+	outside := t.TempDir()
+	write(t, filepath.Join(outside, "victim"), "outside", 0o644)
+	write(t, filepath.Join(outside, "dir/f"), "outside", 0o644)
+	real := filepath.Join(root, "shared")
+	write(t, filepath.Join(real, "made"), "x", 0o644)
+	write(t, filepath.Join(real, "kept"), "a", 0o644)
+	write(t, filepath.Join(real, "d/f"), "a", 0o644)
+	m, err := Create(store, "x", []Target{{Path: filepath.Join(real, "kept")}, {Path: filepath.Join(real, "d")}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Entries = append(m.Entries, Entry{Path: filepath.Join(real, "victim"), Kind: Absent})
+	if err := os.RemoveAll(real); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, real); err != nil {
+		t.Fatal(err)
+	}
+	// Absent entry for the outside file, reached through the link.
+	b, _ := json.Marshal(m)
+	if err := os.WriteFile(filepath.Join(store, m.ID, "manifest.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Restore(store, m.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Problems) == 0 || !strings.Contains(strings.Join(r.Problems, "\n"), "will not follow") {
+		t.Errorf("problems: %v", r.Problems)
+	}
+	if read(t, filepath.Join(outside, "victim")) != "outside" || read(t, filepath.Join(outside, "dir/f")) != "outside" {
+		t.Error("a file outside was touched")
+	}
+	if _, err := os.Lstat(filepath.Join(outside, "kept")); err == nil {
+		t.Error("restore wrote through the link")
 	}
 }

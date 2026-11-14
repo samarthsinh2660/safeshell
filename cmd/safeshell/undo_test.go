@@ -82,6 +82,9 @@ func TestUndoErrors(t *testing.T) {
 	if code, _, _ := runSS("undo", "nope"); code != 1 {
 		t.Errorf("unknown id: %d", code)
 	}
+	if code, _, errOut := runSS("undo", "../../x"); code != 1 || !strings.Contains(errOut, "not a snapshot id") {
+		t.Errorf("bad id: %d %q", code, errOut)
+	}
 	if code, _, _ := runSS("undo", "a", "b"); code != 2 {
 		t.Errorf("usage: %d", code)
 	}
