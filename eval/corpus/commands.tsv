@@ -421,3 +421,36 @@ R3	alias ls=reboot
 R3	alias off=poweroff	
 R0	alias d=docker	
 R0	alias gc=mytool	
+R4	rm -rf \/	
+R4	r\m -rf /	
+R4	\r\m -rf /	
+R4	"r"m -rf /	
+R4	'r'm -rf /	
+R4	bash <<< 'rm -rf ~'	
+R4	printf 'rm -rf ~' | sh	
+R4	printf '%s\n' 'rm -rf ~' | sh	
+R4	echo rm -rf ~ | bash	
+R4	source /dev/stdin <<< 'rm -rf ~'	
+R4	. /dev/stdin <<< 'rm -rf ~'	
+R4	echo 'rm -rf ~' | source /dev/stdin	
+R4	su -c 'rm -rf /'	
+R4	su - root -c 'rm -rf /'	
+R4	su root --command='rm -rf /'	
+R4	pkexec rm -rf /	
+R4	pkexec --user root rm -rf /	
+R4	runuser -u root -- rm -rf /	
+R4	runuser -l bob -c 'rm -rf /'	
+R4	nsenter -t 1 -m rm -rf /	
+R4	watch rm -rf /	
+R4	watch -n 5 rm -rf /	
+R4	watch -x rm -rf /	
+R4	flock /tmp/l rm -rf /	
+R4	flock -w 5 /tmp/l -c 'rm -rf /'	
+R4	chroot / rm -rf /	
+R4	env -C / rm -rf *	
+R4	env --chdir=/ rm -rf *	
+R2	chroot /mnt	
+R2	chroot /mnt ls	
+R1	watch ls	
+R0	flock /tmp/l ls	
+R0	echo r\m	

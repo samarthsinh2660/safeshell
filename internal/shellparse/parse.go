@@ -214,8 +214,8 @@ func (w *walker) pipeline(s *syntax.Stmt, depth int) {
 				continue
 			}
 			cmd.Background = s.Background
-			if n := len(p.Cmds); n > 0 && (p.Cmds[n-1].Name == "echo" || p.Cmds[n-1].Name == "printf") {
-				carried += echoText(p.Cmds[n-1].Args)
+			if n := len(p.Cmds); n > 0 {
+				carried += pipedText(p.Cmds[n-1])
 			}
 			if carried != "" {
 				cmd.Stdin += carried
@@ -232,6 +232,20 @@ func (w *walker) pipeline(s *syntax.Stmt, depth int) {
 	if len(p.Cmds) > 0 {
 		w.res.Pipelines = append(w.res.Pipelines, p)
 	}
+}
+
+// pipedText is the text that prev, an earlier stage of a pipeline, passes on
+// when it is only echo, printf, or cat of a here-document or here-string.
+func pipedText(prev Command) string {
+	switch prev.Name {
+	case "echo", "printf":
+		return echoText(prev.Name, prev.Args)
+	case "cat":
+		if prev.Stdin != "" && !slices.ContainsFunc(prev.Args, func(a string) bool { return !strings.HasPrefix(a, "-") }) {
+			return "\n" + prev.Stdin
+		}
+	}
+	return ""
 }
 
 // build converts one CallExpr into a Command and queues any code hidden inside
@@ -390,6 +404,10 @@ func (w *walker) nested(c *Command, depth int) {
 		}
 	case "find":
 		w.findExec(c, depth)
+	case "chroot": // chroot itself stays rated; the command inside is rated too
+		if rest := chrootCommand(c.Args); len(rest) > 0 {
+			w.inner(c, rest, false, depth)
+		}
 	case "python", "python3", "perl", "ruby", "node":
 		for _, sh := range embeddedShell(InlineCode(*c)) {
 			_ = w.parseString(sh, depth+1)
@@ -439,6 +457,10 @@ func (w *walker) stdinCode(c *Command, depth int) {
 		return
 	}
 	switch c.Name {
+	case "source", ".":
+		if len(c.Args) > 0 && c.Args[0] == "/dev/stdin" {
+			_ = w.parseString(c.Stdin, depth+1)
+		}
 	case "sh", "bash", "zsh", "dash", "ksh":
 		for _, a := range c.Args {
 			if a == "-s" || a == "--" {
@@ -481,7 +503,10 @@ func cronCommand(line string) string {
 }
 
 // cd updates the tracked working directory after `cd args`.
-func (w *walker) cd(args []string) {
+func (w *walker) cd(args []string) { w.cwd = chdir(w.cwd, args) }
+
+// chdir is the directory after `cd args` run from cwd.
+func chdir(cwd string, args []string) string {
 	var dir string
 	n := 0
 	for _, a := range args {
@@ -493,15 +518,15 @@ func (w *walker) cd(args []string) {
 	}
 	switch {
 	case n == 0:
-		w.cwd = "~"
+		return "~"
 	case n > 1 || dir == "-" || strings.ContainsAny(dir, "$`?"):
-		w.cwd = "?"
+		return "?"
 	case strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "~"):
-		w.cwd = path.Clean(dir)
-	case w.cwd == "?":
-	default:
-		w.cwd = path.Join(w.cwd, dir)
+		return path.Clean(dir)
+	case cwd == "?":
+		return cwd
 	}
+	return path.Join(cwd, dir)
 }
 
 func (w *walker) findExec(c *Command, depth int) {
@@ -511,18 +536,23 @@ func (w *walker) findExec(c *Command, depth int) {
 			continue
 		}
 		end := i + 1
-		for end < len(c.Args) && c.Args[end] != ";" && c.Args[end] != "+" && c.Args[end] != `\;` {
+		for end < len(c.Args) && c.Args[end] != ";" && c.Args[end] != "+" {
 			end++
 		}
-		sub := Command{Remote: c.Remote, ViaFind: true}
-		inner := unwrap(slices.Clone(c.Args[i+1:end]), &sub)
+		w.inner(c, c.Args[i+1:end], true, depth)
 		i = end // inner -exec words belong to the inner command, not to this find
-		if len(inner) > 0 {
-			sub.Name, sub.Args = inner[0], inner[1:]
-			w.single(sub)
-			if depth+1 < maxDepth {
-				w.nested(&sub, depth+1)
-			}
+	}
+}
+
+// inner records the command that words spell out, run by c (find -exec, chroot).
+func (w *walker) inner(c *Command, words []string, viaFind bool, depth int) {
+	sub := Command{Remote: c.Remote, ViaFind: viaFind}
+	rest := unwrap(slices.Clone(words), &sub)
+	if len(rest) > 0 {
+		sub.Name, sub.Args = rest[0], rest[1:]
+		w.single(sub)
+		if depth+1 < maxDepth {
+			w.nested(&sub, depth+1)
 		}
 	}
 }
@@ -566,6 +596,12 @@ func unwrap(args []string, cmd *Command) []string {
 					args = append(words, args[n:]...)
 					continue
 				}
+				if takesValue(args[0], "-C", "--chdir") && len(args) > 1 {
+					cmd.Cwd = chdir(cmd.Cwd, args[1:2])
+				}
+				if strings.HasPrefix(args[0], "--chdir=") {
+					cmd.Cwd = chdir(cmd.Cwd, []string{strings.TrimPrefix(args[0], "--chdir=")})
+				}
 				if takesValue(args[0], "-u", "-C", "--unset", "--chdir") {
 					args = args[1:]
 				}
@@ -573,6 +609,12 @@ func unwrap(args []string, cmd *Command) []string {
 					args = args[1:]
 				}
 			}
+		case "su", "runuser", "pkexec", "nsenter", "watch", "flock":
+			rest := wrapped(args, cmd)
+			if len(rest) == 0 {
+				return args // nothing to run: the wrapper itself is the command
+			}
+			args = rest
 		case "nohup", "time", "command", "builtin", "setsid", "busybox":
 			args = skipOpts(args[1:])
 		case "exec":
@@ -600,11 +642,10 @@ func unwrap(args []string, cmd *Command) []string {
 // systemBins are where the standard tools live, so /bin/rm is just rm.
 var systemBins = []string{"/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin"}
 
-// programName undoes the ways of writing one program that would hide it from
-// the rules: a leading backslash (\rm, the usual way to skip an alias) and the
-// full path of a system tool (/bin/rm). Other paths, such as ./rm, are left alone.
+// programName undoes the way of writing one program that would hide it from
+// the rules: the full path of a system tool (/bin/rm). Other paths, such as
+// ./rm, are left alone. (Backslashes such as \rm are already gone from words.)
 func programName(word string) string {
-	word = strings.TrimLeft(word, `\`)
 	if slices.Contains(systemBins, path.Dir(word)) {
 		return path.Base(word)
 	}
@@ -715,20 +756,32 @@ func redirects(rs []*syntax.Redirect) []Redirect {
 	return out
 }
 
-// wordString flattens a shell word. Variables are kept as $NAME and command
-// substitutions as $(...), because their values are unknown until run time.
-func wordString(w *syntax.Word) string {
+// wordString flattens a shell word the way the shell reads it: quotes and
+// backslash escapes are removed, so r\m, 'r'm and \/ are rm and /. Variables
+// are kept as $NAME and command substitutions as $(...), because their values
+// are unknown until run time.
+func wordString(w *syntax.Word) string { return flatten(w, true) }
+
+// rawString is wordString with backslashes left in, for here-document text
+// that a shell reads again later.
+func rawString(w *syntax.Word) string { return flatten(w, false) }
+
+func flatten(w *syntax.Word, unescape bool) string {
 	var sb strings.Builder
-	var parts func([]syntax.WordPart)
-	parts = func(ps []syntax.WordPart) {
+	var parts func([]syntax.WordPart, bool)
+	parts = func(ps []syntax.WordPart, quoted bool) {
 		for _, p := range ps {
 			switch x := p.(type) {
 			case *syntax.Lit:
-				sb.WriteString(x.Value)
+				if unescape {
+					sb.WriteString(unescapeLit(x.Value, quoted))
+				} else {
+					sb.WriteString(x.Value)
+				}
 			case *syntax.SglQuoted:
 				sb.WriteString(x.Value)
 			case *syntax.DblQuoted:
-				parts(x.Parts)
+				parts(x.Parts, true)
 			case *syntax.ParamExp:
 				if x.Param != nil {
 					fmt.Fprintf(&sb, "$%s", x.Param.Value)
@@ -740,7 +793,26 @@ func wordString(w *syntax.Word) string {
 			}
 		}
 	}
-	parts(w.Parts)
+	parts(w.Parts, false)
+	return sb.String()
+}
+
+// unescapeLit removes the backslashes the shell removes: before any character
+// outside quotes, and only before $ ` " \ and a newline inside double quotes.
+func unescapeLit(s string, inDouble bool) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var sb strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\\' && i+1 < len(s) {
+			next := s[i+1]
+			if !inDouble || strings.IndexByte("$`\"\\", next) >= 0 {
+				i++
+			}
+		}
+		sb.WriteByte(s[i])
+	}
 	return sb.String()
 }
 
@@ -750,7 +822,7 @@ func hereText(rs []*syntax.Redirect) string {
 	for _, r := range rs {
 		switch {
 		case r.Hdoc != nil:
-			parts = append(parts, wordString(r.Hdoc))
+			parts = append(parts, rawString(r.Hdoc))
 		case r.Op == syntax.WordHdoc && r.Word != nil:
 			parts = append(parts, wordString(r.Word))
 		}
