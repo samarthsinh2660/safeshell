@@ -1,0 +1,2 @@
+# Go programs are built static on purpose; the sandbox and the hook rely on one self-contained binary.
+safeshell: statically-linked-binary [usr/bin/safeshell]

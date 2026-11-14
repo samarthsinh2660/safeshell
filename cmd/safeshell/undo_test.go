@@ -79,8 +79,11 @@ func TestUndoErrors(t *testing.T) {
 	if code, _, errOut := runSS("undo"); code != 1 || !strings.Contains(errOut, "nothing to undo") {
 		t.Errorf("%d %q", code, errOut)
 	}
-	if code, _, _ := runSS("undo", "nope"); code != 1 {
-		t.Errorf("unknown id: %d", code)
+	if code, _, errOut := runSS("undo", "20200101T000000.000000000Z"); code != 1 || !strings.Contains(errOut, "no such snapshot") {
+		t.Errorf("unknown id: %d %q", code, errOut)
+	}
+	if code, _, errOut := runSS("undo", "../../x"); code != 1 || !strings.Contains(errOut, "not a snapshot id") {
+		t.Errorf("bad id: %d %q", code, errOut)
 	}
 	if code, _, _ := runSS("undo", "a", "b"); code != 2 {
 		t.Errorf("usage: %d", code)

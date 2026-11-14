@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -33,6 +34,10 @@ func Restore(store, id string) (Report, error) {
 	}
 	sort.Slice(absent, func(i, j int) bool { return len(absent[i]) > len(absent[j]) })
 	for _, p := range absent {
+		if err := noSymlinkParents(p); err != nil {
+			r.Problems = append(r.Problems, fmt.Sprintf("could not remove %s: %v", p, err))
+			continue
+		}
 		if _, err := os.Lstat(p); err == nil {
 			if err := os.RemoveAll(p); err != nil {
 				r.Problems = append(r.Problems, fmt.Sprintf("could not remove %s: %v", p, err))
@@ -57,7 +62,7 @@ func Restore(store, id string) (Report, error) {
 	// must stay writable until its contents are back, and writing children
 	// changes its mtime.
 	for i := len(m.Entries) - 1; i >= 0; i-- {
-		if e := m.Entries[i]; e.Kind == Dir {
+		if e := m.Entries[i]; e.Kind == Dir && noSymlinkParents(e.Path) == nil {
 			if err := os.Chmod(e.Path, os.FileMode(e.Mode)); err != nil {
 				r.Problems = append(r.Problems, fmt.Sprintf("could not set permissions on %s: %v", e.Path, err))
 			}
@@ -68,7 +73,27 @@ func Restore(store, id string) (Report, error) {
 	return r, nil
 }
 
+// noSymlinkParents refuses a path with a symlink among its parent folders, so a
+// restore can never be steered to files outside the snapshot.
+func noSymlinkParents(p string) error {
+	cur := string(filepath.Separator)
+	for _, part := range strings.Split(filepath.Dir(p), string(filepath.Separator)) {
+		cur = filepath.Join(cur, part)
+		fi, err := os.Lstat(cur)
+		if err != nil {
+			return nil // the folder is gone; nothing to follow
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s is a link, so SafeShell will not follow it; check it and restore by hand", cur)
+		}
+	}
+	return nil
+}
+
 func restoreEntry(store, id string, e Entry) (changed bool, err error) {
+	if err := noSymlinkParents(e.Path); err != nil {
+		return false, err
+	}
 	cur, statErr := os.Lstat(e.Path)
 	switch e.Kind {
 	case Dir:

@@ -196,7 +196,8 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
 - Before you open the PR, review your own diff for the architecture rules, consistency with the
   existing code and docs, the safety invariants and the business logic.
 - CI shows each part as its own check: format and vet, unit tests and coverage, installer script,
-  fuzz, integration with the real sandbox plus the sweep, and package build. `check` passes only when all of them pass.
+  fuzz, integration with the real sandbox plus the sweep, package build (with a check of the
+  `.deb` contents and lintian), and the Debian package built from `debian/` in a sid container. `check` passes only when all of them pass.
 - Reviewers look for: the safety invariants above, tests, plain-English messages, and a diff that matches the description.
 
 ## Releases
