@@ -73,8 +73,6 @@ jobs:
       # install the same profile the .deb ships, for the binary just built.
       - name: Allow the sandbox
         run: scripts/install-apparmor.sh --yes bin/safeshell && bin/safeshell doctor
-      - name: debug (temporary)
-        run: ls -ld /var/lib /var/lib/docker || true; bin/safeshell analyze --verbose 'rm -rf /var/lib/docker/x' || true
       # SS_NEED_SANDBOX makes a sandbox test fail instead of skip, so none is skipped silently.
       - name: Integration tests with the real sandbox
         run: SS_NEED_SANDBOX=1 make integration

@@ -533,19 +533,20 @@ func TestAnalyzeListsWhatADockerRemovalWouldTake(t *testing.T) {
 func TestSandboxNotesOnlyConcernWhatTheCommandTouches(t *testing.T) {
 	needSandbox(t)
 	d := fixture(t)
-	analyze := func(line string) string {
-		out, err := exec.Command(ssBin, "analyze", "--cwd", d, line).CombinedOutput()
+	analyze := func(args ...string) string {
+		out, err := exec.Command(ssBin, append([]string{"analyze", "--cwd", d}, args...)...).CombinedOutput()
 		var ee *exec.ExitError
 		if err != nil && !(errors.As(err, &ee) && (ee.ExitCode() == 3 || ee.ExitCode() == 4)) { // 3 and 4 are R3/R4 verdicts, not failures
-			t.Fatalf("safeshell analyze %q: %v\n%s", line, err, out)
+			t.Fatalf("safeshell analyze %q: %v\n%s", args, err, out)
 		}
 		return string(out)
 	}
 	if out := analyze(`find . -name "*.log" -delete`); strings.Contains(out, "/var/lib/docker") || strings.Contains(out, "/boot") {
 		t.Errorf("notes about untouched folders were shown:\n%s", out)
 	}
-	// The docker note only exists where /var/lib/docker cannot be read, so it is not checked on every machine.
-	if _, err := os.ReadDir("/var/lib/docker"); err != nil {
+	// The docker note only exists where the sandbox cannot show /var/lib/docker (it can when it
+	// mirrors all of /var/lib), so it is checked only where --verbose shows that note at all.
+	if strings.Contains(analyze("--verbose", `find . -name "*.log" -delete`), "Sandbox note: /var/lib/docker") {
 		if out := analyze("rm -rf /var/lib/docker/x"); !strings.Contains(out, "Sandbox note: /var/lib/docker") {
 			t.Errorf("the note about the folder being touched is missing:\n%s", out)
 		}
