@@ -63,6 +63,9 @@ List saved snapshots.
 .B daemon [stop]
 Keep SafeShell warm in the background for faster checks.
 .TP
+.B deactivate, activate
+Pause checking in every terminal, open and new, and turn it back on. Nothing needs restarting; while paused the hook costs nothing. SAFESHELL_OFF=1 pauses one terminal only.
+.TP
 .B learn [on|off|status]
 Learning mode, off by default. When on, each command that passes without a warning gets one line saying what it does, its level and the safer form. It only adds output.
 .TP
@@ -91,6 +94,9 @@ API keys for cloud models, readable only by you.
 .TP
 .I ~/.local/state/safeshell/audit.jsonl
 Log of decisions.
+.TP
+.I ~/.local/state/safeshell/off
+Exists while checking is paused (safeshell deactivate).
 .SH ENVIRONMENT
 .TP
 .B SAFESHELL_AI

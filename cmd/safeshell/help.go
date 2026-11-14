@@ -75,6 +75,12 @@ Commands that only read (R0) get no line. Commands SafeShell stops or asks about
 explained in full, so they get nothing extra.
 It only adds output: it never changes what is allowed or blocked, and it needs no AI.
 The setting is "learn": true in ~/.config/safeshell/config.json.`},
+	{"pause", "Turn SafeShell off and on", `Once installed, SafeShell checks every terminal with nothing to start. To pause it:
+     safeshell deactivate       every terminal, open ones and new ones, stops checking
+     safeshell activate         every terminal checks again
+Nothing needs to be restarted. While paused, commands run without a check and without delay.
+For one terminal only:  SAFESHELL_OFF=1  (unset SAFESHELL_OFF to check again).
+Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when checking is paused.`},
 	{"undo", "Undo and snapshots", `When you approve a risky command, SafeShell first saves the files it will change.
      safeshell undo            put back the most recent change and verify every file matches
      safeshell undo ID         undo a specific one
@@ -88,6 +94,7 @@ be restored exactly, it tells you instead of claiming success.`},
    safeshell explain <cmd>           the analysis plus a plain-English explanation (needs AI)
    safeshell explain --why <cmd>     which rule and evidence set the level (works without AI)
    safeshell ask <english>           turn English into a checked command
+   safeshell deactivate / activate   pause or resume checking in every terminal
    safeshell learn [on|off|status]   learning mode: one line on what each passing command does
    safeshell undo / safeshell snapshots     restore / list
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
@@ -108,6 +115,7 @@ by ~. File contents are never sent. A log of decisions stays on your machine in
 "sandbox unavailable"         Ubuntu 24.04+ needs a one-time rule: scripts/install-apparmor.sh
 "model is not downloaded"     type /models and pick one, or run  safeshell ai setup
 English is not recognised     start the line with ?   or run  safeshell ask "..."
+Turn SafeShell off or on      safeshell deactivate   /   safeshell activate   (every terminal)
 Disable for one terminal      SAFESHELL_OFF=1        Turn AI off: /models then  off`},
 }
 

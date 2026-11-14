@@ -108,6 +108,17 @@ Work as normal. Inside your prompt:
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
 | Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
 
+### Turn off / on
+
+Once installed, SafeShell is on in every terminal and needs nothing to start. To pause it:
+
+```bash
+safeshell deactivate     # every terminal, open ones and new ones, stops checking until you run:
+safeshell activate       # checking is back on, nothing to restart
+```
+
+While paused, commands run with no check and no delay. `SAFESHELL_OFF=1` pauses one terminal only. `safeshell doctor` tells you when checking is paused.
+
 Without the hook you can use the pieces directly:
 
 ```bash

@@ -45,13 +45,14 @@ func tourHint(stderr io.Writer) {
 	if _, err := os.Stat(p); err == nil {
 		return
 	}
-	if markTourSeen(p) != nil {
+	if touchFile(p) != nil {
 		return
 	}
 	fmt.Fprintln(stderr, "SafeShell is checking your commands. New here? Run  safeshell tour  for a one-minute walk-through (shown once).")
 }
 
-func markTourSeen(p string) error {
+// touchFile makes the folder and an empty private file, which is how a one-time flag is stored.
+func touchFile(p string) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
@@ -61,7 +62,7 @@ func markTourSeen(p string) error {
 // runTour is `safeshell tour`: an R0 command, a blocked rm -rf, a snapshot and
 // an undo, in a throwaway folder that is removed at the end.
 func runTour(stdout, stderr io.Writer, color bool) int {
-	_ = markTourSeen(tourSeenPath()) // a person who ran the tour needs no hint
+	_ = touchFile(tourSeenPath()) // a person who ran the tour needs no hint
 	tmp, err := os.MkdirTemp("", "safeshell-tour-")
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell tour: cannot make a temporary folder:", err)

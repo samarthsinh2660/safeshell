@@ -88,6 +88,8 @@ func doctorSetup(w io.Writer) {
 	switch {
 	case os.Getenv("SAFESHELL_OFF") != "":
 		doctorRow(w, "MISSING", "hook active here", "not active: SAFESHELL_OFF is set in this terminal. Run: unset SAFESHELL_OFF")
+	case paused():
+		doctorRow(w, "MISSING", "hook active here", "paused: run safeshell activate")
 	case os.Getenv("SAFESHELL_HOOK") == strconv.Itoa(os.Getppid()): // the hook exports its shell's pid, so a child shell that inherited it does not count
 		doctorRow(w, "ok", "hook active here", "this terminal checks every command")
 	case installed:

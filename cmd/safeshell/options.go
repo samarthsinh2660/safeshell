@@ -12,7 +12,7 @@ var commandLineCmds = map[string]bool{"check": true, "analyze": true, "simulate"
 // subcommands are the commands that answer -h and --help; a typo keeps its "unknown command" error.
 var subcommands = map[string]bool{
 	"check": true, "analyze": true, "simulate": true, "explain": true, "ask": true, "guard": true,
-	"models": true, "ai": true, "voice": true, "learn": true, "undo": true, "snapshots": true, "daemon": true,
+	"models": true, "ai": true, "voice": true, "learn": true, "deactivate": true, "activate": true, "undo": true, "snapshots": true, "daemon": true,
 	"install": true, "uninstall": true, "hook": true, "version": true, "doctor": true, "tour": true, "help": true,
 }
 
@@ -39,7 +39,7 @@ func wantsHelp(cmd string, args []string) bool {
 // subHelpTopic names the help topic that covers a subcommand, where one exists.
 var subHelpTopic = map[string]string{
 	"models": "models", "ai": "models", "voice": "voice", "undo": "undo",
-	"snapshots": "undo", "install": "start", "ask": "english", "learn": "learn",
+	"snapshots": "undo", "install": "start", "ask": "english", "learn": "learn", "deactivate": "pause", "activate": "pause",
 }
 
 // runSubHelp prints the help for one subcommand and nothing else: its lines
