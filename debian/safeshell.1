@@ -136,7 +136,10 @@ Cloud model keys, used instead of the key file.
 0 for R0 to R2, 3 for R3, 4 for R4.
 .TP
 .B guard
-0 run the printed command, 1 cancelled, 2 wrong usage.
+0 run the printed command, 1 cancelled (also after Ctrl-C), 2 wrong usage.
+.TP
+.BR analyze ", " simulate " after Ctrl-C"
+130; nothing is run and the sandbox's scratch folder is removed.
 .TP
 .B other commands
 0 on success, 1 on failure, 2 for wrong usage.

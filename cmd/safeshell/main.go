@@ -71,6 +71,7 @@ Quote the command so your shell passes it through untouched:
 
 Exit status of 'safeshell check' and 'analyze': 0 = R0-R2, 3 = R3 (irreversible), 4 = R4 (catastrophic).
 Exit status of 'safeshell guard': 0 = run the printed command, 1 = cancelled, 2 = wrong usage.
+Ctrl-C during 'analyze' or 'simulate' stops it with status 130; nothing is run.
 `
 
 func main() {
