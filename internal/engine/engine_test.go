@@ -285,3 +285,15 @@ func TestAddEffectCanOnlyRaiseTheLevel(t *testing.T) {
 		t.Errorf("a lower opinion lowered it: %s %s", a.Level, a.Decision)
 	}
 }
+
+func TestASnapshotRuleRunsTheSandboxEvenForALowRiskCommand(t *testing.T) {
+	sim := &fakeSim{}
+	rules := []policy.Rule{{Match: []string{"touch"}, Snapshot: true}}
+	a := (&Engine{Sim: sim, Rules: rules}).Analyze(context.Background(), "touch notes.txt", "/w")
+	if len(sim.calls) != 1 || a.Sim == nil || a.Decision < domain.Confirm {
+		t.Errorf("calls %d sim %v decision %s: a snapshot needs the files the run changes", len(sim.calls), a.Sim, a.Decision)
+	}
+	if b := (&Engine{Sim: &fakeSim{}}).Analyze(context.Background(), "touch notes.txt", "/w"); b.Sim != nil {
+		t.Error("without the rule a low-risk command is not simulated")
+	}
+}

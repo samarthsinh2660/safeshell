@@ -73,7 +73,7 @@ func TestLoadPolicyReportsUnreadableAndOversizedFiles(t *testing.T) {
 	me := uint32(os.Getuid())
 	if os.Getuid() != 0 {
 		_, found, err := LoadPolicy(policyFile(t, 0o755, 0, goodPolicy), me)
-		if err == nil || !found || !strings.Contains(err.Error(), "cannot read") {
+		if err == nil || !found || !strings.Contains(err.Error(), "chmod 644") {
 			t.Errorf("unreadable: found %v err %v", found, err)
 		}
 	}

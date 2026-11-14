@@ -39,8 +39,8 @@ func LoadPolicy(path string, owner uint32) (rules []policy.Rule, found bool, err
 		}
 	}
 	f, err := os.Open(path)
-	if err != nil {
-		return nil, true, fmt.Errorf("cannot read the team policy %s: %w", path, err)
+	if err != nil { // in practice a file only root can read
+		return nil, true, fmt.Errorf("cannot read the team policy %s (%w). Everyone must be able to read it: sudo chmod 644 %s", path, err, path)
 	}
 	defer f.Close()
 	b, err := io.ReadAll(io.LimitReader(f, maxPolicyBytes+1))

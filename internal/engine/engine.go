@@ -90,9 +90,8 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 		a.Effects = append(a.Effects, inspect(cmds)...)
 	}
 
-	a.simulate(ctx, e.Sim, cwd)
-
 	a.Team = policy.Evaluate(e.Rules, cmds)
+	a.simulate(ctx, e.Sim, cwd)
 	a.decide()
 	return a
 }
@@ -106,7 +105,7 @@ func needsSimulation(v domain.Verdict) bool {
 
 func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 	switch {
-	case !needsSimulation(a.Verdict):
+	case !needsSimulation(a.Verdict) && !a.Team.Snapshot: // a snapshot needs the list of files the run changes
 		if a.Verdict.Level >= domain.R4 {
 			a.SimNote = "not simulated: rated catastrophic from the command text alone"
 		}
