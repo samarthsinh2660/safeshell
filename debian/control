@@ -5,8 +5,8 @@ Maintainer: samarthsinh2660 <rajuvala80@gmail.com>
 Build-Depends: debhelper-compat (= 13),
                dh-golang,
                golang-any (>= 2:1.26~),
-               golang-golang-x-sys-dev (>= 0.47.0),
-               golang-golang-x-term-dev (>= 0.45.0),
+               golang-golang-x-sys-dev (>= 0.49.0),
+               golang-golang-x-term-dev (>= 0.47.0),
                golang-mvdan-sh-dev (>= 3.14.1)
 Standards-Version: 4.7.2
 Homepage: https://github.com/samarthsinh2660/safeshell
