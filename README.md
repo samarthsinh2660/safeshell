@@ -166,7 +166,7 @@ and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `sa
 |---|---|
 | Held-out classifier accuracy | 92.3% exactly right on 220 commands the rules were never tuned on |
 | English to command | 100% (local Qwen 3B, 49 of 49) on 49 requests |
-| Sandbox safety sweep | 492 labelled commands run through the real binary: no file outside the sandbox changed |
+| Sandbox safety sweep | 643 labelled commands run through the real binary: no file outside the sandbox changed |
 | Tests | unit, fuzz, and integration tests on a real terminal and the real kernel |
 
 ## Documentation
