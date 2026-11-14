@@ -421,3 +421,9 @@ R3	alias ls=reboot
 R3	alias off=poweroff	
 R0	alias d=docker	
 R0	alias gc=mytool	
+R0	fc -l
+R0	fc -ln -10
+R2	fc
+R2	fc -s
+R2	fc -e vim 5
+R2	r

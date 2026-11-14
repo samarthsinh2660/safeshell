@@ -46,3 +46,13 @@ func writableFirst(val string) bool {
 	}
 	return false
 }
+
+// ruleFc rates fc and zsh's r. Listing history (fc -l) only reads; every other
+// form opens an editor or re-runs a history line from inside the shell, so the
+// command that results never passes through the hook.
+func ruleFc(c shellparse.Command, f flags) []Finding {
+	if c.Name == "fc" && f.has('l') {
+		return one(fnd(R0, c, "Only lists your command history."))
+	}
+	return one(fnd(R2, c, "Runs whatever you save in the editor, or an old command from your history, without a check. Type the command out instead."))
+}
