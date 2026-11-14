@@ -146,7 +146,8 @@ func doctorCloud(w io.Writer) {
 	b, err := backend()
 	cloudKey := false
 	if p, ok := providers.Find(c.AI.Cloud.Provider); ok {
-		cloudKey = config.Key(p) != ""
+		k, _ := config.Key(p)
+		cloudKey = k != ""
 	}
 	m, _ := models.Find(c.AI.Local.Model)
 	localReady := local.Llama{Dirs: runtime.DefaultDirs(), Model: m, GPU: c.AI.Local.GPU}.Ready()
@@ -173,7 +174,12 @@ func doctorCloud(w io.Writer) {
 		model = p.DefaultModel
 	}
 	doctorRow(w, "info", "cloud provider", p.Title+", model "+report.Printable(model))
-	if config.Key(p) == "" {
+	key, err := config.Key(p)
+	if err != nil {
+		doctorRow(w, "MISSING", "cloud key", err.Error())
+		return
+	}
+	if key == "" {
 		doctorRow(w, "MISSING", "cloud key", "no key for "+p.Title+". Type /models to add one, or set "+p.Env[0])
 		return
 	}

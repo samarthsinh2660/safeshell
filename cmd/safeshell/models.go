@@ -94,12 +94,13 @@ func (m *modelMenu) render(c config.Config) {
 	fmt.Fprintln(m.out, "\n  In the cloud (needs your API key; the command text is sent, your home folder name hidden)")
 	for i, p := range providers.All {
 		key := "no key yet"
-		if config.Key(p) != "" {
+		saved, _ := config.Key(p)
+		if saved != "" {
 			key = "key saved"
 		}
 		if p.EnvKeyName() != "" {
 			key = "key from environment"
-			if config.Key(p) != "" {
+			if saved != "" {
 				key += " (saved key not used)"
 			}
 		}
@@ -202,7 +203,11 @@ func (m *modelMenu) useLocal(ctx context.Context, c config.Config, md models.Mod
 }
 
 func (m *modelMenu) connect(ctx context.Context, c config.Config, p providers.Provider, replace bool) {
-	key := config.Key(p)
+	key, err := config.Key(p)
+	if err != nil {
+		fmt.Fprintln(m.out, err)
+		return
+	}
 	if key == "" || replace {
 		fmt.Fprintf(m.out, "Create a key at %s\n", p.KeyURL)
 		k, err := m.secret("Paste your " + p.Title + " API key (hidden): ")
@@ -248,7 +253,11 @@ func current(c config.Config, p providers.Provider) string {
 
 // choose lists the models p offers this key and saves the one the person picks.
 func (m *modelMenu) choose(ctx context.Context, c config.Config, p providers.Provider) {
-	key := config.Key(p)
+	key, err := config.Key(p)
+	if err != nil {
+		fmt.Fprintln(m.out, err)
+		return
+	}
 	if key == "" {
 		fmt.Fprintf(m.out, "There is no %s key yet. Type the number of %s first to connect it.\n", p.Title, p.Title)
 		return
@@ -303,7 +312,11 @@ func runModelsList(ctx context.Context, stdout, stderr io.Writer, list func(cont
 		fmt.Fprintln(stderr, "safeshell models: no cloud provider is set. Type /models to connect Claude, GPT or Gemini.")
 		return 1
 	}
-	key := config.Key(p)
+	key, err := config.Key(p)
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell models:", err)
+		return 1
+	}
 	if key == "" {
 		fmt.Fprintf(stderr, "safeshell models: there is no %s key yet. Type /models to add one.\n", p.Title)
 		return 1
