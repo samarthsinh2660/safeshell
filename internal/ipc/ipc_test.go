@@ -341,3 +341,19 @@ func TestErrorTextHasMessageAndCode(t *testing.T) {
 		t.Error(got)
 	}
 }
+
+func TestHandlersSeeTheClientsPidFromTheKernel(t *testing.T) {
+	path := start(t, &Server{Handlers: map[string]Handler{
+		"who": func(ctx context.Context, _ json.RawMessage) (any, error) { return PeerPID(ctx), nil },
+	}})
+	var pid int
+	if err := Call(context.Background(), path, "who", map[string]int{"pid": 4242}, &pid); err != nil {
+		t.Fatal(err)
+	}
+	if pid != os.Getpid() {
+		t.Errorf("peer pid %d, want %d", pid, os.Getpid())
+	}
+	if PeerPID(context.Background()) != 0 {
+		t.Error("no connection means no peer pid")
+	}
+}

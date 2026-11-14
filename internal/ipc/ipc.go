@@ -111,7 +111,7 @@ func checkPath(path string, uid int) error {
 
 // checkPeer requires the process on the other end of c to run as uid.
 func checkPeer(c net.Conn, uid int) error {
-	if peer, err := peerUID(c); err != nil || peer != uid {
+	if peerUID, _, err := peer(c); err != nil || peerUID != uid {
 		return ErrUntrusted
 	}
 	return nil
@@ -157,6 +157,15 @@ func Listen(path string) (net.Listener, error) {
 	return l, err
 }
 
+type peerPIDKey struct{}
+
+// PeerPID is the process id of the client a handler is serving, as the kernel
+// reported it for the connection (not a value the client sent), or 0 if unknown.
+func PeerPID(ctx context.Context) int {
+	pid, _ := ctx.Value(peerPIDKey{}).(int)
+	return pid
+}
+
 // Serve accepts connections until ctx ends or the listener closes.
 func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 	go func() { <-ctx.Done(); l.Close() }()
@@ -174,12 +183,13 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 			}
 			return err
 		}
-		if peer, err := peerUID(c); err != nil || peer != uid {
+		peerUID, pid, err := peer(c)
+		if err != nil || peerUID != uid {
 			c.Close() // another user (or one we cannot identify) gets nothing
 			continue
 		}
 		wg.Add(1)
-		go func() { defer wg.Done(); s.conn(ctx, c) }()
+		go func() { defer wg.Done(); s.conn(context.WithValue(ctx, peerPIDKey{}, pid), c) }()
 	}
 }
 

@@ -255,7 +255,7 @@ FileDiff = walk upperdir: regular file = created/modified, char device 0/0 = del
 
 ### 7.3 IPC (`internal/ipc`)
 
-JSON-RPC 2.0 methods (v1): `ping`, `check`, `simulate`, `explain`, `translate`, `snapshot.create`, `snapshot.restore`, `undo`, `status`. Versioned with a `protocol` field; unknown fields ignored; every call has a deadline. The socket is mode `0600`, owned by the user, and the daemon verifies the peer UID with `SO_PEERCRED`. A stale socket file is removed on start after checking the old process is gone.
+JSON-RPC 2.0 methods (v1): `ping`, `check`, `simulate`, `explain`, `translate`, `snapshot.create`, `snapshot.restore`, `undo`, `status`. Versioned with a `protocol` field; unknown fields ignored; every call has a deadline. The socket is mode `0600`, owned by the user, and the daemon verifies the peer UID with `SO_PEERCRED` and hands the peer's pid from the same call to the handler (`ipc.PeerPID`), so the process inspector protects the asking shell, not the daemon's parents; the pid is never taken from the request. A stale socket file is removed on start after checking the old process is gone.
 
 ### 7.4 AI layer (`internal/ai`)
 

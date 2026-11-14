@@ -56,11 +56,11 @@ func TestCallRejectsParamsThatAreNotJSON(t *testing.T) {
 	}
 }
 
-func TestPeerUIDNeedsAUnixConnection(t *testing.T) {
+func TestPeerNeedsAUnixConnection(t *testing.T) {
 	a, b := net.Pipe()
 	defer a.Close()
 	defer b.Close()
-	if _, err := peerUID(a); err == nil {
+	if _, _, err := peer(a); err == nil {
 		t.Error("a pipe has no peer credentials")
 	}
 }
