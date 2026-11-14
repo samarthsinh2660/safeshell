@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"syscall"
 	"time"
@@ -28,6 +29,11 @@ const (
 
 // ErrTooLarge means the files to protect exceed the size limit.
 var ErrTooLarge = errors.New("too much data to snapshot")
+
+// ErrBadID means a snapshot id is not in the format Create produces.
+var ErrBadID = errors.New("not a snapshot id")
+
+var idFormat = regexp.MustCompile(`^\d{8}T\d{6}\.\d{9}Z$`)
 
 // Target is a path the command is expected to change.
 type Target struct {
@@ -82,11 +88,15 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 		}
 	}
 	for _, t := range targets {
-		if t.Create {
-			add(Entry{Path: t.Path, Kind: Absent})
+		// Paths are saved with their parent folders resolved, so a link found among them at
+		// undo time can only mean something was swapped in since (see noSymlinkParents).
+		path := resolveParents(t.Path)
+		// The path may have appeared since the sandbox looked: save it then, so undo never deletes it.
+		if _, err := os.Lstat(path); t.Create && errors.Is(err, fs.ErrNotExist) {
+			add(Entry{Path: path, Kind: Absent})
 			continue
 		}
-		werr := filepath.WalkDir(t.Path, func(p string, de fs.DirEntry, werr error) error {
+		werr := filepath.WalkDir(path, func(p string, de fs.DirEntry, werr error) error {
 			if werr != nil {
 				if errors.Is(werr, fs.ErrNotExist) {
 					return nil
@@ -108,6 +118,19 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 	sort.Slice(m.Entries, func(i, j int) bool { return m.Entries[i].Path < m.Entries[j].Path })
 	b, _ := json.MarshalIndent(m, "", "  ")
 	return m, os.WriteFile(filepath.Join(d, "manifest.json"), b, 0o600)
+}
+
+// resolveParents resolves the links in p's parent folders, keeping p's own name (a link
+// there is saved as a link). Parents that don't exist yet are kept as written.
+func resolveParents(p string) string {
+	dir, rest := filepath.Dir(p), []string{filepath.Base(p)}
+	for {
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(append([]string{r}, rest...)...)
+		}
+		rest = append([]string{filepath.Base(dir)}, rest...)
+		dir = filepath.Dir(dir)
+	}
 }
 
 // capture records p, copying file data into the snapshot's blob store.
@@ -165,6 +188,9 @@ func copyBlob(snap, src string) (string, error) {
 // Load reads a snapshot's manifest.
 func Load(store, id string) (Manifest, error) {
 	var m Manifest
+	if !idFormat.MatchString(id) {
+		return m, fmt.Errorf("%w: %q", ErrBadID, id)
+	}
 	b, err := os.ReadFile(filepath.Join(dir(store, id), "manifest.json"))
 	if err != nil {
 		return m, err

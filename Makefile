@@ -50,6 +50,9 @@ dist: clean-dist
 # Debian versions must start with a digit: v1.2.3 -> 1.2.3, anything else -> 0~that.
 DEBVERSION := $(shell echo '$(VERSION)' | sed -e 's/^v//' -e 's/^[^0-9]/0~&/')
 
+# The maintainer is the one in debian/control.
+DEBMAINTAINER := $(shell sed -n 's/^Maintainer: //p' debian/control)
+
 # Debian packages for amd64 and arm64: install /usr/bin/safeshell and the AppArmor rule for exactly that path.
 deb:
 	@rm -rf dist/deb; mkdir -p dist
@@ -58,9 +61,15 @@ deb:
 	  root=dist/deb/$$arch; mkdir -p $$root/DEBIAN $$root/usr/bin $$root/etc/apparmor.d; \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $$root/usr/bin/safeshell ./cmd/safeshell || exit 1; \
 	  sed 's#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl > $$root/etc/apparmor.d/safeshell-ss; \
+	  mkdir -p $$root/usr/share/man/man1 $$root/usr/share/doc/safeshell; \
+	  gzip -9n -c debian/safeshell.1 > $$root/usr/share/man/man1/safeshell.1.gz; \
+	  cp debian/copyright $$root/usr/share/doc/safeshell/copyright; \
+	  gzip -9n -c debian/changelog > $$root/usr/share/doc/safeshell/changelog.Debian.gz; \
+	  mkdir -p $$root/usr/share/lintian/overrides; cp packaging/deb/lintian-overrides $$root/usr/share/lintian/overrides/safeshell; \
 	  cp packaging/deb/postinst packaging/deb/postrm $$root/DEBIAN/; \
-	  printf 'Package: safeshell\nVersion: $(DEBVERSION)\nSection: utils\nPriority: optional\nArchitecture: %s\nMaintainer: SafeShell team <noreply@example.invalid>\nDescription: A safety layer for your terminal\n Rates every command by how reversible it is, shows what it would do in a sandbox,\n blocks the dangerous ones, and lets you undo. Optional built-in AI.\n' $$arch > $$root/DEBIAN/control; \
-	  find $$root -type d -exec chmod 755 {} +; chmod 644 $$root/etc/apparmor.d/safeshell-ss; \
+	  echo /etc/apparmor.d/safeshell-ss > $$root/DEBIAN/conffiles; \
+	  printf 'Package: safeshell\nVersion: $(DEBVERSION)\nSection: utils\nPriority: optional\nArchitecture: %s\nMaintainer: $(DEBMAINTAINER)\nRecommends: apparmor\nHomepage: https://github.com/samarthsinh2660/safeshell\nDescription: safety layer for your terminal\n Rates every command by how reversible it is, shows what it would do\n in a sandbox, blocks the dangerous ones, and lets you undo.\n Optional built-in AI.\n' $$arch > $$root/DEBIAN/control; \
+	  find $$root -type d -exec chmod 755 {} +; chmod 755 $$root/usr/bin/safeshell; chmod 644 $$root/etc/apparmor.d/safeshell-ss $$root/usr/share/lintian/overrides/safeshell $$root/usr/share/man/man1/safeshell.1.gz $$root/usr/share/doc/safeshell/*; \
 	  dpkg-deb --build --root-owner-group $$root dist/safeshell_$(DEBVERSION)_$$arch.deb || exit 1; \
 	done
 	@ls -l dist/*.deb
