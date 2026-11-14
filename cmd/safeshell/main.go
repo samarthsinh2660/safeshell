@@ -55,6 +55,7 @@ Usage:
                                             and the safer form (off by default)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
   safeshell snapshots                       list saved snapshots
+  safeshell history [-n 20] [--json]        the decisions SafeShell recorded, newest first
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
   safeshell install [--ai]                  add the hook to your shell startup file (and set up the AI)
   safeshell uninstall                       remove the hook
@@ -135,6 +136,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 			return 2
 		}
 		return runSnapshots(stdout, stderr)
+	case "history":
+		return runHistory(args[1:], stdout, stderr)
 	case "guard":
 		return runGuard(args[1:], stdout, stderr, color)
 	case "hook":
