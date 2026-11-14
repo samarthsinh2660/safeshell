@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -238,6 +239,21 @@ func TestRunLimitedStopsAtTheTimeoutEvenWhenAGrandchildKeepsTheOutputOpen(t *tes
 	}
 }
 
+// running reports whether pid is alive. A killed process nobody has reaped yet (a zombie,
+// as in a container whose first process does not reap orphans) is not running.
+func running(pid int) bool {
+	if syscall.Kill(pid, 0) != nil {
+		return false
+	}
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	// The state follows the command name, which is in parentheses and may contain spaces.
+	rest := string(b[bytes.LastIndexByte(b, ')')+1:])
+	return !strings.HasPrefix(strings.TrimSpace(rest), "Z")
+}
+
 func TestRunLimitedKillsWhatTheProgramLeavesBehindAndHonoursTheRequest(t *testing.T) {
 	dir := t.TempDir()
 	pidFile := filepath.Join(dir, "pid")
@@ -254,7 +270,7 @@ func TestRunLimitedKillsWhatTheProgramLeavesBehindAndHonoursTheRequest(t *testin
 	gone := false
 	for i := 0; i < 50 && !gone; i++ {
 		time.Sleep(20 * time.Millisecond)
-		gone = syscall.Kill(pid, 0) != nil
+		gone = !running(pid)
 	}
 	if !gone {
 		syscall.Kill(pid, syscall.SIGKILL)
