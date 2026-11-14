@@ -8,10 +8,11 @@ Contributors don't need it: features land through ordinary pull requests (see
 
 A release is a pull request from a branch named exactly `release/vX.Y.Z` into `main`. When it
 is merged, `.github/workflows/release.yml` does the following:
-1. Checks the branch name and reads the version from it.
-2. Runs `make check`.
-3. Builds the amd64 and arm64 tarballs and `.deb` files, plus `SHA256SUMS`.
-4. Creates the tag `vX.Y.Z` on the merge commit and the GitHub Release with those files attached.
+1. Checks that the PR comes from this repository, checks the branch name and reads the version from it.
+2. Checks the tag does not exist yet and that `CHANGELOG.md` and `debian/changelog` mention the version.
+3. Runs `make check`.
+4. Builds the amd64 and arm64 tarballs and `.deb` files (with man page, copyright and AppArmor conffile; `test/scripts/deb_test.sh` checks them), plus `SHA256SUMS`.
+5. Creates the tag `vX.Y.Z` on the merge commit and the GitHub Release with those files attached.
 
 The version comes from the branch name. Nothing else needs to be bumped in code.
 
