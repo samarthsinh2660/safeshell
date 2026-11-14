@@ -55,6 +55,11 @@ func needSandbox(t *testing.T) {
 		t.Skip("bin/safeshell not built (run: make build)")
 	}
 	if err := exec.Command(ssBin, "doctor").Run(); err != nil {
+		// CI sets SS_NEED_SANDBOX=1 after installing the AppArmor profile, so a broken
+		// sandbox fails the job instead of quietly skipping every sandbox test.
+		if os.Getenv("SS_NEED_SANDBOX") != "" {
+			t.Fatal("sandbox not available, but SS_NEED_SANDBOX is set (run: safeshell doctor)")
+		}
 		t.Skip("sandbox not available here (run: safeshell doctor)")
 	}
 }
