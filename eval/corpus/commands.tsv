@@ -454,3 +454,8 @@ R2	chroot /mnt ls
 R1	watch ls	
 R0	flock /tmp/l ls	
 R0	echo r\m	
+R4	strace -f rm -rf /	
+R4	parallel rm -rf ::: /	
+R4	parallel ::: 'rm -rf /'	
+R0	strace ls	
+R0	parallel echo ::: a b	

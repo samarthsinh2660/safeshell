@@ -394,7 +394,8 @@ func TestHiddenFormsOfRmRfAreR4(t *testing.T) {
 		`printf 'rm -rf ~\n' | sh`, `printf 'cd /tmp\nrm -rf ~\n' | bash`,
 		"echo rm -rf ~ | bash", "cat <<'X' | sh\nrm -rf ~\nX", "source /dev/stdin <<< 'rm -rf ~'", "echo 'rm -rf ~' | . /dev/stdin",
 		"su -c 'rm -rf /'", "pkexec rm -rf /", "runuser -u bob -- rm -rf /", "nsenter -t 1 -m rm -rf /",
-		"watch rm -rf /", "flock /tmp/l rm -rf /", "chroot / rm -rf /", "env -C / rm -rf *",
+		"watch rm -rf /", "flock /tmp/l rm -rf /",
+		"strace -f -o /tmp/t rm -rf /", "parallel rm -rf ::: /", "parallel -j4 rm -rf {} ::: / /home", "parallel ::: 'rm -rf /'", "chroot / rm -rf /", "env -C / rm -rf *",
 	} {
 		if got := Classify(line).Level; got != R4 {
 			t.Errorf("%q = %s, want R4", line, got)

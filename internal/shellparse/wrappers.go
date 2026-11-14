@@ -1,9 +1,12 @@
 package shellparse
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
-// wrapped finds the command that su, runuser, pkexec, nsenter, watch or flock
-// runs, as words ready to unwrap further. Code given to a shell (su -c, watch,
+// wrapped finds the command that su, runuser, pkexec, nsenter, watch, flock,
+// strace or parallel runs, as words ready to unwrap further. Code given to a shell (su -c, watch,
 // flock -c) comes back as `sh -c CODE`. It is nil when no command is named, so
 // the wrapper itself stays the command. su, runuser and pkexec run as root.
 func wrapped(args []string, cmd *Command) []string {
@@ -18,6 +21,10 @@ func wrapped(args []string, cmd *Command) []string {
 		return skipOpts(args[1:], "-t", "--target", "-S", "--setuid", "-G", "--setgid")
 	case "watch":
 		return watchCommand(args)
+	case "strace": // strace -p PID attaches to a running process and names no command
+		return skipOpts(args[1:], "-o", "-e", "-p", "-s", "-u", "-E", "-a", "-b", "-I", "-O", "-S", "-X", "-P")
+	case "parallel":
+		return parallelCommand(args)
 	}
 	return flockCommand(args)
 }
@@ -99,4 +106,34 @@ func chrootCommand(args []string) []string {
 		return nil
 	}
 	return rest[1:]
+}
+
+// parallelCommand returns one command GNU parallel would run: its command words
+// with the first input after ::: put at {} (or added at the end). Without
+// command words, each input is itself a command line, run by a shell. Without
+// ::: the inputs come from stdin, so only the command words are known.
+func parallelCommand(args []string) []string {
+	rest := skipOpts(args[1:], "-j", "--jobs", "-S", "--sshlogin", "-a", "--arg-file", "-d", "--delimiter", "-I", "--joblog", "--results")
+	i := slices.Index(rest, ":::")
+	if i < 0 {
+		return rest // inputs come from stdin or a file: the command is known, its inputs are not
+	}
+	words, inputs := rest[:i], rest[i+1:]
+	if len(inputs) == 0 {
+		return nil
+	}
+	if len(words) == 0 {
+		return shCode(inputs[0])
+	}
+	out, placed := make([]string, 0, len(words)+1), false
+	for _, w := range words {
+		if strings.Contains(w, "{}") {
+			w, placed = strings.ReplaceAll(w, "{}", inputs[0]), true
+		}
+		out = append(out, w)
+	}
+	if !placed {
+		out = append(out, inputs[0])
+	}
+	return out
 }

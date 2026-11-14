@@ -157,3 +157,23 @@ func TestShellInputBuiltFromLiteralText(t *testing.T) {
 		}
 	}
 }
+
+func TestParallelAndStraceCommands(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"parallel", "rm", "-rf", ":::", "/", "/home"}, []string{"rm", "-rf", "/"}},
+		{[]string{"parallel", "-j", "4", "rm", "{}/x", ":::", "/a"}, []string{"rm", "/a/x"}},
+		{[]string{"parallel", ":::", "rm -rf /"}, []string{"sh", "-c", "rm -rf /"}},
+		{[]string{"parallel", "rm", "-rf"}, []string{"rm", "-rf"}},
+		{[]string{"parallel", "rm", ":::"}, nil},
+		{[]string{"strace", "-f", "-o", "/tmp/t", "rm", "x"}, []string{"rm", "x"}},
+		{[]string{"strace", "-p", "123"}, []string{}},
+	} {
+		var cmd Command
+		if got := wrapped(c.args, &cmd); !slices.Equal(got, c.want) {
+			t.Errorf("%q = %q, want %q", c.args, got, c.want)
+		}
+	}
+}

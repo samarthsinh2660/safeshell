@@ -610,7 +610,7 @@ func unwrap(args []string, cmd *Command) []string {
 					args = args[1:]
 				}
 			}
-		case "su", "runuser", "pkexec", "nsenter", "watch", "flock":
+		case "su", "runuser", "pkexec", "nsenter", "watch", "flock", "strace", "parallel":
 			rest := wrapped(args, cmd)
 			if len(rest) == 0 {
 				return args // nothing to run: the wrapper itself is the command
