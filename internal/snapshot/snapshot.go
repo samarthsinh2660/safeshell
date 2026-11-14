@@ -67,6 +67,7 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 	if err = os.MkdirAll(filepath.Join(d, "blobs"), 0o700); err != nil {
 		return m, err
 	}
+	_ = os.Chmod(store, 0o700) // MkdirAll leaves an existing folder as it was; a folder that is not ours stays
 	defer func() {
 		if err != nil {
 			_ = os.RemoveAll(d)

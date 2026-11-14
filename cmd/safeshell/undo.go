@@ -36,7 +36,7 @@ func protect(a engine.Analysis) string {
 	if a.Sim == nil || len(a.Sim.Diff.Changes) == 0 {
 		return ""
 	}
-	m, err := snapshot.Create(snapshotDir(), a.Line, targets(a.Sim.Diff.Changes), snapshotLimit)
+	m, err := snapshot.Create(snapshotDir(), report.MaskSecrets(a.Line), targets(a.Sim.Diff.Changes), snapshotLimit)
 	if err != nil {
 		return "No snapshot taken (" + err.Error() + "): this cannot be undone."
 	}

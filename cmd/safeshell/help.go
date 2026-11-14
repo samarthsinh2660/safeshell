@@ -112,7 +112,9 @@ be restored exactly, it tells you instead of claiming success.`},
 Cloud mode: the command text you typed (or the English request, folder listing and the sandbox
 summary used for the review) goes to the provider you chose, with your home folder name replaced
 by ~. File contents are never sent. A log of decisions stays on your machine in
-~/.local/state/safeshell/audit.jsonl.`},
+~/.local/state/safeshell/audit.jsonl (folder private to you). Values of TOKEN, KEY, SECRET and
+PASSWORD settings and Authorization headers are replaced by *** there and in undo snapshots, and
+lines you start with a space are not logged. The log keeps one old copy once it passes 5 MB.`},
 	{"trouble", "Something is wrong", `safeshell doctor                     checks every part and says what to do about each problem
 "sandbox unavailable"         Ubuntu 24.04+ needs a one-time rule: scripts/install-apparmor.sh
 "model is not downloaded"     type /models and pick one, or run  safeshell ai setup
