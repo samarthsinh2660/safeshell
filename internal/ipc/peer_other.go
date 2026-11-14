@@ -7,6 +7,6 @@ import (
 	"net"
 )
 
-func peerUID(net.Conn) (int, error) {
-	return 0, errors.New("peer credentials are only available on Linux")
+func peer(net.Conn) (uid, pid int, err error) {
+	return 0, 0, errors.New("peer credentials are only available on Linux")
 }

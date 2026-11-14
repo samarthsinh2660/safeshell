@@ -20,7 +20,6 @@ type analyzeParams struct {
 	Line string   `json:"line"`
 	Cwd  string   `json:"cwd"`
 	Env  []string `json:"env,omitempty"`
-	Pid  int      `json:"pid,omitempty"` // the asking process, so its shell is the one protected
 }
 
 // runDaemon serves analyses over a private Unix socket, so the shell hook does
@@ -88,7 +87,8 @@ func daemonHandlers(shutdown func()) map[string]ipc.Handler {
 			if err := json.Unmarshal(p, &a); err != nil || a.Line == "" {
 				return nil, &ipc.Error{Code: ipc.CodeBadParams, Message: "need {line, cwd}"}
 			}
-			return analyze(engine.WithCaller(engine.WithEnv(ctx, a.Env), a.Pid), a.Line, a.Cwd), nil
+			// The asking process is the one whose shell a kill must not hit; the kernel says who it is.
+			return analyze(engine.WithCaller(engine.WithEnv(ctx, a.Env), ipc.PeerPID(ctx)), a.Line, a.Cwd), nil
 		},
 		"shutdown": func(context.Context, json.RawMessage) (any, error) {
 			go func() { time.Sleep(50 * time.Millisecond); shutdown() }() // after this reply is sent
@@ -113,7 +113,7 @@ func analyzeFast(ctx context.Context, line, cwd string, stderr io.Writer) engine
 		var a engine.Analysis
 		c, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer cancel()
-		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ(), os.Getpid()}, &a)
+		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ()}, &a)
 		if err == nil {
 			return a
 		}
