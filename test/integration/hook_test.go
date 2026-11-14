@@ -331,9 +331,16 @@ func TestFcAndRCannotRunHistoryUnchecked(t *testing.T) {
 			sh := startShell(t, c.argv)
 			sh.waitFor(t, "READY>")
 			sh.send(`eval "$(safeshell hook ` + c.shell + `)"` + "\r")
-			sh.send("echo once > " + marker + "\r")
-			sh.waitFor(t, "READY>")
-			_ = os.Remove(marker)
+			sh.send("touch " + marker + "\r") // R1: runs without a question, and leaves a mark
+			for i := 0; i < 500; i++ { // the shell has run it once
+				if _, err := os.Stat(marker); err == nil {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err := os.Remove(marker); err != nil {
+				t.Fatal("the first touch never ran:", err)
+			}
 			sh.send(c.redo + "\r")
 			sh.waitFor(t, "[c] cancel")
 			sh.send("c\r")
@@ -343,7 +350,7 @@ func TestFcAndRCannotRunHistoryUnchecked(t *testing.T) {
 			}
 			// Listing history only reads, so it goes straight through.
 			sh.send("fc -l\r")
-			sh.waitFor(t, "echo once")
+			sh.waitFor(t, "touch "+marker)
 		})
 	}
 }
