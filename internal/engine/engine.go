@@ -33,6 +33,12 @@ func WithEnv(ctx context.Context, env []string) context.Context {
 	return context.WithValue(ctx, envKey{}, env)
 }
 
+// EnvFrom is the environment attached with WithEnv, or nil when there is none.
+func EnvFrom(ctx context.Context) []string {
+	env, _ := ctx.Value(envKey{}).([]string)
+	return env
+}
+
 // Engine analyses commands. A nil Sim means no sandbox is available here.
 type Engine struct {
 	Sim        Simulator
@@ -91,8 +97,7 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 		a.Effects = append(a.Effects, a.estimated("file changes could not be observed"))
 		return
 	}
-	env, _ := ctx.Value(envKey{}).([]string)
-	res, err := sim.Simulate(ctx, sandbox.Spec{Line: a.Line, Cwd: cwd, Env: env})
+	res, err := sim.Simulate(ctx, sandbox.Spec{Line: a.Line, Cwd: cwd, Env: EnvFrom(ctx)})
 	if err != nil {
 		a.SimNote = "simulation failed: " + err.Error()
 		a.Effects = append(a.Effects, a.estimated("the sandbox run failed, so file changes could not be observed"))
