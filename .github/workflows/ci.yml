@@ -109,8 +109,8 @@ jobs:
       - name: Install the build dependencies from debian/control
         run: |
           apt-get update -q
-          apt-get install -y -q --no-install-recommends build-essential devscripts equivs lintian
-          mk-build-deps -i -r -t 'apt-get install -y -q --no-install-recommends' debian/control
+          apt-get install -y -q --no-install-recommends build-essential dpkg-dev lintian
+          apt-get build-dep -y -q --no-install-recommends ./
       - name: dpkg-buildpackage
         run: dpkg-buildpackage -b -us -uc
       - name: lintian (errors fail)
