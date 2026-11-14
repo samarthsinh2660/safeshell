@@ -92,6 +92,12 @@ jobs:
         with:
           go-version-file: go.mod
       - run: make dist deb VERSION=v0.0.0-ci
+      - name: Check what the .deb files contain
+        run: bash test/scripts/deb_test.sh dist/*.deb
+      - name: Lint the .deb files (errors fail)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q lintian
+          lintian --fail-on error dist/*.deb
 
   check:
     name: check

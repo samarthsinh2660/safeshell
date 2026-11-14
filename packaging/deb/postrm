@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
 if [ "$1" = remove ] || [ "$1" = purge ]; then
-  [ -x /usr/sbin/apparmor_parser ] && apparmor_parser -R /etc/apparmor.d/safeshell-ss 2>/dev/null || true
+  command -v apparmor_parser >/dev/null 2>&1 && apparmor_parser -R /etc/apparmor.d/safeshell-ss 2>/dev/null || true
 fi
 exit 0

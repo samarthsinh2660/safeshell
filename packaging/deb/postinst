@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
-if [ -x /usr/sbin/apparmor_parser ] && [ -f /etc/apparmor.d/safeshell-ss ]; then
-  apparmor_parser -r /etc/apparmor.d/safeshell-ss || true
+if [ "$1" = configure ]; then
+  if command -v apparmor_parser >/dev/null 2>&1 && [ -f /etc/apparmor.d/safeshell-ss ]; then
+    apparmor_parser -r /etc/apparmor.d/safeshell-ss || true
+  fi
+  echo "SafeShell installed. Each user runs:  safeshell install   (then optionally: safeshell ai setup)"
 fi
-echo "SafeShell installed. Each user runs:  safeshell install   (then optionally: safeshell ai setup)"
 exit 0
