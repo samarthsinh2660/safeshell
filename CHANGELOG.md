@@ -2,6 +2,26 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.3.0 - 2026-11-14
+
+Trust the sandbox and undo: undo never deletes what it should keep or follows a swapped-in link, secrets stay out of the log, the daemon protects the right shell, and the released `.deb` is a complete Debian package.
+
+### Changed
+- The audit log and snapshot records hide secrets: values of `*TOKEN*`, `*KEY*`, `*SECRET*` and `*PASSWORD*` settings, `Authorization:` and similar headers, JSON fields with those names, passwords in web addresses (`https://user:pass@host`) and `-u user:pass` are replaced by `***`. Lines you start with a space are not logged, like shell history. The log keeps one old copy once it passes 5 MB, and its folder and the snapshot folder are made private to you. (#74)
+- A `keys.json` that other users can read is refused with the `chmod 600` to run, instead of being used. (#57)
+- `safeshell version` prints the same form (`safeshell 1.3.0`) whichever way it was built. (#67)
+- The `.deb` now has the man page, copyright file, `Recommends: apparmor`, the real maintainer, and the AppArmor profile as a conffile, so your edits survive upgrades. Its install script acts only when configuring. (#64)
+- CI builds the Debian package from `debian/` on Debian unstable with lintian, checks the `.deb` contents, and runs the integration tests and the full sweep with the real sandbox on every pull request. The release workflow checks that the PR comes from this repository, that the tag is new, and that both changelogs mention the version. (#65)
+
+### Fixed
+- `safeshell undo` could delete a file that appeared after the check (for example a download finishing while you read the question) and still say "Verified". Such a file is now saved and restored instead. (#53)
+- Undo no longer follows a link swapped into a parent folder after the snapshot, and only accepts real snapshot ids (`safeshell undo ../../x` is refused). Links that were already there, such as `/bin` or a linked projects folder, still work. (#78)
+- Through the daemon, `kill -9 <your shell>` and `pkill bash` were rated R2 instead of R4, because the daemon protected its own parents. It now protects the shell that asked, identified by the kernel. (#51)
+- Ctrl-C during `analyze`, `simulate` or a check left the sandbox's scratch folder in RAM until logout. It is now removed, and folders left by earlier runs are cleaned up. Ctrl-C during a check cancels the line. (#52)
+- Saving an API key when `keys.json` was damaged wiped your other keys. The file is now left alone and the message says how to fix it. (#57)
+- Unpacking the AI engine could write outside its folder through chained links in the archive; every write now stays inside. (#54)
+- The man page, usage text and `help commands` list every command, the environment variables and the exit codes; a test keeps them in step. The systemd unit finds SafeShell whether it came from the `.deb` or `install.sh`. (#67)
+
 ## 1.2.0 - 2026-11-14
 
 Learn and see more: SafeShell now shows what a git, docker, kubectl or database command would lose before you approve it, explains commands as you work, and keeps a readable history of its decisions.
