@@ -240,10 +240,11 @@ func TestIfSafeShellItselfFailsTheLineRunsWithAWarningInsteadOfVanishing(t *test
 	needSandbox(t)
 	fake := t.TempDir()
 	_ = os.WriteFile(filepath.Join(fake, "safeshell"), []byte("#!/bin/sh\nexit 7\n"), 0o755)
-	sh := startBash(t)
+	// The broken `safeshell` is first in PATH from the start; the hook itself comes from the real
+	// binary. (Typing the PATH change would be checked, and a /tmp folder first in PATH asks.)
+	sh := startBash(t, "PATH="+fake+":"+filepath.Dir(ssBin)+":"+os.Getenv("PATH"))
 	sh.waitFor(t, "READY>")
-	sh.send(`eval "$(safeshell hook bash)"` + "\r")
-	sh.send("export PATH=" + fake + ":$PATH\r") // from now on `safeshell` is broken
+	sh.send(`eval "$(` + ssBin + ` hook bash)"` + "\r")
 	sh.send("echo still-ran\r")
 	sh.waitFor(t, "NOT checked")
 	sh.waitFor(t, "still-ran\r\n")
