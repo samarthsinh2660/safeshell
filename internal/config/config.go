@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -139,25 +140,47 @@ func SetLearn(path string, on bool) error {
 // KeysPath is the file holding API keys (mode 0600).
 func KeysPath() string { return filepath.Join(dir(), "keys.json") }
 
-// Key returns the API key for a provider: the environment wins, then keys.json.
-func Key(p providers.Provider) string {
-	if k := p.KeyFromEnv(); k != "" {
-		return k
+// readKeys loads keys.json. A missing file is empty. A damaged file, or one
+// other users can read, is an error so it is never overwritten or trusted.
+func readKeys() (map[string]string, error) {
+	path := KeysPath()
+	m := map[string]string{}
+	st, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return m, nil
 	}
-	b, err := os.ReadFile(KeysPath())
 	if err != nil {
-		return ""
+		return nil, err
 	}
-	var m map[string]string
-	_ = json.Unmarshal(b, &m)
-	return m[p.ID]
+	if st.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("%s can be read by other users. Run: chmod 600 %s", path, path)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("%s is damaged. Fix it, or delete it and add your keys again", path)
+	}
+	return m, nil
 }
 
-// SaveKey stores a provider's key in keys.json, readable only by the user.
+// Key returns the API key for a provider: the environment wins, then keys.json.
+// A missing key is "" with no error; an unusable keys.json is an error.
+func Key(p providers.Provider) (string, error) {
+	if k := p.KeyFromEnv(); k != "" {
+		return k, nil
+	}
+	m, err := readKeys()
+	return m[p.ID], err
+}
+
+// SaveKey stores a provider's key in keys.json, readable only by the user. It
+// refuses to touch a damaged file, so the other keys in it are not lost.
 func SaveKey(p providers.Provider, key string) error {
-	m := map[string]string{}
-	if b, err := os.ReadFile(KeysPath()); err == nil {
-		_ = json.Unmarshal(b, &m)
+	m, err := readKeys()
+	if err != nil {
+		return err
 	}
 	m[p.ID] = key
 	if err := os.MkdirAll(dir(), 0o700); err != nil {

@@ -11,8 +11,9 @@ import (
 )
 
 // ExtractTarGz unpacks src into dest, dropping the archive's top-level folder.
-// Entries that would land outside dest, and links that point outside it, are
-// refused.
+// Entries whose names would land outside dest, and links whose text points
+// outside it, are refused. Every write goes through os.Root, so a write that
+// would pass through a symlink leading outside dest fails too.
 func ExtractTarGz(src, dest string) error {
 	f, err := os.Open(src)
 	if err != nil {
@@ -31,6 +32,11 @@ func ExtractTarGz(src, dest string) error {
 	if err != nil {
 		return err
 	}
+	rt, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer rt.Close()
 	tr := tar.NewReader(gz)
 	for {
 		h, err := tr.Next()
@@ -44,21 +50,22 @@ func ExtractTarGz(src, dest string) error {
 		if rel == "" {
 			continue
 		}
+		rel = filepath.Clean(rel)
 		target := filepath.Join(root, rel)
 		if !within(root, target) {
 			return fmt.Errorf("archive entry %q escapes the install folder", h.Name)
 		}
 		switch h.Typeflag {
 		case tar.TypeDir:
-			err = os.MkdirAll(target, 0o755)
+			err = rt.MkdirAll(rel, 0o755)
 		case tar.TypeReg:
-			err = writeFile(target, tr, os.FileMode(h.Mode).Perm()|0o600)
+			err = writeFile(rt, rel, tr, os.FileMode(h.Mode).Perm()|0o600)
 		case tar.TypeSymlink:
 			if filepath.IsAbs(h.Linkname) || !within(root, filepath.Join(filepath.Dir(target), h.Linkname)) {
 				return fmt.Errorf("archive link %q points outside the install folder", h.Name)
 			}
-			_ = os.Remove(target)
-			err = os.Symlink(h.Linkname, target)
+			_ = rt.Remove(rel)
+			err = rt.Symlink(h.Linkname, rel)
 		}
 		if err != nil {
 			return err
@@ -70,11 +77,11 @@ func within(root, p string) bool {
 	return p == root || strings.HasPrefix(p, root+string(filepath.Separator))
 }
 
-func writeFile(path string, r io.Reader, mode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+func writeFile(rt *os.Root, path string, r io.Reader, mode os.FileMode) error {
+	if err := rt.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	f, err := rt.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}

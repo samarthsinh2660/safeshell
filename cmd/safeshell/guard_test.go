@@ -268,3 +268,21 @@ func TestDaemonCommandUsageAndStopWhenNotRunning(t *testing.T) {
 		t.Error("usage")
 	}
 }
+
+func TestGuardMasksSecretsAndSkipsSpaceLines(t *testing.T) {
+	a := sampleAnalysis()
+	a.Level, a.Decision = domain.R0, domain.Allow
+	a.Line = "export TOKEN=abc123"
+	fakeAnalyze(t, a)
+	runSS("guard", "--", a.Line)
+	if e := lastAudit(t); e.Line != "export TOKEN=***" {
+		t.Errorf("line %q", e.Line)
+	}
+	before, _ := os.ReadFile(auditPath())
+	a.Line = " export TOKEN=abc123"
+	fakeAnalyze(t, a)
+	runSS("guard", "--", a.Line)
+	if after, _ := os.ReadFile(auditPath()); string(after) != string(before) {
+		t.Error("a line starting with a space must not be logged")
+	}
+}

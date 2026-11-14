@@ -171,6 +171,51 @@ func TestExtractRefusesEscapes(t *testing.T) {
 	}
 }
 
+func TestExtractRefusesWritingThroughChainedSymlinks(t *testing.T) {
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "x", "y", "install")
+	a := archive(t,
+		entry{name: "top/a", typ: tar.TypeSymlink, link: "."},
+		entry{name: "top/a/a/L", typ: tar.TypeSymlink, link: "../.."},
+		entry{name: "top/L/escaped.txt", typ: tar.TypeReg, mode: 0o644, body: "x"},
+	)
+	if err := ExtractTarGz(a, dest); err == nil {
+		t.Error("a write through a symlink that leaves the folder was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(parent, "x", "escaped.txt")); err == nil {
+		t.Error("a file was written outside the install folder")
+	}
+}
+
+func TestExtractRefusesMakingFoldersThroughASymlink(t *testing.T) {
+	parent := t.TempDir()
+	dest := filepath.Join(parent, "install")
+	a := archive(t,
+		entry{name: "top/out", typ: tar.TypeSymlink, link: "."},
+		entry{name: "top/out/L", typ: tar.TypeSymlink, link: ".."},
+		entry{name: "top/L/dir/", typ: tar.TypeDir, mode: 0o755},
+	)
+	if err := ExtractTarGz(a, dest); err == nil {
+		t.Error("a folder made through a symlink that leaves the folder was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(parent, "dir")); err == nil {
+		t.Error("a folder was made outside the install folder")
+	}
+}
+
+func TestExtractReportsAnInstallFolderItCannotOpen(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can open any folder")
+	}
+	dest := filepath.Join(t.TempDir(), "locked")
+	if err := os.Mkdir(dest, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	if err := ExtractTarGz(archive(t, entry{name: "top/f", typ: tar.TypeReg, mode: 0o644}), dest); err == nil {
+		t.Error("a folder that cannot be opened was accepted")
+	}
+}
+
 func variants(bs []Build) string {
 	var v []string
 	for _, b := range bs {

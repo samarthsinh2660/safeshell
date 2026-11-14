@@ -251,7 +251,7 @@ FileDiff = walk upperdir: regular file = created/modified, char device 0/0 = del
 - The script only: reads the line, calls `safeshell hook-check -- "$line"`, and acts on the exit code (0 run, 1 cancel). The checker may print a rewritten line (the chosen safer alternative) to a temp fd, which the script puts into the buffer.
 - `safeshell deactivate` creates `off` in the XDG state folder and `activate` removes it. The hook computes that path once at load and tests it with `[[ -e ... ]]` before calling `guard` or `voice`, so a paused SafeShell spawns nothing and every open terminal obeys at once. `SAFESHELL_OFF=1` still pauses one terminal.
 - Interactive choices are drawn by `safeshell` on `/dev/tty`, not by the script.
-- Bypass (leading space or `safeshell --force`) is allowed and audited. Known limit: scripts run by another interpreter are not seen by the hook; we scan script files when a shell/interpreter is invoked on them.
+- Bypass (leading space or `safeshell --force`) is allowed; a leading-space line is not written to the audit log, and secret values (`*TOKEN*`, `*KEY*`, `*SECRET*`, `*PASSWORD*` assignments, `Authorization:` headers, JSON fields with those names, `scheme://user:pass@` and `-u user:pass`) are masked by `report.MaskSecrets` in the audit log and snapshot manifests. The audit log rotates to `audit.jsonl.old` at 5 MB and its folder is set to 0700. Known limit: scripts run by another interpreter are not seen by the hook; we scan script files when a shell/interpreter is invoked on them.
 
 ### 7.3 IPC (`internal/ipc`)
 

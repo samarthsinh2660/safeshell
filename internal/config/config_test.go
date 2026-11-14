@@ -77,13 +77,22 @@ func TestSaveRoundTripsPrivately(t *testing.T) {
 	}
 }
 
+func key(t *testing.T, p providers.Provider) string {
+	t.Helper()
+	k, err := Key(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return k
+}
+
 func TestKeysEnvWinsAndFileIsPrivate(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("OPENAI_API_KEY", "")
 	p, _ := providers.Find("openai")
 	a, _ := providers.Find("anthropic")
 	t.Setenv("ANTHROPIC_API_KEY", "")
-	if Key(p) != "" {
+	if key(t, p) != "" {
 		t.Error("no key yet")
 	}
 	if err := SaveKey(p, "sk-file"); err != nil {
@@ -92,15 +101,54 @@ func TestKeysEnvWinsAndFileIsPrivate(t *testing.T) {
 	if err := SaveKey(a, "sk-ant"); err != nil {
 		t.Fatal(err)
 	}
-	if Key(p) != "sk-file" || Key(a) != "sk-ant" {
+	if key(t, p) != "sk-file" || key(t, a) != "sk-ant" {
 		t.Error("keys not kept apart")
 	}
 	if st, _ := os.Stat(KeysPath()); st.Mode().Perm() != 0o600 {
 		t.Errorf("keys mode %v", st.Mode())
 	}
 	t.Setenv("OPENAI_API_KEY", "sk-env")
-	if Key(p) != "sk-env" {
+	if key(t, p) != "sk-env" {
 		t.Error("environment must win")
+	}
+}
+
+func TestDamagedKeysFileIsNeverOverwritten(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	p, _ := providers.Find("openai")
+	os.MkdirAll(filepath.Dir(KeysPath()), 0o700)
+	damaged := `{"anthropic": "sk-ant-secret", `
+	os.WriteFile(KeysPath(), []byte(damaged), 0o600)
+	for name, err := range map[string]error{"Key": func() error { _, err := Key(p); return err }(), "SaveKey": SaveKey(p, "sk-new")} {
+		if err == nil || !strings.Contains(err.Error(), "damaged") || !strings.Contains(err.Error(), KeysPath()) {
+			t.Errorf("%s: want a damaged-file error naming the path, got %v", name, err)
+		}
+		if err != nil && strings.Contains(err.Error(), "sk-ant-secret") {
+			t.Errorf("%s: error quotes a key", name)
+		}
+	}
+	if b, _ := os.ReadFile(KeysPath()); string(b) != damaged {
+		t.Errorf("damaged file was changed: %q", b)
+	}
+}
+
+func TestKeysFileOthersCanReadIsRefused(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("OPENAI_API_KEY", "")
+	p, _ := providers.Find("openai")
+	os.MkdirAll(filepath.Dir(KeysPath()), 0o700)
+	os.WriteFile(KeysPath(), []byte(`{"openai": "sk-file"}`), 0o644)
+	os.Chmod(KeysPath(), 0o644)
+	if k, err := Key(p); err == nil || k != "" || !strings.Contains(err.Error(), "chmod 600 "+KeysPath()) {
+		t.Errorf("0644 file: key %q err %v", k, err)
+	}
+	if err := SaveKey(p, "sk-new"); err == nil {
+		t.Error("SaveKey must refuse a file others can read")
+	}
+	t.Setenv("OPENAI_API_KEY", "sk-env")
+	if key(t, p) != "sk-env" {
+		t.Error("the environment key needs no file")
 	}
 }
 
@@ -149,6 +197,13 @@ func TestSaveKeyFailsCleanly(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
 	os.WriteFile(filepath.Join(cfg, "safeshell"), nil, 0o600) // the settings folder is a file
+	if SaveKey(p, "sk-1234567890") == nil {
+		t.Error("a settings folder that is a file")
+	}
+
+	cfg = t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	os.Symlink(filepath.Join(cfg, "nowhere"), filepath.Join(cfg, "safeshell")) // a dangling link: the file is "missing" but the folder cannot be made
 	if SaveKey(p, "sk-1234567890") == nil {
 		t.Error("a folder that cannot be made")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -94,8 +95,8 @@ func TestConnectingAProviderChecksAndStoresTheKey(t *testing.T) {
 	fx := newMenu(t, "7\nq\n", "AIza-test-key-123", nil) // 7 = Gemini
 	fx.m.Run(context.Background())
 	g, _ := providers.Find("gemini")
-	if config.Key(g) != "AIza-test-key-123" || len(fx.checked) != 1 {
-		t.Errorf("key %q checked %v", config.Key(g), fx.checked)
+	if mustKey(g) != "AIza-test-key-123" || len(fx.checked) != 1 {
+		t.Errorf("key %q checked %v", mustKey(g), fx.checked)
 	}
 	if c := fx.cfg(t); c.AI.Mode != ai.Cloud || c.AI.Cloud.Provider != "gemini" {
 		t.Errorf("%+v", c.AI)
@@ -106,8 +107,8 @@ func TestABadKeyIsNeverSaved(t *testing.T) {
 	fx := newMenu(t, "6\nq\n", "sk-bad-key-1234567", errors.New("gpt answered 401"))
 	fx.m.Run(context.Background())
 	o, _ := providers.Find("openai")
-	if config.Key(o) != "" || fx.cfg(t).AI.Mode != ai.Auto || !strings.Contains(fx.out.String(), "401") {
-		t.Errorf("key %q mode %s\n%s", config.Key(o), fx.cfg(t).AI.Mode, fx.out)
+	if mustKey(o) != "" || fx.cfg(t).AI.Mode != ai.Auto || !strings.Contains(fx.out.String(), "401") {
+		t.Errorf("key %q mode %s\n%s", mustKey(o), fx.cfg(t).AI.Mode, fx.out)
 	}
 	fx = newMenu(t, "6\nq\n", "short", nil)
 	fx.m.Run(context.Background())
@@ -121,8 +122,8 @@ func TestExistingKeyActivatesWithoutAskingAgainAndKeyCommandReplaces(t *testing.
 	a, _ := providers.Find("anthropic")
 	config.SaveKey(a, "sk-ant-old-key-1234")
 	fx.m.Run(context.Background())
-	if len(fx.checked) != 1 || fx.checked[0] != "anthropic:sk-ant-new-key-1234" || config.Key(a) != "sk-ant-new-key-1234" {
-		t.Errorf("checked %v key %q", fx.checked, config.Key(a))
+	if len(fx.checked) != 1 || fx.checked[0] != "anthropic:sk-ant-new-key-1234" || mustKey(a) != "sk-ant-new-key-1234" {
+		t.Errorf("checked %v key %q", fx.checked, mustKey(a))
 	}
 }
 
@@ -402,5 +403,43 @@ func TestListCloudAsksTheProvider(t *testing.T) {
 	p.URL = "http://127.0.0.1:1" // nothing listens here
 	if _, err := listCloud(context.Background(), p, "k"); err == nil {
 		t.Error("expected a network error")
+	}
+}
+
+// mustKey is Key for tests that expect a readable keys file.
+func mustKey(p providers.Provider) string {
+	k, _ := config.Key(p)
+	return k
+}
+
+// damageKeys leaves a broken keys.json in the (already isolated) settings folder.
+func damageKeys(t *testing.T) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(config.KeysPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config.KeysPath(), []byte("{broken"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestADamagedKeysFileIsReportedEverywhere(t *testing.T) {
+	fx := newMenu(t, "7\nchoose 7\nq\n", "AIza-test-key-123", nil) // 7 = Gemini
+	damageKeys(t)
+	c, _ := config.Load(filepath.Join(t.TempDir(), "none"))
+	c.AI.Mode, c.AI.Cloud.Provider = ai.Cloud, "gemini"
+	if err := config.Save(config.Path(), c); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildBackend(c, fx.m.dirs); err == nil || !strings.Contains(err.Error(), "damaged") {
+		t.Errorf("backend: %v", err)
+	}
+	fx.m.Run(context.Background())
+	if strings.Count(fx.out.String(), "keys.json is damaged") != 2 || len(fx.checked) != 0 {
+		t.Errorf("checked %v\n%s", fx.checked, fx.out)
+	}
+	code, _, errw := runList(t, fakeList(nil, nil))
+	if code != 1 || !strings.Contains(errw, "damaged") {
+		t.Errorf("%d %q", code, errw)
 	}
 }
