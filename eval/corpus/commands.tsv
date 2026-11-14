@@ -421,3 +421,17 @@ R3	alias ls=reboot
 R3	alias off=poweroff	
 R0	alias d=docker	
 R0	alias gc=mytool	
+R4	sed -n '1e rm -rf /' file	
+R3	sed 's/x/y/w /etc/passwd' file	
+R2	sed -n 'w out.txt' file	
+R3	sed -n 's/x/y/e' file	
+R3	git push origin +main	
+R3	git push origin +HEAD:main	
+R3	git push --mirror	
+R3	git push origin --delete main	
+R2	sudo echo hi > out.txt	
+R2	sudo ls > /tmp/x	
+R3	echo x | sudo tee /etc/x	
+R4	pkill -9 -u root	
+R4	pkill -u 0	
+R3	pkill a	
