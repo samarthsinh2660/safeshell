@@ -44,9 +44,9 @@ in a minor release if the CHANGELOG says so plainly under **Changed**.
 
 ### Before the branch
 - [ ] Every feature planned for this version is merged. Unfinished work waits for the next one.
-- [ ] `main` is green in CI.
-- [ ] On a machine with a working sandbox: `make check && make build && make integration`, and
-      `SS_SWEEP=1 go test ./test/integration -run Sweep`.
+- [ ] `main` is green in CI. CI runs `make check`, the integration tests with the real sandbox
+      and the full sweep (`SS_SWEEP=1`) on every pull request, the release PR included, so they
+      don't need to be run by hand.
 - [ ] If the AI or prompt changed: `safeshell ai bench` with the local model and one cloud model.
       Note the scores for the CHANGELOG.
 - [ ] Try the new features by hand once (for example `safeshell voice setup`, then `safeshell voice`).

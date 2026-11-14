@@ -52,6 +52,8 @@ SS_SWEEP=1 go test ./test/integration -run Sweep    # every labelled command thr
 ```
 
 `safeshell doctor` shows what your machine supports. Tests that need a missing feature skip themselves.
+CI installs the same rule and runs both with `SS_NEED_SANDBOX=1`, which makes a missing sandbox fail
+the tests instead of skipping them, so every pull request is checked with the real sandbox.
 
 ## How the code is organised
 
@@ -194,7 +196,7 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
 - Before you open the PR, review your own diff for the architecture rules, consistency with the
   existing code and docs, the safety invariants and the business logic.
 - CI shows each part as its own check: format and vet, unit tests and coverage, installer script,
-  fuzz, integration, and package build. `check` passes only when all of them pass.
+  fuzz, integration with the real sandbox plus the sweep, and package build. `check` passes only when all of them pass.
 - Reviewers look for: the safety invariants above, tests, plain-English messages, and a diff that matches the description.
 
 ## Releases

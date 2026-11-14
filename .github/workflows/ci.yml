@@ -61,16 +61,25 @@ jobs:
       - run: make fuzz FUZZTIME=15s
 
   integration:
-    name: Integration tests (real binary)
+    name: Integration tests and sweep (real binary, real sandbox)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # The sandbox needs user namespaces, which GitHub's runners restrict under
-      # AppArmor; those tests skip themselves there and run locally via `make integration`.
-      - run: make integration
+      - name: Install zsh, so the zsh hook tests run too
+        run: sudo apt-get update -q && sudo apt-get install -y -q zsh
+      - run: make build
+      # Ubuntu 24.04 lets a binary use user namespaces only with an AppArmor profile;
+      # install the same profile the .deb ships, for the binary just built.
+      - name: Allow the sandbox
+        run: scripts/install-apparmor.sh --yes bin/safeshell && bin/safeshell doctor
+      # SS_NEED_SANDBOX makes a sandbox test fail instead of skip, so none is skipped silently.
+      - name: Integration tests with the real sandbox
+        run: SS_NEED_SANDBOX=1 make integration
+      - name: Sweep every labelled command through the real binary
+        run: SS_NEED_SANDBOX=1 SS_SWEEP=1 go test -count=1 -timeout 20m ./test/integration -run Sweep
 
   packages:
     name: Build tarballs and .debs
