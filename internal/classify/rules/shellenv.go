@@ -54,5 +54,6 @@ func ruleFc(c shellparse.Command, f flags) []Finding {
 	if c.Name == "fc" && f.has('l') {
 		return one(fnd(R0, c, "Only lists your command history."))
 	}
-	return one(fnd(R2, c, "Runs whatever you save in the editor, or an old command from your history, without a check. Type the command out instead."))
+	// R3, not R2: what it will run is not known until it runs, so the sandbox cannot preview it.
+	return one(fnd(R3, c, "Runs whatever you save in the editor, or an old command from your history, without a check. Type the command out instead."))
 }

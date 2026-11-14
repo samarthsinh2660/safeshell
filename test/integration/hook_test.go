@@ -335,8 +335,8 @@ func TestFcAndRCannotRunHistoryUnchecked(t *testing.T) {
 			sh.waitFor(t, "READY>")
 			_ = os.Remove(marker)
 			sh.send(c.redo + "\r")
-			sh.waitFor(t, "Run it anyway?")
-			sh.send("n\r")
+			sh.waitFor(t, "[c] cancel")
+			sh.send("c\r")
 			sh.waitFor(t, "Nothing was run")
 			if _, err := os.Stat(marker); err == nil {
 				t.Fatal(c.redo + " re-ran the history line without a check")

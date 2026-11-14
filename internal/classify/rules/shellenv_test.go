@@ -84,11 +84,11 @@ func TestFcAndRAreRatedByWhetherTheyOnlyList(t *testing.T) {
 	}{
 		{"fc", []string{"-l"}, R0},
 		{"fc", []string{"-ln", "-10"}, R0},
-		{"fc", nil, R2},
-		{"fc", []string{"-s"}, R2},
-		{"fc", []string{"-e", "vim", "5"}, R2},
-		{"r", nil, R2},
-		{"r", []string{"-l"}, R2},
+		{"fc", nil, R3},
+		{"fc", []string{"-s"}, R3},
+		{"fc", []string{"-e", "vim", "5"}, R3},
+		{"r", nil, R3},
+		{"r", []string{"-l"}, R3},
 	}
 	for _, tc := range tests {
 		c := shellparse.Command{Name: tc.name, Args: tc.args}

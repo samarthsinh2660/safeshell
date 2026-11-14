@@ -423,7 +423,7 @@ R0	alias d=docker
 R0	alias gc=mytool	
 R0	fc -l
 R0	fc -ln -10
-R2	fc
-R2	fc -s
-R2	fc -e vim 5
-R2	r
+R3	fc
+R3	fc -s
+R3	fc -e vim 5
+R3	r
