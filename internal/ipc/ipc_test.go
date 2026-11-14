@@ -293,6 +293,48 @@ func TestCallHonoursItsContext(t *testing.T) {
 	}
 }
 
+func TestLongSocketPathGetsAClearMessage(t *testing.T) {
+	long := filepath.Join(privateDir(t), strings.Repeat("r", 120), "safeshell.sock")
+	if len(long) <= maxSocketPath {
+		t.Fatalf("test path is only %d bytes", len(long))
+	}
+	_, err := Listen(long)
+	if !errors.Is(err, ErrPathTooLong) {
+		t.Errorf("Listen: %v", err)
+	}
+	for _, want := range []string{"XDG_RUNTIME_DIR", "still checked", "mkdir -m 700 /tmp/ss-$USER", "limit is 107"} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("message lacks %q: %v", want, err)
+		}
+	}
+	if err != nil && strings.Contains(err.Error(), "under /tmp") {
+		t.Errorf("message should not suggest a plain /tmp folder: %v", err)
+	}
+	// The client must not try to connect: it reports the same clear reason and
+	// is not mistaken for an untrusted socket, so the hook falls back quietly.
+	err = Call(context.Background(), long, "ping", nil, nil)
+	if !errors.Is(err, ErrPathTooLong) || errors.Is(err, ErrUntrusted) {
+		t.Errorf("Call: %v", err)
+	}
+}
+
+func TestSocketPathAtTheLimitIsAccepted(t *testing.T) {
+	if err := checkLength(filepath.Join(privateDir(t), "s.sock")); err != nil {
+		t.Errorf("short path refused: %v", err)
+	}
+	// Linux sun_path is 108 bytes with the NUL, so 107 is the longest usable path.
+	if maxSocketPath != 107 {
+		t.Fatalf("maxSocketPath = %d, want 107 (Linux sun_path 108 minus NUL)", maxSocketPath)
+	}
+	exact := strings.Repeat("a", 107)
+	if err := checkLength(exact); err != nil {
+		t.Errorf("path of exactly 107 bytes refused: %v", err)
+	}
+	if err := checkLength(exact + "a"); !errors.Is(err, ErrPathTooLong) {
+		t.Errorf("108 bytes accepted: %v", err)
+	}
+}
+
 func TestErrorTextHasMessageAndCode(t *testing.T) {
 	e := &Error{Code: CodeBadParams, Message: "need {line}"}
 	if got := e.Error(); !strings.Contains(got, "need {line}") || !strings.Contains(got, "code") {
