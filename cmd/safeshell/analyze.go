@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -232,13 +233,32 @@ func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
 	}
 	line := strings.Join(args, " ")
 	cwd := cwdOr(f.cwd)
-	a := analyze(context.Background(), line, cwd)
+	ctx, stop := interruptible()
+	defer stop()
+	a := analyze(ctx, line, cwd)
+	if ctx.Err() != nil {
+		fmt.Fprintln(stderr, interruptedMsg)
+		return exitInterrupted
+	}
 	if f.json {
 		printJSON(stdout, a)
 	} else {
 		printAnalysis(stdout, a, cwd, color, f.verbose)
 	}
 	return a.Decision.ExitCode()
+}
+
+// exitInterrupted is the conventional status of a command ended by Ctrl-C.
+const exitInterrupted = 130
+
+const interruptedMsg = "Stopped. Nothing was run."
+
+// interruptible returns a context that ends on Ctrl-C or a termination signal,
+// so a simulation in progress is cancelled and removes its scratch folder
+// instead of the process dying with it. Call stop to get the default signal
+// behaviour back.
+func interruptible() (ctx context.Context, stop context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }
 
 var decisionText = map[domain.Decision]string{

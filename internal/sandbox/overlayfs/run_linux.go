@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -41,7 +42,9 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	if err != nil {
 		return sandbox.Result{}, err
 	}
-	scratch, err := os.MkdirTemp(scratchBase(), "ss-sim-")
+	base := scratchBase()
+	sweepStale(base, os.Getuid(), time.Now())
+	scratch, err := os.MkdirTemp(base, fmt.Sprintf("ss-sim-%d-", os.Getpid()))
 	if err != nil {
 		return sandbox.Result{}, err
 	}
@@ -142,6 +145,42 @@ func cleanup(root string) {
 		return nil
 	})
 	_ = os.RemoveAll(root)
+}
+
+// legacyAge is how old a scratch folder without an owner pid in its name must be
+// before it counts as left behind (older versions named folders ss-sim-<random>).
+const legacyAge = time.Hour
+
+// sweepStale removes scratch folders in base that an earlier run left behind
+// (for example after Ctrl-C): ours, and with an owner process that is gone. It
+// never follows symlinks and ignores anything not owned by the current user.
+func sweepStale(base string, uid int, now time.Time) {
+	entries, _ := os.ReadDir(base)
+	for _, e := range entries {
+		rest, ok := strings.CutPrefix(e.Name(), "ss-sim-")
+		if !ok || !e.IsDir() { // a symlink is not a directory here
+			continue
+		}
+		p := filepath.Join(base, e.Name())
+		fi, err := os.Lstat(p)
+		if err != nil || int(fi.Sys().(*syscall.Stat_t).Uid) != uid {
+			continue
+		}
+		if stale(rest, fi.ModTime(), now) {
+			cleanup(p)
+		}
+	}
+}
+
+// stale says whether a folder named ss-sim-<rest> was left behind: its owner
+// pid is gone, or, for the old naming without a pid, it is older than legacyAge.
+func stale(rest string, modified, now time.Time) bool {
+	if pid, _, found := strings.Cut(rest, "-"); found {
+		if n, err := strconv.Atoi(pid); err == nil && n > 0 {
+			return syscall.Kill(n, 0) == syscall.ESRCH // EPERM means it is running as someone else
+		}
+	}
+	return now.Sub(modified) > legacyAge
 }
 
 func firstLine(s string) string {
