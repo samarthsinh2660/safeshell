@@ -99,10 +99,27 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q lintian
           lintian --fail-on error dist/*.deb
 
+  debian:
+    name: Debian package from debian/ (sid, lintian)
+    runs-on: ubuntu-24.04
+    container: debian:sid
+    steps:
+      - uses: actions/checkout@v4
+      # Build exactly as Debian would: build-deps from Debian's own archive, no network for Go.
+      - name: Install the build dependencies from debian/control
+        run: |
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends build-essential devscripts equivs lintian
+          mk-build-deps -i -r -t 'apt-get install -y -q --no-install-recommends' debian/control
+      - name: dpkg-buildpackage
+        run: dpkg-buildpackage -b -us -uc
+      - name: lintian (errors fail)
+        run: lintian --fail-on error ../safeshell_*.deb
+
   check:
     name: check
     if: always()
-    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, packages]
+    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, packages, debian]
     runs-on: ubuntu-24.04
     steps:
       - name: A job failed or was skipped
