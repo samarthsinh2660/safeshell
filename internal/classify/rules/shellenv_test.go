@@ -75,3 +75,26 @@ func TestWriteTargetStartupFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestFcAndRAreRatedByWhetherTheyOnlyList(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want domain.Level
+	}{
+		{"fc", []string{"-l"}, R0},
+		{"fc", []string{"-ln", "-10"}, R0},
+		{"fc", nil, R3},
+		{"fc", []string{"-s"}, R3},
+		{"fc", []string{"-e", "vim", "5"}, R3},
+		{"r", nil, R3},
+		{"r", []string{"-l"}, R3},
+	}
+	for _, tc := range tests {
+		c := shellparse.Command{Name: tc.name, Args: tc.args}
+		fs, known := Rate(c)
+		if !known || len(fs) != 1 || fs[0].Level != tc.want {
+			t.Errorf("%s %v = %v (known %v), want %s", tc.name, tc.args, fs, known, tc.want)
+		}
+	}
+}

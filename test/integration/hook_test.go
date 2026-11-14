@@ -311,3 +311,46 @@ func TestCtrlCAtTheQuestionCancelsTheLine(t *testing.T) {
 		t.Fatal("Ctrl-C at the question ran the command")
 	}
 }
+
+func TestFcAndRCannotRunHistoryUnchecked(t *testing.T) {
+	needSandbox(t)
+	for _, c := range []struct {
+		shell string
+		argv  []string
+		redo  string
+	}{
+		{"bash", bashArgv, "fc -s"},
+		{"zsh", zshArgv, "fc -e -"},
+		{"zsh", zshArgv, "r"},
+	} {
+		t.Run(c.shell+" "+c.redo, func(t *testing.T) {
+			if _, err := exec.LookPath(c.shell); err != nil {
+				t.Skip(c.shell + " is not installed")
+			}
+			marker := filepath.Join(t.TempDir(), "ran")
+			sh := startShell(t, c.argv)
+			sh.waitFor(t, "READY>")
+			sh.send(`eval "$(safeshell hook ` + c.shell + `)"` + "\r")
+			sh.send("touch " + marker + "\r") // R1: runs without a question, and leaves a mark
+			for i := 0; i < 500; i++ { // the shell has run it once
+				if _, err := os.Stat(marker); err == nil {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if err := os.Remove(marker); err != nil {
+				t.Fatal("the first touch never ran:", err)
+			}
+			sh.send(c.redo + "\r")
+			sh.waitFor(t, "[c] cancel")
+			sh.send("c\r")
+			sh.waitFor(t, "Nothing was run")
+			if _, err := os.Stat(marker); err == nil {
+				t.Fatal(c.redo + " re-ran the history line without a check")
+			}
+			// Listing history only reads, so it goes straight through.
+			sh.send("fc -l\r")
+			sh.waitFor(t, "touch "+marker)
+		})
+	}
+}
