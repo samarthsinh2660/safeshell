@@ -292,6 +292,9 @@ func TestCtrlOCannotBypassTheGuardEither(t *testing.T) {
 }
 
 func TestCtrlCAtTheQuestionCancelsTheLine(t *testing.T) {
+	if _, err := os.Stat(ssBin); err != nil {
+		t.Skip("bin/safeshell not built (run: make build)")
+	}
 	d := t.TempDir()
 	victim := filepath.Join(d, "proj")
 	_ = os.MkdirAll(victim, 0o755)
