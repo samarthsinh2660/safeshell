@@ -239,7 +239,8 @@ func (w *walker) pipeline(s *syntax.Stmt, depth int) {
 func pipedText(prev Command) string {
 	switch prev.Name {
 	case "echo", "printf":
-		return echoText(prev.Name, prev.Args)
+		// printf (and echo -e, or dash's echo) turn \n into a new line before the shell reads it.
+		return strings.ReplaceAll(echoText(prev.Name, prev.Args), `\n`, "\n")
 	case "cat":
 		if prev.Stdin != "" && !slices.ContainsFunc(prev.Args, func(a string) bool { return !strings.HasPrefix(a, "-") }) {
 			return "\n" + prev.Stdin

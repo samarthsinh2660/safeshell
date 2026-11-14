@@ -391,6 +391,7 @@ func TestHiddenFormsOfRmRfAreR4(t *testing.T) {
 	for _, line := range []string{
 		`rm -rf \/`, `r\m -rf /`, `\r\m -rf /`, `"r"m -rf /`,
 		"sh <<EOF\nrm -rf ~\nEOF", "bash <<< 'rm -rf ~'", "printf 'rm -rf ~' | sh", `printf '%s\n' 'rm -rf ~' | sh`,
+		`printf 'rm -rf ~\n' | sh`, `printf 'cd /tmp\nrm -rf ~\n' | bash`,
 		"echo rm -rf ~ | bash", "cat <<'X' | sh\nrm -rf ~\nX", "source /dev/stdin <<< 'rm -rf ~'", "echo 'rm -rf ~' | . /dev/stdin",
 		"su -c 'rm -rf /'", "pkexec rm -rf /", "runuser -u bob -- rm -rf /", "nsenter -t 1 -m rm -rf /",
 		"watch rm -rf /", "flock /tmp/l rm -rf /", "chroot / rm -rf /", "env -C / rm -rf *",
