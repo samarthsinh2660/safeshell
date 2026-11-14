@@ -53,7 +53,8 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 			return f(func(name string, args ...string) (string, error) { return toolRunner(bctx, env, cwd, name, args...) }, cmds)
 		}
 	}
-	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	procs := func(cmds []shellparse.Command) []domain.Effect { return inspectProcesses(callerPid(ctx), cmds) }
+	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	return e.Analyze(ctx, line, cwd)
 }
@@ -68,8 +69,9 @@ func (realSandbox) Simulate(ctx context.Context, spec sandbox.Spec) (sandbox.Res
 	return overlayfs.Run(ctx, spec)
 }
 
-func inspectProcesses(cmds []shellparse.Command) []domain.Effect {
-	return effects.InspectProcesses(effects.ProcFS{Root: "/proc"}, os.Getpid(), os.Getuid(), cmds)
+// inspectProcesses protects the asking process and its parents (your shell) from a kill.
+func inspectProcesses(caller int, cmds []shellparse.Command) []domain.Effect {
+	return effects.InspectProcesses(effects.ProcFS{Root: "/proc"}, caller, os.Getuid(), cmds)
 }
 
 func inspectDisks(cmds []shellparse.Command) []domain.Effect {
@@ -128,6 +130,15 @@ func lookPath(env []string, name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s was not found in the PATH of your shell", name)
+}
+
+// callerPid is the process that asked, which the daemon receives with the
+// request, or this process when there is none.
+func callerPid(ctx context.Context) int {
+	if pid := engine.CallerFrom(ctx); pid > 0 {
+		return pid
+	}
+	return os.Getpid()
 }
 
 // callerEnv is the environment of the shell that asked, which the daemon

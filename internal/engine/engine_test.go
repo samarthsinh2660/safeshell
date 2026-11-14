@@ -209,6 +209,15 @@ func TestMirrorGapKeepsTheObservedEffectAndLevel(t *testing.T) {
 	}
 }
 
+func TestTheCallersPidTravelsInTheContext(t *testing.T) {
+	if got := CallerFrom(context.Background()); got != 0 {
+		t.Errorf("no caller was attached, got %d", got)
+	}
+	if got := CallerFrom(WithCaller(context.Background(), 4242)); got != 4242 {
+		t.Errorf("got %d", got)
+	}
+}
+
 func TestTheCallersEnvironmentReachesTheSandbox(t *testing.T) {
 	sim := &fakeSim{res: del("x", 1)}
 	e := &Engine{Sim: sim}

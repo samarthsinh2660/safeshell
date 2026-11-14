@@ -39,6 +39,20 @@ func EnvFrom(ctx context.Context) []string {
 	return env
 }
 
+type callerKey struct{}
+
+// WithCaller attaches the pid of the process that asked, whose parent shell
+// must be protected from a kill, rather than that of a long-running daemon.
+func WithCaller(ctx context.Context, pid int) context.Context {
+	return context.WithValue(ctx, callerKey{}, pid)
+}
+
+// CallerFrom is the pid attached with WithCaller, or 0 when there is none.
+func CallerFrom(ctx context.Context) int {
+	pid, _ := ctx.Value(callerKey{}).(int)
+	return pid
+}
+
 // Engine analyses commands. A nil Sim means no sandbox is available here.
 type Engine struct {
 	Sim        Simulator
