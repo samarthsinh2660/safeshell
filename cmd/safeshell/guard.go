@@ -53,6 +53,7 @@ opts:
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
+	tourHint(stderr)
 	cwd = cwdOr(cwd)
 	line := strings.Join(args, " ")
 	if code, ok := slashCommand(line, stderr); ok {
@@ -83,6 +84,8 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	aiReview(&a, stderr)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)
+	} else {
+		learnNote(stderr, a, color)
 	}
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true

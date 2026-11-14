@@ -9,8 +9,10 @@ import "fmt"
 const bash = `# SafeShell hook for bash. Add to ~/.bashrc:  eval "$(safeshell hook bash)"
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
 # Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
+__ss_off="${XDG_STATE_HOME:-${HOME-}/.local/state}/safeshell/off"   # exists while checking is paused (safeshell deactivate)
 __ss_voice() {
   [[ -n "${SAFESHELL_OFF-}" ]] && return 0
+  [[ -e "${__ss_off-}" ]] && return 0
   local out tty rc
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
   out=$(command safeshell voice --text </dev/tty 2>/dev/tty)
@@ -22,6 +24,7 @@ __ss_voice() {
 }
 __ss_guard() {
   [[ -n "${SAFESHELL_OFF-}" || -z "${READLINE_LINE//[[:space:]]/}" ]] && return 0
+  [[ -e "${__ss_off-}" ]] && return 0
   local out rc tty t first unknown=()
   t=${READLINE_LINE#"${READLINE_LINE%%[![:space:]]*}"}; first=${t%%[[:space:]]*}
   # A first word the shell does not know may be plain English: let SafeShell AI try it.
@@ -56,15 +59,18 @@ if [[ $- == *i* ]]; then
   bind -m vi-command -x '"v": __ss_noedit'
   bind -m vi-command -x '"#": __ss_noedit'
   unset __ss_k
+  export SAFESHELL_HOOK=$$   # this shell's pid; lets safeshell doctor tell that the hook is active in this shell
 fi
 `
 
 const zsh = `# SafeShell hook for zsh. Add to ~/.zshrc:  eval "$(safeshell hook zsh)"
 # Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
 # Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
+__ss_off="${XDG_STATE_HOME:-${HOME-}/.local/state}/safeshell/off"   # exists while checking is paused (safeshell deactivate)
 __ss_voice() {
   emulate -L zsh
   [[ -n "${SAFESHELL_OFF-}" ]] && return 0
+  [[ -e "${__ss_off-}" ]] && return 0
   local out tty rc
   zle -I
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # Enter must end the recording
@@ -80,6 +86,7 @@ bindkey '^X^V' __ss_voice
 __ss_check() {   # returns 1 when the line was cancelled
   emulate -L zsh
   [[ -n "${SAFESHELL_OFF-}" || -z "${BUFFER//[[:space:]]/}" ]] && return 0
+  [[ -e "${__ss_off-}" ]] && return 0
   local out rc tty first unknown=()
   first=${${(z)BUFFER}[1]}
   whence -- "$first" >/dev/null 2>&1 || unknown=(--unknown)
@@ -106,6 +113,7 @@ for __ss_w in accept-line accept-and-hold accept-line-and-down-history accept-an
   zle -N ${__ss_w} __ss_${__ss_w//-/_}
 done
 unset __ss_w
+if [[ -o interactive ]]; then export SAFESHELL_HOOK=$$; fi   # this shell's pid; lets safeshell doctor tell that the hook is active in this shell
 `
 
 // Script returns the hook for the named shell.

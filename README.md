@@ -88,8 +88,8 @@ git clone https://github.com/samarthsinh2660/safeshell.git && cd safeshell
 make build && bash scripts/install.sh
 ```
 
-Open a new terminal and every command you press Enter on is checked first. Run `safeshell doctor` to see
-what your machine supports. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
+Open a new terminal and every command you press Enter on is checked first. Run `safeshell doctor` to check
+every part (sandbox, hook, daemon, snapshots, AI) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
 otherwise run `scripts/install-apparmor.sh` (uses sudo).
 
 > The command is `safeshell`, not `ss`: `/usr/bin/ss` already belongs to the system's `iproute2`.
@@ -104,8 +104,20 @@ Work as normal. Inside your prompt:
 | `safeshell models list` | print the models your active cloud provider offers (one per line, the one in use marked) |
 | `/help` | guided help (also `safeshell help`) |
 | `safeshell undo` | restore what the last approved command changed |
+| `safeshell learn on` | learning mode: one line after each command that passes, saying what it does and the safer form (`off` to stop; see `safeshell help learn`) |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
 | Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
+
+### Turn off / on
+
+Once installed, SafeShell is on in every terminal and needs nothing to start. To pause it:
+
+```bash
+safeshell deactivate     # every terminal, open ones and new ones, stops checking until you run:
+safeshell activate       # checking is back on, nothing to restart
+```
+
+While paused, commands run with no check and no delay. `SAFESHELL_OFF=1` pauses one terminal only. `safeshell doctor` tells you when checking is paused.
 
 Without the hook you can use the pieces directly:
 

@@ -49,6 +49,10 @@ Usage:
   safeshell ai setup|status|stop|bench      download the built-in model (once) / show AI state / stop it / measure it
   safeshell voice [setup [--yes]|status|--text]
                                             speak a request (local speech engine; set up once with  voice setup)
+  safeshell deactivate                      pause checking in every terminal, open and new, until  safeshell activate
+  safeshell activate                        turn checking back on
+  safeshell learn [on|off|status]           learning mode: one line after each command that passes, saying what it does
+                                            and the safer form (off by default)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
   safeshell snapshots                       list saved snapshots
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
@@ -56,7 +60,8 @@ Usage:
   safeshell uninstall                       remove the hook
   safeshell hook bash|zsh                   print the shell hook; add  eval "$(safeshell hook bash)"  to your rc file
   safeshell version                         which release this is
-  safeshell doctor                          show what this machine allows (sandbox, snapshots, AI)
+  safeshell doctor                          check every part: sandbox, hook, daemon, snapshots, AI; says what to fix
+  safeshell tour                            a one-minute walk-through in a throwaway folder (nothing is left behind)
 
 Quote the command so your shell passes it through untouched:
   safeshell check 'rm -rf ~/projects'
@@ -116,6 +121,13 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runVoice(args[1:], stdout, stderr, color)
 	case "ask":
 		return runAsk(args[1:], stdout, stderr, color)
+	case "deactivate", "activate":
+		if !unexpectedArgs(args[0], args[1:], stderr) {
+			return 2
+		}
+		return runPause(args[0] == "deactivate", stdout, stderr)
+	case "learn":
+		return runLearn(args[1:], stdout, stderr)
 	case "undo":
 		return runUndo(args[1:], stdout, stderr)
 	case "snapshots":
@@ -133,6 +145,11 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		}
 		fmt.Fprintln(stdout, "safeshell", version)
 		return 0
+	case "tour":
+		if !unexpectedArgs("tour", args[1:], stderr) {
+			return 2
+		}
+		return runTour(stdout, stderr, color)
 	case "doctor":
 		if !unexpectedArgs("doctor", args[1:], stderr) {
 			return 2
