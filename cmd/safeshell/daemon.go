@@ -87,7 +87,8 @@ func daemonHandlers(shutdown func()) map[string]ipc.Handler {
 			if err := json.Unmarshal(p, &a); err != nil || a.Line == "" {
 				return nil, &ipc.Error{Code: ipc.CodeBadParams, Message: "need {line, cwd}"}
 			}
-			return analyze(engine.WithEnv(ctx, a.Env), a.Line, a.Cwd), nil
+			// The asking process is the one whose shell a kill must not hit; the kernel says who it is.
+			return analyze(engine.WithCaller(engine.WithEnv(ctx, a.Env), ipc.PeerPID(ctx)), a.Line, a.Cwd), nil
 		},
 		"shutdown": func(context.Context, json.RawMessage) (any, error) {
 			go func() { time.Sleep(50 * time.Millisecond); shutdown() }() // after this reply is sent

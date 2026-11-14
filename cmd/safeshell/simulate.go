@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -19,7 +18,13 @@ func runSimulate(args []string, stdout, stderr io.Writer) int {
 	}
 	spec := sandbox.Spec{Cwd: f.cwd, Timeout: f.timeout}
 	spec.Line = strings.Join(args, " ")
-	res, err := simulate(context.Background(), spec)
+	ctx, stop := interruptible()
+	defer stop()
+	res, err := simulate(ctx, spec)
+	if ctx.Err() != nil {
+		fmt.Fprintln(stderr, interruptedMsg)
+		return exitInterrupted
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "safeshell simulate: %s\n", report.Printable(err.Error()))
 		return 1

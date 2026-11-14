@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -53,7 +54,8 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 			return f(func(name string, args ...string) (string, error) { return toolRunner(bctx, env, cwd, name, args...) }, cmds)
 		}
 	}
-	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	procs := func(cmds []shellparse.Command) []domain.Effect { return inspectProcesses(callerPid(ctx), cmds) }
+	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	return e.Analyze(ctx, line, cwd)
 }
@@ -68,8 +70,9 @@ func (realSandbox) Simulate(ctx context.Context, spec sandbox.Spec) (sandbox.Res
 	return overlayfs.Run(ctx, spec)
 }
 
-func inspectProcesses(cmds []shellparse.Command) []domain.Effect {
-	return effects.InspectProcesses(effects.ProcFS{Root: "/proc"}, os.Getpid(), os.Getuid(), cmds)
+// inspectProcesses protects the asking process and its parents (your shell) from a kill.
+func inspectProcesses(caller int, cmds []shellparse.Command) []domain.Effect {
+	return effects.InspectProcesses(effects.ProcFS{Root: "/proc"}, caller, os.Getuid(), cmds)
 }
 
 func inspectDisks(cmds []shellparse.Command) []domain.Effect {
@@ -128,6 +131,15 @@ func lookPath(env []string, name string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%s was not found in the PATH of your shell", name)
+}
+
+// callerPid is the process that asked, which the daemon receives with the
+// request, or this process when there is none.
+func callerPid(ctx context.Context) int {
+	if pid := engine.CallerFrom(ctx); pid > 0 {
+		return pid
+	}
+	return os.Getpid()
 }
 
 // callerEnv is the environment of the shell that asked, which the daemon
@@ -232,13 +244,32 @@ func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
 	}
 	line := strings.Join(args, " ")
 	cwd := cwdOr(f.cwd)
-	a := analyze(context.Background(), line, cwd)
+	ctx, stop := interruptible()
+	defer stop()
+	a := analyze(ctx, line, cwd)
+	if ctx.Err() != nil {
+		fmt.Fprintln(stderr, interruptedMsg)
+		return exitInterrupted
+	}
 	if f.json {
 		printJSON(stdout, a)
 	} else {
 		printAnalysis(stdout, a, cwd, color, f.verbose)
 	}
 	return a.Decision.ExitCode()
+}
+
+// exitInterrupted is the conventional status of a command ended by Ctrl-C.
+const exitInterrupted = 130
+
+const interruptedMsg = "Stopped. Nothing was run."
+
+// interruptible returns a context that ends on Ctrl-C or a termination signal,
+// so a simulation in progress is cancelled and removes its scratch folder
+// instead of the process dying with it. Call stop to get the default signal
+// behaviour back.
+func interruptible() (ctx context.Context, stop context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }
 
 var decisionText = map[domain.Decision]string{
