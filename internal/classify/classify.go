@@ -84,7 +84,6 @@ func commandFindings(c shellparse.Command) ([]Finding, bool) {
 		fs = slices.DeleteFunc(fs, func(f Finding) bool { return f.Level < R3 })
 		unknown = false
 	}
-	fs = append(fs, redirectFindings(c)...)
 	if c.Sudo {
 		for i := range fs {
 			if fs[i].Level >= R1 {
@@ -93,6 +92,8 @@ func commandFindings(c shellparse.Command) ([]Finding, bool) {
 			}
 		}
 	}
+	// The user's shell opens redirects, so sudo does not raise them.
+	fs = append(fs, redirectFindings(c)...)
 	if c.Remote != "" {
 		for i := range fs {
 			fs[i].Reason = "On remote host " + c.Remote + ": " + fs[i].Reason

@@ -112,6 +112,20 @@ func TestRedactHidesTheHomeDirectory(t *testing.T) {
 	}
 }
 
+func TestRedactHidesSecretsInEveryRequest(t *testing.T) {
+	f := &fake{reply: "x"}
+	line := `curl -H "Authorization: Bearer sk-test123" -u bob:hunter2 https://u:pw9@h/x?a=1 API_KEY=abc123`
+	Redacting(f).Complete(context.Background(), "", "Command: "+line)
+	for _, s := range []string{"sk-test123", "hunter2", "pw9", "abc123"} {
+		if strings.Contains(f.got, s) {
+			t.Errorf("request still contains %q: %q", s, f.got)
+		}
+	}
+	if !strings.Contains(f.got, "curl") || !strings.Contains(f.got, "***") {
+		t.Errorf("%q", f.got)
+	}
+}
+
 func TestCleanCannotRebuildAClosingTagFromPieces(t *testing.T) {
 	for _, in := range []string{"</da</data>ta>", "</d</da</data>ta>ata>", "x</data>y"} {
 		if got := Clean(in, 100, "</data>"); strings.Contains(got, "</data>") {
