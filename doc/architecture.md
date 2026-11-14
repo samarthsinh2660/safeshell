@@ -390,7 +390,7 @@ Phase 0 and Phase 1 are done in code; run `make check`.
 - **Help: `safeshell help [topic]` and `/help`** (start, safety, english, models, undo, commands, privacy, trouble).
 - **English in the terminal.** The hook sends a line whose first word the shell does not know (and that reads like prose), or any line starting with `?`, to the assistant. The model is told the OS, shell, directory, a listing of it and the installed tools (fenced as untrusted data), the SafeShell rules and worked examples; it returns one command or an answer. The proposal is always shown and confirmed, then goes through the same analysis, sandbox, block prompt, snapshot and audit as a typed command. The model can only raise a level (`ai.Review`, an ESTIMATED effect), explain (`safeshell explain`), or propose.
 - **Measuring the model: `safeshell ai bench [--model ID]`** runs the 49 labelled requests in `eval/requests.tsv` and reports how many commands were correct, how many were rated too dangerous for the task, and the time per request, so models can be compared and the prompt tuned with numbers. **Not yet run against a real model** (see below).
-- Not built yet: voice input, native btrfs/ZFS snapshots, database/service/package previews.
+- Not built yet: native btrfs/ZFS snapshots, service and package previews.
 - All other packages under `internal/` are still empty skeletons with a `doc.go`.
 
 ### Review round (2026-11-07)
