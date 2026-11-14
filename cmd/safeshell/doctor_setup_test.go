@@ -166,6 +166,18 @@ func TestDoctorAIAndCloud(t *testing.T) {
 	}
 }
 
+func TestDoctorSaysWhenTheKeysFileIsDamaged(t *testing.T) {
+	doctorHome(t)
+	useAI(t, fakeAI{}, nil)
+	damageKeys(t)
+	c, _ := config.Load(config.Path())
+	c.AI.Cloud.Provider = "anthropic"
+	if err := config.Save(config.Path(), c); err != nil {
+		t.Fatal(err)
+	}
+	wantAll(t, doctorOut(t), "MISSING  cloud key", "keys.json is damaged")
+}
+
 func TestDoctorAIReadiness(t *testing.T) {
 	doctorHome(t)
 	useAI(t, fakeAI{}, nil) // backend() returns a local backend even when nothing is downloaded

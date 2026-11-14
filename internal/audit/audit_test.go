@@ -185,3 +185,45 @@ func TestReadFailsOnUnreadableFile(t *testing.T) {
 		t.Error("expected error reading directory as file")
 	}
 }
+
+func TestAppendTightensALooseFolder(t *testing.T) {
+	d := filepath.Join(t.TempDir(), "state")
+	if err := os.Mkdir(d, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Append(filepath.Join(d, "audit.jsonl"), Entry{Line: "ls"}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := os.Stat(d); st.Mode().Perm() != 0o700 {
+		t.Errorf("mode %v", st.Mode())
+	}
+}
+
+func TestAppendKeepsOneOldFileWhenTheLogIsTooBig(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "audit.jsonl")
+	if err := os.WriteFile(p, make([]byte, maxBytes), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Append(p, Entry{Line: "new"}); err != nil {
+		t.Fatal(err)
+	}
+	if old, _ := os.Stat(p + ".old"); old == nil || old.Size() != maxBytes {
+		t.Error("the full log should have moved to .old")
+	}
+	if es, _, _ := Read(p); len(es) != 1 || es[0].Line != "new" {
+		t.Errorf("entries %v", es)
+	}
+}
+
+func TestAppendFailsWhenTheLogCannotBeRotated(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "audit.jsonl")
+	if err := os.WriteFile(p, make([]byte, maxBytes), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(p+".old", "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := Append(p, Entry{Line: "new"}); err == nil {
+		t.Error("rotation onto a folder should fail")
+	}
+}

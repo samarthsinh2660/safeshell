@@ -290,3 +290,24 @@ func TestCtrlOCannotBypassTheGuardEither(t *testing.T) {
 		t.Fatal("Ctrl-O ran the command without the guard")
 	}
 }
+
+func TestCtrlCAtTheQuestionCancelsTheLine(t *testing.T) {
+	if _, err := os.Stat(ssBin); err != nil {
+		t.Skip("bin/safeshell not built (run: make build)")
+	}
+	d := t.TempDir()
+	victim := filepath.Join(d, "proj")
+	_ = os.MkdirAll(victim, 0o755)
+	_ = os.WriteFile(filepath.Join(victim, "a.txt"), []byte("x"), 0o644)
+	sh := startBash(t)
+	sh.waitFor(t, "READY>")
+	sh.send(`eval "$(safeshell hook bash)"` + "\r")
+	sh.send("rm -rf " + victim + "\r")
+	sh.waitFor(t, "[c] cancel")
+	sh.send("\x03")
+	sh.send("echo after-ctrl-c\r")
+	sh.waitFor(t, "after-ctrl-c\r\n")
+	if _, err := os.Stat(filepath.Join(victim, "a.txt")); err != nil {
+		t.Fatal("Ctrl-C at the question ran the command")
+	}
+}

@@ -29,7 +29,10 @@ func buildBackend(c config.Config, dirs runtime.Dirs) (ai.Backend, error) {
 		if !ok {
 			return nil, errors.New("no cloud provider chosen: type /models")
 		}
-		key := config.Key(p)
+		key, err := config.Key(p)
+		if err != nil {
+			return nil, err
+		}
 		if key == "" {
 			return nil, errors.New("no API key for " + p.Title + ": type /models")
 		}
