@@ -255,6 +255,34 @@ func TestAnEnvironmentOverrideIsNeverSavedByTheMenu(t *testing.T) {
 	}
 }
 
+func TestEnvironmentKeyIsSaidToTakePrecedenceWhenReplacing(t *testing.T) {
+	fx := newMenu(t, "key 6\nq\n", "sk-new-saved-key-123456", nil)
+	t.Setenv("OPENAI_API_KEY", "sk-env-key-1234567890")
+	fx.m.Run(context.Background())
+	out := fx.out.String()
+	if !strings.Contains(out, "key from environment") {
+		t.Errorf("the menu does not show the key comes from the environment:\n%s", out)
+	}
+	if !strings.Contains(out, "key from environment (saved key not used)") {
+		t.Errorf("the menu row does not say the saved key is unused:\n%s", out)
+	}
+	if !strings.Contains(out, "but it is not used yet: OPENAI_API_KEY is set in your environment") {
+		t.Errorf("the saved key is not explained as overridden:\n%s", out)
+	}
+	if strings.Contains(out, "connected and in use") {
+		t.Errorf("the message claims the overridden saved key is in use:\n%s", out)
+	}
+}
+
+func TestSavedKeyWithoutEnvironmentKeyGetsNoNote(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	fx := newMenu(t, "key 6\nq\n", "sk-new-saved-key-123456", nil)
+	fx.m.Run(context.Background())
+	if out := fx.out.String(); strings.Contains(out, "takes precedence") || strings.Contains(out, "from environment") {
+		t.Errorf("unexpected environment note:\n%s", out)
+	}
+}
+
 func fakeList(list []ai.ModelInfo, err error) func(context.Context, providers.Provider, string) ([]ai.ModelInfo, error) {
 	return func(context.Context, providers.Provider, string) ([]ai.ModelInfo, error) { return list, err }
 }

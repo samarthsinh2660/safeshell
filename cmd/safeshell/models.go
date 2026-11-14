@@ -97,6 +97,12 @@ func (m *modelMenu) render(c config.Config) {
 		if config.Key(p) != "" {
 			key = "key saved"
 		}
+		if p.EnvKeyName() != "" {
+			key = "key from environment"
+			if config.Key(p) != "" {
+				key += " (saved key not used)"
+			}
+		}
 		model := p.DefaultModel
 		if c.AI.Cloud.Provider == p.ID && c.AI.Cloud.Model != "" {
 			model = c.AI.Cloud.Model
@@ -225,7 +231,11 @@ func (m *modelMenu) connect(ctx context.Context, c config.Config, p providers.Pr
 	if c.AI.Mode != ai.Hybrid {
 		c.AI.Mode = ai.Cloud
 	}
-	m.save(c, p.Title+" ("+p.Maker+") is connected and in use.")
+	msg := p.Title + " (" + p.Maker + ") is connected and in use."
+	if env := p.EnvKeyName(); env != "" {
+		msg = "Saved the key for " + p.Title + " (" + p.Maker + "), but it is not used yet: " + env + " is set in your environment and takes precedence. Run unset " + env + " (and remove it from your shell startup file) to use the saved key."
+	}
+	m.save(c, msg)
 }
 
 // current is the cloud model in use for p: the saved one, or the provider's default.

@@ -41,12 +41,21 @@ func Find(id string) (Provider, bool) {
 	return Provider{}, false
 }
 
+// EnvKeyName is the environment variable that supplies p's key, or "" if none is set.
+// The first variable in Env with a non-blank value wins.
+func (p Provider) EnvKeyName() string {
+	for _, e := range p.Env {
+		if strings.TrimSpace(os.Getenv(e)) != "" {
+			return e
+		}
+	}
+	return ""
+}
+
 // KeyFromEnv returns the key set in the environment, if any.
 func (p Provider) KeyFromEnv() string {
-	for _, e := range p.Env {
-		if v := strings.TrimSpace(os.Getenv(e)); v != "" {
-			return v
-		}
+	if e := p.EnvKeyName(); e != "" {
+		return strings.TrimSpace(os.Getenv(e))
 	}
 	return ""
 }
