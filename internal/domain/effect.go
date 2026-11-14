@@ -32,6 +32,7 @@ const (
 	EffectServices   EffectKind = "services"
 	EffectGit        EffectKind = "git"
 	EffectContainers EffectKind = "containers"
+	EffectDatabase   EffectKind = "database"
 )
 
 // Effect is one thing a command would do, with how sure we are.

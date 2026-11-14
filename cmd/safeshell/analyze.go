@@ -45,7 +45,7 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 		run := func(dir string, args ...string) (string, error) { return gitRunner(bctx, env, dir, args...) }
 		return effects.InspectGit(run, cwd, cmds)
 	}
-	// Each of the two gets its own budget, which also ends with the request.
+	// Each of the three gets its own budget, which also ends with the request.
 	tool := func(f func(effects.Runner, []shellparse.Command) []domain.Effect) engine.Inspector {
 		return func(cmds []shellparse.Command) []domain.Effect {
 			bctx, cancel := context.WithTimeout(ctx, inspectBudget)
@@ -54,7 +54,7 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 		}
 	}
 	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{inspectProcesses, inspectDisks, inspectPackages, inspectServices, inspectRepo,
-		tool(effects.InspectDocker), tool(effects.InspectKubectl)}}
+		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	return e.Analyze(ctx, line, cwd)
 }
 
