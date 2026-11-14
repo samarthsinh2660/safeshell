@@ -100,9 +100,9 @@ func TestSweepEveryLabelledCommandThroughTheRealBinary(t *testing.T) {
 			if a.Level < a.Verdict.Level {
 				add("final level is lower than the rules' level")
 			}
-			// A delete of the whole filesystem legitimately hits the sandbox time limit;
-			// that is fine as long as it is reported and the command stays high-risk.
-			if a.Sim != nil && a.Sim.TimedOut && (a.SimNote == "" || a.Level < domain.R3) {
+			// A delete of the whole filesystem, or a listener such as `nc -l`, legitimately hits the
+			// sandbox time limit; that is fine as long as it is reported and never runs unattended.
+			if a.Sim != nil && a.Sim.TimedOut && (a.SimNote == "" || a.Decision == domain.Allow) {
 				add("simulation timed out without being flagged")
 			}
 			if el > 45*time.Second {
