@@ -41,6 +41,8 @@ func TestRuleGapsV14(t *testing.T) {
 		{"pkill sh", R3},
 		{"pkill bash", R2},
 		{"pkill a", R3},
+		{"pkill -x vi", R2},
+		{"pkill --exact sh", R2},
 		{"pkill", R2},
 	} {
 		if got := Classify(tc.line).Level; got != tc.want {

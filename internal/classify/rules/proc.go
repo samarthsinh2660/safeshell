@@ -36,7 +36,7 @@ func rulePkill(c shellparse.Command, f flags) []Finding {
 	switch {
 	case ownedByRoot(f.all):
 		level, why, alt = R4, "Stops every process owned by root, which takes the machine down.", "pgrep -a -u root"
-	case len(f.pos) > 0 && len(f.pos[len(f.pos)-1]) <= 2:
+	case len(f.pos) > 0 && len(f.pos[len(f.pos)-1]) <= 2 && !f.has('x', "exact"): // -x matches the whole name only
 		level, why = R3, "Stops every process whose name contains this very short pattern, which is likely to match far more than you expect."
 	}
 	return one(fnd(level, c, why).WithAlt(alt, "lists what would match, without stopping anything"))

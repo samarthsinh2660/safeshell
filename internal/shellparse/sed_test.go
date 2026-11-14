@@ -15,6 +15,7 @@ func TestSedActions(t *testing.T) {
 		{[]string{"s/x/y/gw out.txt"}, nil, []string{"out.txt"}},
 		{[]string{"-e", "w a", "-e", "W b"}, nil, []string{"a", "b"}},
 		{[]string{"-ew a"}, nil, []string{"a"}},
+		{[]string{"# write nothing\np", "f"}, nil, nil},
 		{[]string{"--expression=w a"}, nil, []string{"a"}},
 		{[]string{"--expression", "w a"}, nil, []string{"a"}},
 		{[]string{"-e"}, nil, nil},

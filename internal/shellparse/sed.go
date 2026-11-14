@@ -93,7 +93,7 @@ func sedScan(s string) (execs, writes []string) {
 			} else {
 				writes = append(writes, t)
 			}
-		case strings.IndexByte("aicrR:btT", c) >= 0: // text or a file name to the end of the line
+		case strings.IndexByte("aicrR:btT#", c) >= 0: // text, a file name or a comment to the end of the line
 			_, i = rest(i)
 		default: // p, d, n and the other one-letter commands
 			i++
