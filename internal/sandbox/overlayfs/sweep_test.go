@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"syscall"
+	"strings"
 	"testing"
 	"time"
 )
@@ -21,10 +21,7 @@ func TestSweepStaleRemovesOnlyOurAbandonedFolders(t *testing.T) {
 		os.Chmod(filepath.Join(p, "work"), 0o000) // overlay work directories are mode 000
 		return p
 	}
-	dead := os.Getpid() + 1
-	for syscall.Kill(dead, 0) != syscall.ESRCH { // a pid with no process
-		dead++
-	}
+	dead := deadPid(t)
 	gone := mk("ss-sim-" + strconv.Itoa(dead) + "-1")
 	alive := mk("ss-sim-" + strconv.Itoa(os.Getpid()) + "-1")
 	oldLegacy := mk("ss-sim-123456")
@@ -67,4 +64,19 @@ func TestSweepStaleSkipsFoldersOfOtherUsers(t *testing.T) {
 	if _, err := os.Lstat(p); err != nil {
 		t.Error("another user's folder was removed")
 	}
+}
+
+// deadPid is a pid no process can have: one above the kernel's pid_max. The next
+// free pid would race with other test processes starting in parallel.
+func deadPid(t *testing.T) int {
+	t.Helper()
+	b, err := os.ReadFile("/proc/sys/kernel/pid_max")
+	if err != nil {
+		t.Skip("no /proc/sys/kernel/pid_max")
+	}
+	max, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return max + 1
 }

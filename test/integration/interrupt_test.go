@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -54,10 +55,17 @@ func TestCtrlCDuringASimulationLeavesNoScratchFolder(t *testing.T) {
 
 func TestLeftoverScratchFolderOfAFinishedRunIsSweptAtTheNextRun(t *testing.T) {
 	needSandbox(t)
-	dead := os.Getpid() + 1
-	for syscall.Kill(dead, 0) != syscall.ESRCH {
-		dead++
+	// A pid above pid_max belongs to no process; the next free pid could be taken
+	// by another process before the run sweeps.
+	b, err := os.ReadFile("/proc/sys/kernel/pid_max")
+	if err != nil {
+		t.Skip("no /proc/sys/kernel/pid_max")
 	}
+	max, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := max + 1
 	stale := filepath.Join(scratchBase(), "ss-sim-"+strconv.Itoa(dead)+"-leftover")
 	if err := os.Mkdir(stale, 0o700); err != nil {
 		t.Fatal(err)
