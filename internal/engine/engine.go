@@ -57,6 +57,7 @@ func CallerFrom(ctx context.Context) int {
 type Engine struct {
 	Sim        Simulator
 	Inspectors []Inspector
+	Rules      []policy.Rule // the admin's team policy; nil when there is none
 }
 
 // Analysis is everything learned about one command line.
@@ -68,6 +69,10 @@ type Analysis struct {
 	SimNote  string          `json:"sim_note,omitempty"` // why it was not simulated, or why that failed
 	Level    domain.Level    `json:"level"`              // the final level: rules raised by effects
 	Decision domain.Decision `json:"decision"`
+	// Team is what the admin's policy asks of this line; PolicyWarning says the
+	// policy file could not be used (set by the caller that loaded it).
+	Team          policy.Outcome `json:"team"`
+	PolicyWarning string         `json:"policy_warning,omitempty"`
 }
 
 // Analyze rates line, inspects the real system, simulates when the rules say the
@@ -85,10 +90,9 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 		a.Effects = append(a.Effects, inspect(cmds)...)
 	}
 
+	a.Team = policy.Evaluate(e.Rules, cmds)
 	a.simulate(ctx, e.Sim, cwd)
-
-	a.Level = policy.FinalLevel(a.Verdict.Level, a.Effects)
-	a.Decision = policy.Decide(a.Level, a.Effects)
+	a.decide()
 	return a
 }
 
@@ -101,7 +105,7 @@ func needsSimulation(v domain.Verdict) bool {
 
 func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 	switch {
-	case !needsSimulation(a.Verdict):
+	case !needsSimulation(a.Verdict) && !a.Team.Snapshot: // a snapshot needs the list of files the run changes
 		if a.Verdict.Level >= domain.R4 {
 			a.SimNote = "not simulated: rated catastrophic from the command text alone"
 		}
@@ -156,6 +160,13 @@ func (a *Analysis) estimated(why string) domain.Effect {
 // Effects can only raise the level, never lower it.
 func (a *Analysis) AddEffect(e domain.Effect) {
 	a.Effects = append(a.Effects, e)
+	a.decide()
+}
+
+// decide sets the final level and decision: the rules raised by effects, then by
+// the team policy. Each step can only raise.
+func (a *Analysis) decide() {
 	a.Level = policy.FinalLevel(a.Verdict.Level, a.Effects)
 	a.Decision = policy.Decide(a.Level, a.Effects)
+	a.Level, a.Decision = a.Team.Apply(a.Level, a.Decision)
 }
