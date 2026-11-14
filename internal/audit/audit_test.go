@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,15 @@ func TestDefaultPathHonoursXDG(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "/x")
 	if got := DefaultPath(); got != "/x/safeshell/audit.jsonl" {
 		t.Error(got)
+	}
+}
+
+func TestDefaultPathDefaultFallback(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "")
+	h, _ := os.UserHomeDir()
+	expected := filepath.Join(h, ".local", "state", "safeshell", "audit.jsonl")
+	if got := DefaultPath(); got != expected {
+		t.Errorf("got %s, want %s", got, expected)
 	}
 }
 
@@ -93,5 +103,85 @@ func TestOutcome(t *testing.T) {
 func TestAppendFailsWhenThePathIsAFolder(t *testing.T) {
 	if Append(t.TempDir(), Entry{}) == nil {
 		t.Error("expected an error when the path is a folder")
+	}
+}
+
+func TestReadMissingFileReturnsNil(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "nonexistent.jsonl")
+	entries, skipped, err := Read(p)
+	if err != nil || skipped != 0 || entries != nil {
+		t.Fatalf("expected nil, 0, nil; got entries=%v, skipped=%d, err=%v", entries, skipped, err)
+	}
+}
+
+func TestReadSkipsCorruptedLinesAndBlankLines(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "audit.jsonl")
+	content := "\n\n{\"time\":\"2026-11-12T09:00:00Z\",\"line\":\"ls\",\"level\":\"R0\",\"decision\":\"allow\",\"outcome\":\"ran\"}\n\n{broken json line\n{\"time\":\"2026-11-12T09:01:00Z\",\"line\":\"pwd\",\"level\":\"R0\",\"decision\":\"allow\",\"outcome\":\"ran\"}\n"
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, skipped, err := Read(p)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if skipped != 1 {
+		t.Errorf("expected 1 skipped line, got %d", skipped)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 valid entries, got %d", len(entries))
+	}
+	if entries[0].Line != "ls" || entries[1].Line != "pwd" {
+		t.Errorf("unexpected entries: %+v", entries)
+	}
+}
+
+func TestReadLineOver64KB(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "large.jsonl")
+	bigLine := strings.Repeat("echo 'a';", 10000) // ~100 KB
+	e := Entry{
+		Time:     time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC),
+		Line:     bigLine,
+		Level:    "R1",
+		Decision: "allow",
+		Outcome:  "ran",
+	}
+	data, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, append(data, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, skipped, err := Read(p)
+	if err != nil {
+		t.Fatalf("failed to read line >64KB: %v", err)
+	}
+	if skipped != 0 || len(entries) != 1 {
+		t.Fatalf("expected 1 entry, 0 skipped; got len=%d, skipped=%d", len(entries), skipped)
+	}
+	if entries[0].Line != bigLine {
+		t.Errorf("line content mismatch")
+	}
+}
+
+func TestReadLineExceeding1MBReturnsScannerError(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "huge.jsonl")
+	hugeLine := strings.Repeat("x", 2*1024*1024)
+	if err := os.WriteFile(p, []byte(hugeLine+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := Read(p)
+	if err == nil {
+		t.Error("expected scanner error on line >1MB")
+	}
+}
+
+func TestReadFailsOnUnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	_, _, err := Read(dir)
+	if err == nil {
+		t.Error("expected error reading directory as file")
 	}
 }
