@@ -73,6 +73,75 @@ func TestExplain(t *testing.T) {
 	}
 }
 
+func TestExplainWhyWorksWithTheAIOff(t *testing.T) {
+	got := fakeAnalyze(t, sampleAnalysis())
+	useAI(t, nil, nil)
+	code, out, e := runSS("explain", "--why", "rm", "-rf", "~/projects")
+	if code != 0 || e != "" || got[0] != "rm -rf ~/projects" {
+		t.Fatalf("%d %q %q %v", code, out, e, got)
+	}
+	for _, want := range []string{"R3 Irreversible", "Rule level: R3", "OBSERVED  files: would delete 4,312 files", "Set by the rule: Recursively"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "In plain English") {
+		t.Error("no AI text without an AI")
+	}
+	useAI(t, nil, errors.New("broken config")) // a backend that cannot start is the same as off
+	if code, out, _ := runSS("explain", "--why", "ls"); code != 0 || !strings.Contains(out, "Final level") {
+		t.Errorf("%d %q", code, out)
+	}
+}
+
+func TestExplainWhyAddsTheAITextWhenSet(t *testing.T) {
+	fakeAnalyze(t, sampleAnalysis())
+	useAI(t, fakeAI{reply: "It deletes your projects folder for good."}, nil)
+	code, out, _ := runSS("explain", "--why", "rm -rf ~/projects")
+	if code != 0 || !strings.Contains(out, "Final level: R3") || !strings.Contains(out, "In plain English") {
+		t.Errorf("%d %q", code, out)
+	}
+	useAI(t, fakeAI{err: errors.New("offline")}, nil)
+	code, out, e := runSS("explain", "--why", "rm -rf ~/projects")
+	if code != 1 || !strings.Contains(out, "Final level: R3") || !strings.Contains(e, "offline") {
+		t.Errorf("the reasons are still shown when the AI fails: %d %q %q", code, out, e)
+	}
+}
+
+func TestExplainWhyIncludesTheAIReview(t *testing.T) {
+	a := sampleAnalysis()
+	a.Level, a.Decision, a.Verdict.Level = domain.R2, domain.Confirm, domain.R2
+	a.Verdict.Findings[0].Level = domain.R2
+	a.Effects = nil
+	fakeAnalyze(t, a)
+	useAI(t, fakeAI{reply: `{"level":"R3","reason":"Deletes the only copy of a thesis."}`}, nil)
+	_, out, _ := runSS("explain", "--why", "mv thesis.pdf /dev/null")
+	if !strings.Contains(out, "Final level: R3") || !strings.Contains(out, "Set by the review effect") {
+		t.Errorf("the AI review must count, as it does in the hook:\n%s", out)
+	}
+}
+
+func TestExplainNeedsARealCommand(t *testing.T) {
+	for _, args := range [][]string{{"--why", ""}, {"--why", "  "}, {""}} {
+		if code, _, e := runSS(append([]string{"explain"}, args...)...); code != 2 || !strings.Contains(e, "give a command") {
+			t.Errorf("%v: %d %q", args, code, e)
+		}
+	}
+}
+
+func TestExplainWithoutWhyPointsToIt(t *testing.T) {
+	useAI(t, nil, nil)
+	if _, _, e := runSS("explain", "ls"); !strings.Contains(e, "explain --why") {
+		t.Errorf("%q", e)
+	}
+}
+
+func TestExplainWhyNeedsACommand(t *testing.T) {
+	if code, _, e := runSS("explain", "--why"); code != 2 || e == "" {
+		t.Errorf("%d %q", code, e)
+	}
+}
+
 func TestAskTranslatesThenGuards(t *testing.T) {
 	a := sampleAnalysis()
 	a.Level, a.Decision = domain.R0, domain.Allow

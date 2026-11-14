@@ -27,8 +27,8 @@ flowchart TD
 | Command name | `safeshell`. `/usr/bin/ss` belongs to `iproute2` on every Debian/Ubuntu machine, so a binary called `ss` cannot be packaged |
 | Dependencies in Debian | `mvdan.cc/sh` 3.14.1, `x/sys` 0.49.0, `x/term` 0.47.0 and Go 1.26 are all in Debian unstable |
 | `debian/` source package | present: `control`, `rules`, `changelog`, `copyright`, `watch`, `postinst`, `postrm`, man page, `README.Debian` |
-| Builds offline in a clean Debian unstable container | yes; the 28 test packages pass inside the build |
-| `lintian --pedantic` | no errors; one warning left (the ITP bug number, see step 4) |
+| Builds offline in a clean Debian unstable container | yes; the 30 test packages pass inside the build |
+| `lintian --pedantic` | no errors |
 | No download at install time | yes; `safeshell ai setup` downloads only when the user runs it |
 
 Re-run the check any time (needs Docker):
@@ -55,24 +55,22 @@ These steps need your accounts and identity, so only you can do them.
 3. **Route A (PPA).** On Launchpad choose *Create a new PPA* named `safeshell`. Then, from the repo root:
    ```bash
    sudo apt install devscripts debhelper dh-golang
-   # edit debian/changelog: change UNRELEASED to your Ubuntu series, e.g. "noble", and the version to 1.0.0-1~ppa1
+   # edit debian/changelog: change unstable to your Ubuntu series, e.g. "noble", and the version to 1.1.0-1~ppa1
    debuild -S -sa
-   dput ppa:<your-launchpad-id>/safeshell ../safeshell_1.0.0-1~ppa1_source.changes
+   dput ppa:<your-launchpad-id>/safeshell ../safeshell_1.1.0-1~ppa1_source.changes
    ```
    Launchpad emails you when it builds. Note: Launchpad builds without network, and Ubuntu's own Go and library
    packages are older than Debian unstable's, so the PPA build can fail on the dependency versions for older Ubuntu
    releases. Target the newest Ubuntu series first. If it fails, Route B is the way.
 4. **Route B (Debian).**
    - Create a Debian account at <https://salsa.debian.org> (optional) and subscribe to `debian-mentors`.
-   - File the ITP: `sudo apt install reportbug && reportbug wnpp` and choose *ITP*. Title:
-     `ITP: safeshell -- safety layer for your terminal`. Debian emails you the bug number.
-   - Put that number into `debian/changelog` in place of `#ITP-BUG-NUMBER` (the warning goes away).
+   - The ITP is filed as #1153343 and `debian/changelog` already closes it (`Closes: #1153343`).
    - Register at <https://mentors.debian.net> and upload the signed source package:
      ```bash
      debuild -S -sa
-     dput mentors ../safeshell_1.0.0-1_source.changes
+     dput mentors ../safeshell_1.1.0-1_source.changes
      ```
-   - Email `debian-mentors@lists.debian.org` with subject `RFS: safeshell/1.0.0-1 [ITP]`, the mentors link,
+   - Email `debian-mentors@lists.debian.org` with subject `RFS: safeshell/1.1.0-1 [ITP]`, the mentors link,
      and two lines on what it does. A Debian Developer reviews it, asks for changes, and uploads it for you.
    - After upload it waits in the NEW queue (days to weeks), then enters unstable.
 5. **Ubuntu** copies Debian's packages into its next release automatically; nothing to submit. If you miss the
@@ -86,7 +84,7 @@ sequenceDiagram
     participant DD as Debian Developer (sponsor)
     participant NEW as NEW queue
     You->>BTS: reportbug wnpp (ITP)
-    BTS-->>You: bug number
+    BTS-->>You: bug number (#1153343)
     You->>M: dput mentors (signed source package)
     You->>DD: RFS email to debian-mentors
     DD-->>You: review comments, you fix and re-upload

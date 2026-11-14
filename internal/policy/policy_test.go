@@ -44,3 +44,11 @@ func TestFinalLevelOnlyRaises(t *testing.T) {
 		t.Error("no effects leaves the level alone")
 	}
 }
+
+func TestWorthReviewOnlyForR2AndR3(t *testing.T) {
+	for l, want := range map[domain.Level]bool{domain.R0: false, domain.R1: false, domain.R2: true, domain.R3: true, domain.R4: false} {
+		if got := WorthReview(l); got != want {
+			t.Errorf("WorthReview(%s) = %v, want %v", l, got, want)
+		}
+	}
+}

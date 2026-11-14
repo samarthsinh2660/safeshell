@@ -1,0 +1,13 @@
+R3 Irreversible: it is blocked, and you can override
+$ echo hi | sudo rm -rf x
+
+1. The rules (they read the command text)
+   R3  Deletes as root.
+       in: sudo rm -rf x
+   Rule level: R3
+
+2. What it would really do (how sure, least to most: estimated, inspected, previewed, observed)
+   Nothing seen here can lower the level.
+
+3. Final level: R3
+   Set by the rule: Deletes as root.

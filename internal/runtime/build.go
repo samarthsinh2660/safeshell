@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+
+	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
 // Tag is the pinned llama.cpp release.
@@ -136,15 +138,7 @@ type Dirs struct{ Data, State string }
 
 // DefaultDirs follows the XDG spec.
 func DefaultDirs() Dirs {
-	home, _ := os.UserHomeDir()
-	d := Dirs{Data: filepath.Join(home, ".local", "share", "safeshell"), State: filepath.Join(home, ".local", "state", "safeshell")}
-	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
-		d.Data = filepath.Join(x, "safeshell")
-	}
-	if x := os.Getenv("XDG_STATE_HOME"); x != "" {
-		d.State = filepath.Join(x, "safeshell")
-	}
-	return d
+	return Dirs{Data: xdg.Dir("XDG_DATA_HOME", ".local", "share"), State: xdg.Dir("XDG_STATE_HOME", ".local", "state")}
 }
 
 // EngineDir is where one build is unpacked.

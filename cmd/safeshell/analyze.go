@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -64,49 +63,66 @@ func inspectServices(cmds []shellparse.Command) []domain.Effect {
 	return effects.InspectServices(realRunner, cmds)
 }
 
-func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
-	cwd, asJSON, verbose := "", false, false
-	for len(args) > 0 && strings.HasPrefix(args[0], "--") {
-		switch args[0] {
-		case "--json":
-			asJSON = true
-		case "--verbose":
-			verbose = true
-		case "--cwd":
+// flags are the options analyze and simulate share.
+type flags struct {
+	json, verbose bool
+	cwd           string
+	timeout       time.Duration // only read when parseFlags was asked for it
+}
+
+// parseFlags reads the leading --json, --verbose and --cwd DIR options (and
+// --timeout DURATION when withTimeout is set) and returns the command words
+// that follow. cmd names the subcommand in messages. ok is false once a message
+// has been printed and the caller should exit 2.
+func parseFlags(cmd string, args []string, withTimeout bool, stderr io.Writer) (f flags, rest []string, ok bool) {
+	for len(args) > 0 && strings.HasPrefix(args[0], "--") && args[0] != "--" {
+		switch {
+		case args[0] == "--json":
+			f.json = true
+		case args[0] == "--verbose":
+			f.verbose = true
+		case args[0] == "--cwd" || (withTimeout && args[0] == "--timeout"):
 			if len(args) < 2 {
 				fmt.Fprint(stderr, usage)
-				return 2
+				return f, nil, false
 			}
-			cwd, args = args[1], args[1:]
+			if args[0] == "--cwd" {
+				f.cwd = args[1]
+			} else if d, err := time.ParseDuration(args[1]); err != nil {
+				fmt.Fprintf(stderr, "safeshell %s: bad --timeout %q (try 5s)\n", cmd, args[1])
+				return f, nil, false
+			} else {
+				f.timeout = d
+			}
+			args = args[1:]
 		default:
-			fmt.Fprintf(stderr, "safeshell analyze: unknown option %s\n", args[0])
-			return 2
+			unknownOption(cmd, args, stderr)
+			return f, nil, false
 		}
 		args = args[1:]
 	}
+	args, _ = endOptions(cmd, args, stderr) // what is left is "--" or the command, never an option
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
+		return f, nil, false
+	}
+	return f, args, true
+}
+
+func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
+	f, args, ok := parseFlags("analyze", args, false, stderr)
+	if !ok {
 		return 2
 	}
 	line := strings.Join(args, " ")
-	if cwd == "" {
-		cwd, _ = os.Getwd()
-	}
+	cwd := cwdOr(f.cwd)
 	a := analyze(context.Background(), line, cwd)
-	if asJSON {
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(a)
+	if f.json {
+		printJSON(stdout, a)
 	} else {
-		printAnalysis(stdout, a, cwd, color, verbose)
+		printAnalysis(stdout, a, cwd, color, f.verbose)
 	}
-	switch a.Decision {
-	case domain.HardBlock:
-		return 4
-	case domain.Block:
-		return 3
-	}
-	return 0
+	return a.Decision.ExitCode()
 }
 
 var decisionText = map[domain.Decision]string{
@@ -148,7 +164,7 @@ func hiddenNotes(w io.Writer, n int, dim, reset string) {
 
 func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bool) {
 	c := newPalette(color)
-	col := [...]string{c.green, c.green, c.yellow, c.red, c.red}[a.Level]
+	col := c.level(a.Level)
 	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, a.Level, a.Level.Label(), c.reset, decisionText[a.Decision])
 	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, report.Printable(a.Line), c.reset)
 	if a.Level > a.Verdict.Level {
@@ -182,10 +198,5 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 		}
 		hiddenNotes(w, hidden, c.dim, c.reset)
 	}
-	if len(a.Verdict.Alternatives) > 0 {
-		fmt.Fprintf(w, "\n%sSafer options%s\n", c.bold, c.reset)
-		for i, alt := range a.Verdict.Alternatives {
-			fmt.Fprintf(w, "  %d) %s%s%s\n     %s\n", i+1, c.green, report.Printable(alt.Command), c.reset, report.Printable(alt.Note))
-		}
-	}
+	printAlternatives(w, c, a.Verdict.Alternatives)
 }

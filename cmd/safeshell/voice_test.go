@@ -155,7 +155,7 @@ func useSetup(t *testing.T, s voice.Setup) {
 func TestVoiceStatus(t *testing.T) {
 	useSetup(t, fakeSetup(t))
 	_, out, _ := runSS("voice", "status")
-	for _, want := range []string{"recorder: none found: install pipewire-bin, pulseaudio-utils or alsa-utils", "engine:   not set up: safeshell voice setup", "model:    not downloaded"} {
+	for _, want := range []string{"recorder: none found: safeshell voice setup installs one", "engine:   not set up: safeshell voice setup", "model:    not downloaded"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in %q", want, out)
 		}
@@ -167,11 +167,144 @@ func TestVoiceStatus(t *testing.T) {
 	}
 }
 
-func TestVoiceSetupNeedsBuildTools(t *testing.T) {
+func TestVoiceSetupWithoutAptNamesWhatIsMissing(t *testing.T) {
 	useSetup(t, fakeSetup(t))
 	code, _, errOut := runSS("voice", "setup")
-	if code != 1 || !strings.Contains(errOut, "needs cmake and a C++ compiler") {
+	if code != 1 || !strings.Contains(errOut, "needs cmake, g++, make") || !strings.Contains(errOut, "package manager") {
 		t.Errorf("%d %q", code, errOut)
+	}
+}
+
+// aptSetup has apt-get but no build tools or recorder; RunTTY records the call.
+func aptSetup(t *testing.T, ran *[]string) voice.Setup {
+	s := fakeSetup(t, "apt-get")
+	s.RunTTY = func(_ context.Context, name string, args ...string) error {
+		*ran = append(*ran, name+" "+strings.Join(args, " "))
+		return errors.New("stop here")
+	}
+	return s
+}
+
+func TestVoiceSetupAsksBeforeInstallingTools(t *testing.T) {
+	const cmd = "sudo apt-get install -y cmake g++ make pipewire-bin"
+	for name, tc := range map[string]struct {
+		input string
+		args  []string
+		ran   bool
+	}{"yes": {"y\n", nil, true}, "enter": {"\n", nil, true}, "no": {"n\n", nil, false}, "--yes": {"", []string{"--yes"}, true}} {
+		var ran []string
+		useSetup(t, aptSetup(t, &ran))
+		typed(t, tc.input)
+		code, out, errOut := runSS(append([]string{"voice", "setup"}, tc.args...)...)
+		if code != 1 || !strings.Contains(out, cmd) || (tc.ran != (len(ran) == 1)) || !strings.Contains(errOut, "safeshell voice setup") {
+			t.Errorf("%s: %d %q %q %v", name, code, out, errOut, ran)
+		}
+		if tc.ran && ran[0] != "sudo apt-get install -y cmake g++ make pipewire-bin" {
+			t.Errorf("%s: %v", name, ran)
+		}
+	}
+}
+
+func TestVoiceSetupWithoutATerminalPrintsTheCommandAndStops(t *testing.T) {
+	var ran []string
+	useSetup(t, aptSetup(t, &ran))
+	file := filepath.Join(t.TempDir(), "in") // a plain file is not a terminal
+	_ = os.WriteFile(file, nil, 0o600)
+	pipe, _ := os.Open(file)
+	defer pipe.Close()
+	old := guardInput
+	t.Cleanup(func() { guardInput = old })
+	guardInput = func() io.Reader { return pipe }
+	code, out, errOut := runSS("voice", "setup")
+	if code != 1 || len(ran) != 0 || !strings.Contains(out, "sudo apt-get install") || !strings.Contains(errOut, "could not read an answer") {
+		t.Errorf("%d %q %q %v", code, out, errOut, ran)
+	}
+}
+
+func TestVoiceSetupTreatsEndOfInputAsNo(t *testing.T) {
+	var ran []string
+	useSetup(t, aptSetup(t, &ran))
+	typed(t, "") // Ctrl-D, or input from /dev/null
+	code, _, errOut := runSS("voice", "setup")
+	if code != 1 || len(ran) != 0 || !strings.Contains(errOut, "could not read an answer") {
+		t.Errorf("%d %q %v", code, errOut, ran)
+	}
+}
+
+// interrupted makes Ctrl-C arrive as soon as something reads the input.
+type interrupted struct{ cancel context.CancelFunc }
+
+func (r interrupted) Read(p []byte) (int, error) {
+	r.cancel()
+	return copy(p, "\n"), nil
+}
+
+// ctrlC replaces the interrupt context with one the test cancels itself.
+func ctrlC(t *testing.T) context.CancelFunc {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	old := interruptContext
+	t.Cleanup(func() { interruptContext = old; cancel() })
+	interruptContext = func() (context.Context, context.CancelFunc) { return ctx, cancel }
+	return cancel
+}
+
+func TestVoiceSetupCancelledAtThePromptSaysSo(t *testing.T) {
+	var ran []string
+	useSetup(t, aptSetup(t, &ran))
+	cancel := ctrlC(t)
+	old := guardInput
+	t.Cleanup(func() { guardInput = old })
+	guardInput = func() io.Reader { return interrupted{cancel} } // Ctrl-C, then Enter
+	code, _, errOut := runSS("voice", "setup")
+	if code != 1 || !strings.Contains(errOut, cancelledMsg) || strings.Contains(errOut, "installing") || len(ran) != 0 {
+		t.Errorf("%d %q %v", code, errOut, ran)
+	}
+}
+
+func TestVoiceInterruptedWhileWaitingForEnterIsCancelled(t *testing.T) {
+	cancel := ctrlC(t)
+	useVoice(t, cancelRecorder{cancel}, fakeTranscriber{text: "x"}, nil)
+	pr, pw := io.Pipe() // Enter never comes
+	old := guardInput
+	t.Cleanup(func() { guardInput = old; pw.Close() })
+	guardInput = func() io.Reader { return pr }
+	code, _, errOut := runSS("voice", "--text")
+	if code != 1 || !strings.Contains(errOut, cancelledMsg) {
+		t.Errorf("%d %q", code, errOut)
+	}
+}
+
+// cancelRecorder finishes at once, and Ctrl-C arrives right after.
+type cancelRecorder struct{ cancel context.CancelFunc }
+
+func (r cancelRecorder) Record(context.Context, <-chan struct{}) (string, func(), error) {
+	r.cancel()
+	return "/tmp/fake.wav", func() {}, nil
+}
+
+func TestVoiceSaysTimeIsUpWhenTheRecorderRunsToTheLimit(t *testing.T) {
+	old := voiceLimit
+	t.Cleanup(func() { voiceLimit = old })
+	voiceLimit = 0
+	useVoice(t, instantRecorder{}, fakeTranscriber{text: "x"}, nil)
+	pr, pw := io.Pipe()
+	oldIn := guardInput
+	t.Cleanup(func() { guardInput = oldIn; pw.Close() })
+	guardInput = func() io.Reader { return pr }
+	done := make(chan string, 1)
+	go func() { _, _, e := runSS("voice", "--text"); done <- e }()
+	_, _ = pw.Write([]byte("\n"))
+	if e := <-done; !strings.Contains(e, "Time is up") {
+		t.Errorf("%q", e)
+	}
+}
+
+func TestVoiceSetupRejectsUnknownOptions(t *testing.T) {
+	for _, a := range [][]string{{"--bogus"}, {"--yes", "x"}} {
+		if code, _, e := runSS(append([]string{"voice", "setup"}, a...)...); code != 2 || !strings.Contains(e, "Usage:") {
+			t.Errorf("%v: %d %q", a, code, e)
+		}
 	}
 }
 
@@ -195,7 +328,7 @@ func TestDoctorVoiceRows(t *testing.T) {
 	f.Close()
 	doctorVoice(&b, s, run, " 0 [PCH            ]: HDA-Intel\n")
 	out = b.String()
-	if !strings.Contains(out, "none (install pipewire-bin") || !strings.Contains(out, "a sound card is present") || !strings.Contains(out, "downloaded") || strings.Contains(out, "not downloaded") {
+	if !strings.Contains(out, "none (safeshell voice setup installs one") || !strings.Contains(out, "a sound card is present") || !strings.Contains(out, "downloaded") || strings.Contains(out, "not downloaded") {
 		t.Errorf("%q", out)
 	}
 	b.Reset()
@@ -263,7 +396,7 @@ func TestDefaultNewVoice(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 	useSetup(t, readySetup(t))
-	if _, _, err := newVoice(); err == nil || !strings.Contains(err.Error(), "No recorder found") || !strings.Contains(err.Error(), "pipewire-bin") {
+	if _, _, err := newVoice(); err == nil || !strings.Contains(err.Error(), "No recorder found") || !strings.Contains(err.Error(), "safeshell voice setup") {
 		t.Errorf("%v", err)
 	}
 	useSetup(t, readySetup(t, "arecord"))
@@ -283,7 +416,7 @@ func TestVoiceRecorderFailureIsReported(t *testing.T) {
 }
 
 func TestVoiceSetupSucceedsWhenEverythingIsThere(t *testing.T) {
-	useSetup(t, readySetup(t))
+	useSetup(t, readySetup(t, "arecord"))
 	code, out, errOut := runSS("voice", "setup")
 	if code != 0 || !strings.Contains(out, "Speech engine ready: /usr/bin/whisper-cli") || !strings.Contains(out, "Speech model ready:") || errOut != "" {
 		t.Errorf("%d %q %q", code, out, errOut)
@@ -297,7 +430,7 @@ func (notFound) RoundTrip(*http.Request) (*http.Response, error) {
 }
 
 func TestVoiceSetupModelDownloadFails(t *testing.T) {
-	s := fakeSetup(t, "whisper-cli")
+	s := fakeSetup(t, "whisper-cli", "arecord")
 	s.Client = &http.Client{Transport: notFound{}}
 	useSetup(t, s)
 	code, _, errOut := runSS("voice", "setup")
@@ -319,5 +452,15 @@ func TestVoiceStatusReady(t *testing.T) {
 	useSetup(t, b)
 	if _, out, _ := runSS("voice", "status"); !strings.Contains(out, "engine:   "+b.EnginePath()+"\n") {
 		t.Errorf("%q", out)
+	}
+}
+
+func TestVoiceSetupReportsAnEngineSourceDownloadFailure(t *testing.T) {
+	s := fakeSetup(t, "cmake", "g++", "make", "arecord")
+	s.Client = &http.Client{Transport: notFound{}}
+	useSetup(t, s)
+	code, _, errOut := runSS("voice", "setup")
+	if code != 1 || !strings.Contains(errOut, "could not download the speech engine source") {
+		t.Errorf("%d %q", code, errOut)
 	}
 }

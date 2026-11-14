@@ -108,3 +108,10 @@ func TestUndoReportsWhatCouldNotBeRestored(t *testing.T) {
 		t.Errorf("%d %q", code, out)
 	}
 }
+
+func TestSnapshotDirFollowsXDG(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", "/data")
+	if got := snapshotDir(); got != "/data/safeshell/snapshots" {
+		t.Error(got)
+	}
+}

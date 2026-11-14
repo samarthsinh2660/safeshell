@@ -19,7 +19,7 @@ const voiceNotSetUp = "Voice is not set up yet. Run:  safeshell voice setup   (b
 
 // voiceSetup says where voice files live and which tools exist; tests replace it.
 var voiceSetup = func() voice.Setup {
-	return voice.Setup{Dirs: runtime.DefaultDirs(), LookPath: exec.LookPath}
+	return voice.Setup{Dirs: runtime.DefaultDirs(), LookPath: exec.LookPath, RunTTY: voice.RunTTY}
 }
 
 // newVoice returns the recorder and transcriber to use, or an error saying
@@ -32,10 +32,19 @@ var newVoice = func() (voice.Recorder, voice.Transcriber, error) {
 	}
 	rec, ok := voice.PickRecorder(s.LookPath)
 	if !ok {
-		return nil, nil, errors.New("No recorder found. Install one with:  sudo apt install pipewire-bin  (or pulseaudio-utils or alsa-utils)")
+		return nil, nil, errors.New("No recorder found. Run  safeshell voice setup  to install one")
 	}
 	return rec, voice.WhisperCLI{Bin: st.EngineBin, Model: s.ModelPath()}, nil
 }
+
+// interruptContext is cancelled by Ctrl-C. It is a test seam: tests replace it.
+var interruptContext = func() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt)
+}
+
+// voiceLimit is the recording length after which "Time is up" is shown. It is
+// a test seam: tests replace it.
+var voiceLimit = voice.MaxRecord
 
 // runVoice is `safeshell voice [--text | setup | status]`.
 func runVoice(args []string, stdout, stderr io.Writer, color bool) int {
@@ -50,8 +59,8 @@ func runVoice(args []string, stdout, stderr io.Writer, color bool) int {
 		}
 		fmt.Fprintln(stdout, text)
 		return 0
-	case len(args) == 1 && args[0] == "setup":
-		return voiceSetupRun(stdout, stderr)
+	case len(args) >= 1 && args[0] == "setup":
+		return voiceSetupRun(args[1:], stdout, stderr)
 	case len(args) == 1 && args[0] == "status":
 		voiceStatus(stdout)
 		return 0
@@ -66,7 +75,7 @@ func voiceHear(stderr io.Writer) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := interruptContext()
 	defer cancel()
 	in := guardInput()
 	stop := make(chan struct{})
@@ -81,7 +90,7 @@ func voiceHear(stderr io.Writer) (string, error) {
 	select {
 	case <-stop:
 	default: // the pending read would eat the next answer, so wait for it
-		if time.Since(start) >= voice.MaxRecord {
+		if time.Since(start) >= voiceLimit {
 			fmt.Fprintln(stderr, "Time is up. Press Enter to continue.")
 		}
 		select {
@@ -101,7 +110,7 @@ func voiceHear(stderr io.Writer) (string, error) {
 func voiceErr(err error) error {
 	switch {
 	case errors.Is(err, context.Canceled):
-		return errors.New("Cancelled. Nothing was run.")
+		return errors.New(cancelledMsg)
 	case errors.Is(err, context.DeadlineExceeded):
 		return fmt.Errorf("the speech engine took too long. Try a shorter request, or run  safeshell voice status: %w", err)
 	}
@@ -133,21 +142,38 @@ func voiceAsk(stdout, stderr io.Writer, color bool) int {
 	default:
 		return voiceCancelled(stderr)
 	}
-	cwd, _ := os.Getwd()
-	code, _ := askLine(text, cwd, stdout, stderr, color)
+	code, _ := askLine(text, cwdOr(""), stdout, stderr, color)
 	return code
 }
 
 func voiceCancelled(stderr io.Writer) int {
-	fmt.Fprintln(stderr, "Cancelled. Nothing was run.")
+	fmt.Fprintln(stderr, cancelledMsg)
 	return 1
 }
 
-func voiceSetupRun(stdout, stderr io.Writer) int {
+func voiceSetupRun(args []string, stdout, stderr io.Writer) int {
+	yes := len(args) == 1 && args[0] == "--yes"
+	if len(args) > 1 || (len(args) == 1 && !yes) {
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
 	s := voiceSetup()
 	s.Out = stdout
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := interruptContext()
 	defer cancel()
+	ask := func(q string) (string, bool) {
+		in := guardInput()
+		if !isTerminal(in) {
+			return "", false
+		}
+		fmt.Fprint(stdout, q)
+		a, err := readLine(in)
+		return a, err == nil // end of input is not a yes
+	}
+	if err := s.EnsureTools(ctx, yes, ask); err != nil {
+		fmt.Fprintln(stderr, "safeshell voice setup:", voiceErr(err))
+		return 1
+	}
 	bin, err := s.EnsureEngine(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell voice setup:", err)
@@ -169,7 +195,7 @@ func voiceStatus(w io.Writer) {
 	if rec, ok := voice.PickRecorder(s.LookPath); ok {
 		fmt.Fprintf(w, "recorder: %s\n", rec.Name)
 	} else {
-		fmt.Fprintln(w, "recorder: none found: install pipewire-bin, pulseaudio-utils or alsa-utils")
+		fmt.Fprintln(w, "recorder: none found: safeshell voice setup installs one")
 	}
 	fmt.Fprintf(w, "engine:   %s\n", voiceEngineText(st))
 	if st.ModelReady {
@@ -194,7 +220,7 @@ func voiceEngineText(st voice.Status) string {
 func doctorVoice(w io.Writer, s voice.Setup, run func(string, ...string) (string, error), cards string) {
 	fmt.Fprintln(w, "\nVoice")
 	rec, ok := voice.PickRecorder(s.LookPath)
-	name := "none (install pipewire-bin, pulseaudio-utils or alsa-utils)"
+	name := "none (safeshell voice setup installs one)"
 	if ok {
 		name = rec.Name
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/ai/providers"
 	"github.com/samarthsinh2660/safeshell/internal/models"
+	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
 // Config holds every setting. The zero value is valid.
@@ -30,13 +31,7 @@ type Config struct {
 	} `json:"ai"`
 }
 
-func dir() string {
-	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "safeshell")
-	}
-	h, _ := os.UserHomeDir()
-	return filepath.Join(h, ".config", "safeshell")
-}
+func dir() string { return xdg.Dir("XDG_CONFIG_HOME", ".config") }
 
 // Path is the config file.
 func Path() string { return filepath.Join(dir(), "config.json") }
