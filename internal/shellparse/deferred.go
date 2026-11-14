@@ -40,7 +40,7 @@ func (w *walker) startupText(c *Command, depth int) {
 	}
 	text := c.Stdin
 	if c.Name == "echo" || c.Name == "printf" {
-		text += echoText(c.Args)
+		text += echoText(c.Name, c.Args)
 	}
 	w.deferred(strings.ReplaceAll(text, `\n`, "\n"), depth)
 }
@@ -64,7 +64,7 @@ func echoed(st *syntax.Stmt) string {
 				for _, a := range call.Args[1:] {
 					args = append(args, wordString(a))
 				}
-				text += echoText(args)
+				text += echoText(name, args)
 			}
 		}
 		return true
@@ -73,8 +73,13 @@ func echoed(st *syntax.Stmt) string {
 }
 
 // echoText is the line echo or printf writes for args, without options such as -e.
-func echoText(args []string) string {
+// When printf is given a format with conversions (%s) the format is not text
+// itself, so the words that fill it in are taken.
+func echoText(name string, args []string) string {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		args = args[1:]
+	}
+	if name == "printf" && len(args) > 1 && strings.Contains(args[0], "%") {
 		args = args[1:]
 	}
 	return "\n" + strings.Join(args, " ")
