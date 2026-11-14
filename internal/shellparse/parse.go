@@ -390,6 +390,11 @@ func (w *walker) nested(c *Command, depth int) {
 		}
 	case "find":
 		w.findExec(c, depth)
+	case "sed":
+		execs, _ := SedActions(c.Args)
+		for _, sh := range execs {
+			_ = w.parseString(sh, depth+1)
+		}
 	case "python", "python3", "perl", "ruby", "node":
 		for _, sh := range embeddedShell(InlineCode(*c)) {
 			_ = w.parseString(sh, depth+1)

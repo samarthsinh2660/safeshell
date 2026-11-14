@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
@@ -12,9 +13,12 @@ func ruleGit(c shellparse.Command, f flags) []Finding {
 		switch {
 		case f.hasAny("--force-with-lease") || f.long["force-with-lease"] != "" || f.has(0, "force-with-lease"):
 			return one(fnd(R2, c, "Rewrites history on the remote, but refuses if someone else pushed in the meantime."))
-		case f.has('f', "force") || f.hasAny("--delete", "-d") || anyPrefix(f.pos, ":"):
-			return one(fnd(R3, c, "Overwrites or deletes history on the shared remote. Other people's work can be lost.").
-				WithAlt(strings.Replace(c.String(), "--force", "--force-with-lease", 1), "refuses if someone else pushed in the meantime"))
+		case f.has('f', "force", "mirror") || f.hasAny("--delete", "-d") || anyPrefix(f.pos, ":") || anyPrefix(f.pos, "+"):
+			fd := fnd(R3, c, "Overwrites or deletes history on the shared remote. Other people's work can be lost.")
+			if alt := leaseAlt(c); alt != "" {
+				fd = fd.WithAlt(alt, "refuses if someone else pushed in the meantime")
+			}
+			return one(fd)
 		}
 		return one(fnd(R2, c, "Publishes commits to a shared remote. Hard to take back once others pull them."))
 	case "reset":
@@ -85,6 +89,30 @@ func ruleGit(c shellparse.Command, f flags) []Finding {
 		return one(fnd(R0, c, "Only reads repository information."))
 	}
 	return one(fnd(R1, c, "Changes the local repository. Reversible through git history."))
+}
+
+// leaseAlt turns a force push into a --force-with-lease push: `-f` or `--force`
+// becomes the lease option and a `+` refspec loses its plus. It returns "" when
+// the push has neither (a delete or a mirror has no safer form).
+func leaseAlt(c shellparse.Command) string {
+	words := strings.Fields(c.String())
+	flagged, stripped := false, false
+	for i, w := range words {
+		switch {
+		case w == "-f" || w == "--force":
+			words[i], flagged = "--force-with-lease", true
+		case len(w) > 1 && w[0] == '+':
+			words[i], stripped = w[1:], true
+		}
+	}
+	if !flagged && !stripped {
+		return ""
+	}
+	if !flagged {
+		i := slices.Index(words, "push") + 1
+		words = slices.Insert(words, i, "--force-with-lease")
+	}
+	return strings.Join(words, " ")
 }
 
 func anyPrefix(ss []string, p string) bool {

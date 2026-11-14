@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
@@ -31,8 +32,33 @@ func ruleKillall(c shellparse.Command, f flags) []Finding {
 
 func rulePkill(c shellparse.Command, f flags) []Finding {
 	alt := "pgrep -a " + strings.Join(f.pos, " ")
-	return one(fnd(R2, c, "Stops every process that matches a name or pattern, which may include more than you expect.").
-		WithAlt(alt, "lists what would match, without stopping anything"))
+	level, why := R2, "Stops every process that matches a name or pattern, which may include more than you expect."
+	switch {
+	case ownedByRoot(f.all):
+		level, why, alt = R4, "Stops every process owned by root, which takes the machine down.", "pgrep -a -u root"
+	case len(f.pos) > 0 && len(f.pos[len(f.pos)-1]) <= 2 && !f.has('x', "exact"): // -x matches the whole name only
+		level, why = R3, "Stops every process whose name contains this very short pattern, which is likely to match far more than you expect."
+	}
+	return one(fnd(level, c, why).WithAlt(alt, "lists what would match, without stopping anything"))
+}
+
+// ownedByRoot reports a pkill user filter (-u, -U, --uid, --euid) that names root.
+func ownedByRoot(args []string) bool {
+	for i, a := range args {
+		v := ""
+		switch {
+		case a == "-u" || a == "-U" || a == "--uid" || a == "--euid":
+			if i+1 < len(args) {
+				v = args[i+1]
+			}
+		case strings.HasPrefix(a, "--uid=") || strings.HasPrefix(a, "--euid="):
+			_, v, _ = strings.Cut(a, "=")
+		}
+		if slices.ContainsFunc(strings.Split(v, ","), func(u string) bool { return u == "root" || u == "0" }) {
+			return true
+		}
+	}
+	return false
 }
 
 func rulePower(c shellparse.Command, f flags) []Finding {
