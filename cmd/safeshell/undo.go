@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -80,6 +81,10 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 		id = ms[0].ID
 	}
 	m, err := snapshot.Load(store, id)
+	if errors.Is(err, snapshot.ErrBadID) {
+		fmt.Fprintln(stderr, "safeshell undo: that is not a snapshot id. Run 'safeshell snapshots' to see them.")
+		return 1
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell undo: no such snapshot:", id)
 		return 1
