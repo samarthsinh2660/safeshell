@@ -41,6 +41,12 @@ set the final level; this works without an AI, and the explanation is added when
 .TP
 .BI ask " request"
 Turn a request written in English into a command, which is then checked like any other.
+The assistant is told the project in this folder (git branch, Makefile targets, npm scripts), the
+commands SafeShell saw in the last 30 minutes and, in a terminal with the hook, the last few
+requests, so a follow-up such as "now delete them" or "undo that" is understood.
+See
+.B safeshell help privacy
+for what a cloud model receives.
 .TP
 .RB "models [" list ]
 Choose the AI model from a menu, or list the models your cloud key offers.

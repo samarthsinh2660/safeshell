@@ -2,6 +2,20 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+- The English assistant understands context. It is told the project in the current folder (git branch, Makefile targets, npm scripts, go.mod, Python, Rust and Docker files; read only, nothing is run) and the commands SafeShell saw in the last 30 minutes. (#175)
+- Follow-ups: each terminal remembers its last 5 English exchanges for 30 minutes (private file, secrets masked), so "now do the same for the logs folder", "now delete them" or "undo that" work. (#175)
+- `safeshell ai bench` also measures 20 requests that need context or follow-ups, reported per category and kept apart from the original 49. (#175)
+- An architecture test fails CI when a pure package touches files, processes or the network, or when anything but `cmd/safeshell` imports the engine. (#174)
+
+### Changed
+- The assistant is told never to fill in a made-up value such as `user@server` and to use the context before asking you. With a cloud model, the project facts, recent commands and recent exchanges are sent too, secrets masked; `safeshell help privacy` lists everything. (#175)
+
+### Fixed
+- An answer longer than 4096 characters to one of the assistant's questions no longer spills into the next question. Thanks to @ShahadatTest. (#171)
+
 ## 1.4.0 - 2026-11-16
 
 Shared rules: administrators can set a team policy, and the remaining ways of hiding a command from the checks are closed.
