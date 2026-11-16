@@ -1,3 +1,13 @@
+safeshell (1.4.0-1) unstable; urgency=medium
+
+  * New upstream release: team policy in /etc/safeshell/policy.json,
+    secrets masked before text is sent to a cloud AI, fc and r blocked,
+    quoting, here-documents and wrappers (su, pkexec, watch, flock,
+    parallel, strace, chroot) looked into, sed e/w, git push +refspec,
+    sudo redirects and pkill of root rated correctly.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Mon, 16 Nov 2026 12:00:00 +0530
+
 safeshell (1.3.0-1) unstable; urgency=medium
 
   * New upstream release: undo keeps files that appeared after the check
