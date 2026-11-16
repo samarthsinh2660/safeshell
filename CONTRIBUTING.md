@@ -98,6 +98,9 @@ The rules this picture enforces:
 - `cmd/safeshell` is the only place that wires adapters to the engine. It holds no business logic.
 - A new shell, snapshot backend, AI provider or inspector is a new adapter or file, not edits scattered through the engine.
 
+`go test ./internal/archtest` checks the first three rules from the import lists of the source files and fails
+with the file, the import and the rule it breaks. `make check` runs it.
+
 More detail in [doc/architecture.md](doc/architecture.md).
 
 ## How a command is judged

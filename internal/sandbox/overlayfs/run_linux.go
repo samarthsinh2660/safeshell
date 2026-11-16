@@ -122,7 +122,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		layers = out.Layers
 	}
 	for _, l := range layers {
-		d, err := sandbox.Diff(l.Upper, l.Mount, sandbox.Options{})
+		d, err := Diff(l.Upper, l.Mount, Options{})
 		if err != nil {
 			return res, fmt.Errorf("read changes of %s: %w", l.Mount, err)
 		}

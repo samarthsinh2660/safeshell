@@ -86,7 +86,7 @@ safeshell/                        repository root = Go module root
 │   │   └── rules/            one file per tool family: fs, disk, git, docker, k8s, cloud, db, pkg, net, proc, system
 │   ├── engine/               use-cases (Check, Simulate, Run, Undo) + port interfaces
 │   ├── policy/               allow / ask / block / override rules, trusted paths
-│   ├── sandbox/              Simulator port + diff helpers
+│   ├── sandbox/              Simulator port + result types and parsers (pure; the overlay diff reader is in overlayfs)
 │   │   ├── overlayfs/        rootless namespaces + OverlayFS, observed file diff   (linux only)
 │   │   ├── effects/          network, process, service, database, git, pkg, disk adapters
 │   │   └── netwatch/         seccomp user-notification supervisor that records network attempts   (linux only)
@@ -120,7 +120,7 @@ safeshell/                        repository root = Go module root
 
 Why this shape (go.dev's own guidance is to start flat and grow into `internal/` and `cmd/`; `golang-standards/project-layout` is a community convention, not an official standard, so we copy only what we need): `cmd/` holds binaries, `internal/` prevents accidental external imports, and splitting `internal/` by *responsibility* (not by layer name like `models/` or `utils/`) keeps each package small enough for one person to hold in their head.
 
-### 3.1 Dependency rules (enforced in review, later by a lint rule)
+### 3.1 Dependency rules (enforced by `internal/archtest`)
 
 ```
 cmd/safeshell  ──►  everything (composition root: builds adapters, injects them into engine)
@@ -133,7 +133,7 @@ voice   ──►  runtime (downloads, checksums, unpacking) and the standard li
 classify ──► domain, shellparse
 shellparse ─► mvdan.cc/sh only
 domain  ──►  standard library only
-report  ──►  domain, shellparse, and the data types of sandbox (FileDiff, Change, NetAttempt, Warning): the one place a pure package reads an adapter package's types
+report  ──►  domain, shellparse, and the data types of sandbox (FileDiff, Change, NetAttempt, Warning); sandbox itself is pure, only sandbox/overlayfs and sandbox/effects touch the machine
 ai      ──►  domain, report; it never imports engine (cmd/safeshell builds ai.Facts from an engine.Analysis)
 ```
 
@@ -143,6 +143,8 @@ Hard rules:
 3. `engine` never imports an adapter. Interfaces are declared in `engine` (consumer side, the Go idiom) and adapters satisfy them. `cmd/safeshell` is the only place that knows the concrete types.
 4. No import cycles, no `utils`/`common`/`helpers` packages.
 5. Linux-specific code lives behind `//go:build linux` with a stub for other OSes so `go build` and unit tests work anywhere.
+
+`internal/archtest` enforces rules 1 to 3 in CI. It reads the import lists of every non-test `.go` file under `internal/`, `cmd/` and `eval/` with `go/parser`. The pure packages (`domain`, `classify`, `classify/rules`, `policy`, `report`, `shellparse`, `sandbox`) may import only each other, the standard library without `os`, `os/exec`, `os/signal`, `os/user`, `net`, `net/http`, `syscall`, `io/ioutil` and `plugin`, and `mvdan.cc/sh`; they may not call `time.Now`. `engine` follows the same import rules, and only `cmd/safeshell` may import it. Violations that still exist are listed in the test's `known` map and the test fails when one is fixed, so the list only shrinks.
 
 ---
 
