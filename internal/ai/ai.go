@@ -61,8 +61,10 @@ func (c Chain) Complete(ctx context.Context, system, user string) (string, error
 	return "", errors.Join(errs...)
 }
 
-// Redact replaces the home directory path with ~ before text leaves the machine.
+// Redact replaces the home directory path with ~ and hides secret values
+// (tokens, passwords, keys) before text leaves the machine.
 func Redact(s string) string {
+	s = report.MaskSecrets(s)
 	if h, err := os.UserHomeDir(); err == nil && len(h) > 1 {
 		s = strings.ReplaceAll(s, h, "~")
 	}

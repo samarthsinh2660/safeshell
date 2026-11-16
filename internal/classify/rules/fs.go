@@ -117,10 +117,25 @@ func ruleLn(c shellparse.Command, f flags) []Finding {
 }
 
 func ruleSed(c shellparse.Command, f flags) []Finding {
-	if f.has('i', "in-place") {
-		return one(fnd(R2, c, "Edits files in place. The original text is not kept.").WithAlt(strings.Replace(c.String(), "sed -i", "sed -i.bak", 1), "keeps a .bak copy of each file"))
+	var fs []Finding
+	execs, writes := shellparse.SedActions(c.Args)
+	for _, e := range execs {
+		if e == "" {
+			fs = append(fs, fnd(R3, c, "Runs the text it is editing as a shell command."))
+		}
 	}
-	return one(fnd(R0, c, "Only prints the edited text; files are not changed."))
+	for _, w := range writes {
+		if fd, ok := WriteTarget(c.String(), w, false, ""); ok {
+			fs = append(fs, fd)
+		}
+	}
+	if f.has('i', "in-place") {
+		return append(fs, fnd(R2, c, "Edits files in place. The original text is not kept.").WithAlt(strings.Replace(c.String(), "sed -i", "sed -i.bak", 1), "keeps a .bak copy of each file"))
+	}
+	if len(fs) == 0 {
+		return one(fnd(R0, c, "Only prints the edited text; files are not changed."))
+	}
+	return fs
 }
 
 func ruleTee(c shellparse.Command, f flags) []Finding {
