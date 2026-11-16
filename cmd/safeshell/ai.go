@@ -152,12 +152,23 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 			replies = append(replies, reply)
 			continue
 		}
+		turn := nl.Turn{Request: request, Clarifications: replies, Command: r.Command, Answer: r.Answer}
 		if r.Command == "" { // a question: show the answer, run nothing
 			fmt.Fprintln(stderr, report.Printable(r.Answer))
+			remember(turn)
 			return 1, true
 		}
-		return proposeAndGuard(r, cwd, stdout, stderr, color), true
+		code = proposeAndGuard(r, cwd, stdout, stderr, color)
+		turn.Ran = code == 0
+		remember(turn)
+		return code, true
 	}
+}
+
+// remember keeps an exchange for this terminal's follow-ups. It is a
+// convenience, so a failure to save is ignored.
+func remember(t nl.Turn) {
+	_ = conversations().Add(os.Getenv("SAFESHELL_HOOK"), t)
 }
 
 // maxClarifications is how many times the model may ask before its question is just shown.

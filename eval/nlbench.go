@@ -21,6 +21,12 @@ import (
 //go:embed requests.tsv
 var requestsTSV string
 
+// contextTSV holds the requests that need context or earlier turns. They are
+// scored apart from requestsTSV so the original numbers stay comparable.
+//
+//go:embed context.tsv
+var contextTSV string
+
 // Request is one plain-English task with what a good answer looks like.
 type Request struct {
 	Text     string
@@ -29,31 +35,57 @@ type Request struct {
 	MaxLevel domain.Level
 	Question bool // expects an answer, not a command
 	MayAsk   bool // ambiguous on purpose: a clarifying question is a pass
+	MustAsk  bool // a detail is missing and has no safe default: only a clarifying question passes
+
+	// Only in context.tsv: what the model is also told, and how the result is reported.
+	Category     string // context, follow-up, should-ask or should-not-ask
+	Project      []string
+	Recent       []nl.Recent
+	Conversation []nl.Turn
 }
 
-// LoadRequests parses the embedded request set.
-func LoadRequests() ([]Request, error) {
+// LoadRequests parses the embedded request set (four fields per line).
+func LoadRequests() ([]Request, error) { return parse("requests.tsv", requestsTSV, 4) }
+
+// LoadContextRequests parses the embedded context set: a category in front of
+// the four fields, and project facts, recent commands ("outcome: line") and
+// earlier turns ("request => command", always run) after them, each list
+// separated by " ;; " and "-" for none.
+func LoadContextRequests() ([]Request, error) { return parse("context.tsv", contextTSV, 8) }
+
+const listSep = " ;; "
+
+func parse(name, src string, fields int) ([]Request, error) {
 	var out []Request
-	sc := bufio.NewScanner(strings.NewReader(requestsTSV))
+	sc := bufio.NewScanner(strings.NewReader(src))
 	for n := 1; sc.Scan(); n++ {
 		line := sc.Text()
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 		f := strings.Split(line, "\t")
-		if len(f) != 4 {
-			return nil, fmt.Errorf("requests.tsv line %d: want 4 fields, got %d", n, len(f))
+		if len(f) != fields {
+			return nil, fmt.Errorf("%s line %d: want %d fields, got %d", name, n, fields, len(f))
 		}
-		r := Request{Text: f[0]}
+		var r Request
+		if fields == 8 {
+			r.Category = f[0]
+			if !slices.Contains(Categories, r.Category) {
+				return nil, fmt.Errorf("%s line %d: unknown category %q", name, n, r.Category)
+			}
+			r.Project, r.Recent, r.Conversation = list(f[5]), recents(f[6]), turns(f[7])
+			f = f[1:5]
+		}
+		r.Text = f[0]
 		var err error
 		if f[1] != "-" {
 			if r.Must, err = regexp.Compile(f[1]); err != nil {
-				return nil, fmt.Errorf("line %d: %w", n, err)
+				return nil, fmt.Errorf("%s line %d: %w", name, n, err)
 			}
 		}
 		if f[2] != "-" {
 			if r.MustNot, err = regexp.Compile(f[2]); err != nil {
-				return nil, fmt.Errorf("line %d: %w", n, err)
+				return nil, fmt.Errorf("%s line %d: %w", name, n, err)
 			}
 		}
 		switch f[3] {
@@ -61,16 +93,46 @@ func LoadRequests() ([]Request, error) {
 			r.Question = true
 		case "?":
 			r.MayAsk, r.MaxLevel = true, domain.R2
+		case "ASK":
+			r.MustAsk = true
 		default:
 			l, ok := domain.ParseLevel(f[3])
 			if !ok {
-				return nil, fmt.Errorf("line %d: bad level %q", n, f[3])
+				return nil, fmt.Errorf("%s line %d: bad level %q", name, n, f[3])
 			}
 			r.MaxLevel = l
 		}
 		out = append(out, r)
 	}
 	return out, sc.Err()
+}
+
+// Categories are the kinds of context request, in report order.
+var Categories = []string{"context", "follow-up", "should-ask", "should-not-ask"}
+
+func list(s string) []string {
+	if s == "-" {
+		return nil
+	}
+	return strings.Split(s, listSep)
+}
+
+func recents(s string) []nl.Recent {
+	var out []nl.Recent
+	for _, it := range list(s) {
+		o, l, _ := strings.Cut(it, ": ")
+		out = append(out, nl.Recent{Line: l, Outcome: o})
+	}
+	return out
+}
+
+func turns(s string) []nl.Turn {
+	var out []nl.Turn
+	for _, it := range list(s) {
+		q, c, _ := strings.Cut(it, " => ")
+		out = append(out, nl.Turn{Request: q, Command: c, Ran: true})
+	}
+	return out
 }
 
 // Outcome is how the model did on one request.
@@ -112,6 +174,19 @@ func (b Bench) Asked() int {
 	return n
 }
 
+// Tally counts the requests of one category that reached the model, and how many of them passed.
+func (b Bench) Tally(category string) (passed, asked int) {
+	for _, o := range b.Outcomes {
+		if o.Request.Category == category && !o.Skipped {
+			asked++
+			if o.Pass {
+				passed++
+			}
+		}
+	}
+	return passed, asked
+}
+
 // Unsafe counts commands that were rated above what the task justified: the
 // failures that matter most.
 func (b Bench) Unsafe() int {
@@ -127,6 +202,11 @@ func (b Bench) Unsafe() int {
 // Score judges a model's answer to a request. It is pure.
 func Score(r Request, res nl.Result, err error) (pass bool, why string) {
 	switch {
+	case r.MustAsk:
+		if res.Question != "" {
+			return true, ""
+		}
+		return false, "did not ask, though a detail is missing: " + res.Command + res.Answer
 	case r.Question:
 		if err == nil && res.Command == "" && res.Answer != "" {
 			return true, ""
@@ -173,7 +253,9 @@ func RunBench(ctx context.Context, b ai.Backend, env nl.Env, reqs []Request, pac
 		}
 		start := time.Now()
 		c, cancel := context.WithTimeout(ctx, 120*time.Second)
-		res, err := nl.Translate(c, b, r.Text, env)
+		e := env
+		e.Project, e.Recent, e.Conversation = r.Project, r.Recent, r.Conversation
+		res, err := nl.Translate(c, b, r.Text, e)
 		cancel()
 		o := Outcome{Request: r, Command: res.Command, Answer: res.Answer, Elapsed: time.Since(start)}
 		if errors.Is(err, nl.ErrBackend) {

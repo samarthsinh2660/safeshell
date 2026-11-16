@@ -122,7 +122,11 @@ safeshell doctor  shows which policy is active.`},
 	{"privacy", "What leaves your machine", `Local mode: nothing. The model runs on your computer; the only download is the model itself.
 Cloud mode: the command text you typed (or the English request, folder listing and the sandbox
 summary used for the review) goes to the provider you chose, with your home folder name replaced
-by ~. File contents are never sent. A log of decisions stays on your machine in
+by ~. For English requests it also sends the last few commands SafeShell saw (from the log below),
+your last few English requests and answers from this terminal (kept 30 minutes in
+~/.local/state/safeshell/conversations, private to you), and short facts about the folder such as
+the git branch and the names of Makefile targets or npm scripts. Secret values are masked first.
+File contents are never sent. A log of decisions stays on your machine in
 ~/.local/state/safeshell/audit.jsonl (folder private to you). Values of TOKEN, KEY, SECRET and
 PASSWORD settings, Authorization headers and passwords in web addresses or -u user:pass are
 replaced by *** there and in undo snapshots, and lines you start with a space are not logged.
