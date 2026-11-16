@@ -239,3 +239,67 @@ func TestDeletedTreeReportsNotableFiles(t *testing.T) {
 		t.Errorf("expected .git or thesis.pdf among %v", c.Notable)
 	}
 }
+
+func TestIsOpaqueDirReadsTheOverlayMarker(t *testing.T) {
+	dir := t.TempDir()
+	if isOpaqueDir(dir) {
+		t.Fatal("a plain directory is not opaque")
+	}
+	if err := syscall.Setxattr(dir, "user.overlay.opaque", []byte("y"), 0); err != nil {
+		t.Skipf("this filesystem does not take user attributes: %v", err)
+	}
+	if !isOpaqueDir(dir) {
+		t.Error("a directory marked user.overlay.opaque=y is opaque")
+	}
+}
+
+func TestUnreadableFolders(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can read any folder")
+	}
+	lock := func(t *testing.T, p string) {
+		if err := os.Chmod(p, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(p, 0o755) })
+	}
+
+	t.Run("in the upper directory the diff fails", func(t *testing.T) {
+		upper := t.TempDir()
+		write(t, upper, "locked/a", "a")
+		lock(t, filepath.Join(upper, "locked"))
+		if _, err := Diff(upper, t.TempDir(), fake); err == nil {
+			t.Error("an upper folder that cannot be read must be an error, not an empty diff")
+		}
+	})
+
+	t.Run("inside a deleted folder it is skipped", func(t *testing.T) {
+		lower, upper := t.TempDir(), t.TempDir()
+		write(t, lower, "proj/a.go", "aa")
+		write(t, lower, "proj/locked/b.go", "b")
+		lock(t, filepath.Join(lower, "proj/locked"))
+		write(t, upper, "proj", "")
+		opt := Options{IsWhiteout: func(p string, _ fs.FileInfo) bool { return filepath.Base(p) == "proj" }}
+		d, err := Diff(upper, lower, opt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c := d.Changes[0]; c.Kind != sandbox.Deleted || c.Files != 1 || c.Bytes != 2 {
+			t.Errorf("deleted = %+v, want the one readable file", c)
+		}
+	})
+}
+
+func TestFileThatVanishesWhileReadingIsNotAnError(t *testing.T) {
+	upper := t.TempDir()
+	write(t, upper, "a", "a")
+	write(t, upper, "b", "b")
+	opt := fake
+	opt.IsWhiteout = func(p string, _ fs.FileInfo) bool { // runs for "a" before "b" is read
+		_ = os.Remove(filepath.Join(upper, "b"))
+		return false
+	}
+	if _, err := Diff(upper, t.TempDir(), opt); err != nil {
+		t.Errorf("a file removed during the read must not fail the diff: %v", err)
+	}
+}
