@@ -187,9 +187,8 @@ func readLine(in io.Reader) (string, error) {
 			if buf[0] == '\n' {
 				return strings.TrimSpace(sb.String()), nil
 			}
-			sb.WriteByte(buf[0])
-			if sb.Len() >= maxReply {
-				return strings.TrimSpace(sb.String()), nil
+			if sb.Len() < maxReply {
+				sb.WriteByte(buf[0])
 			}
 		}
 		if err != nil {

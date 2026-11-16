@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -350,5 +351,34 @@ func TestReadLine(t *testing.T) {
 	}
 	if _, err := readLine(strings.NewReader("")); err == nil {
 		t.Error("EOF with nothing typed must be an error")
+	}
+}
+
+func TestReadLineDrainsLongReply(t *testing.T) {
+	for _, size := range []int{maxReply - 1, maxReply, maxReply + 1, 5000, 2 * maxReply} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			reader := strings.NewReader(strings.Repeat("x", size) + "\nn\n")
+			first, err := readLine(reader)
+			if err != nil || first != strings.Repeat("x", min(size, maxReply)) {
+				t.Fatalf("first reply length=%d error=%v", len(first), err)
+			}
+			second, err := readLine(reader)
+			if second != "n" || err != nil {
+				t.Fatalf("next answer=%q error=%v", second, err)
+			}
+			if _, err := readLine(reader); !errors.Is(err, io.EOF) {
+				t.Fatalf("after replies: %v", err)
+			}
+		})
+	}
+}
+func TestReadLineDrainsLongReplyThroughEOF(t *testing.T) {
+	reader := strings.NewReader(strings.Repeat("x", 5000))
+	reply, err := readLine(reader)
+	if len(reply) != maxReply || err != nil {
+		t.Fatalf("reply length=%d error=%v", len(reply), err)
+	}
+	if _, err := readLine(reader); !errors.Is(err, io.EOF) {
+		t.Fatalf("next read: %v", err)
 	}
 }
