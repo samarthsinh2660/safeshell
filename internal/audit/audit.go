@@ -69,6 +69,19 @@ func Append(path string, e Entry) error {
 	return json.NewEncoder(f).Encode(e)
 }
 
+// Recent returns the last n entries no older than window before now,
+// oldest first. A log that cannot be read gives none.
+func Recent(path string, now time.Time, window time.Duration, n int) []Entry {
+	all, _, _ := Read(path)
+	var out []Entry
+	for _, e := range all {
+		if now.Sub(e.Time) <= window {
+			out = append(out, e)
+		}
+	}
+	return out[max(0, len(out)-n):]
+}
+
 // Read loads all entries from path in chronological order. Damaged or
 // unparseable lines are skipped and counted in skipped. If the file does
 // not exist, it returns nil, 0, nil.

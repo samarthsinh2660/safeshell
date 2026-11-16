@@ -7,8 +7,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/samarthsinh2660/safeshell/internal/audit"
+	"github.com/samarthsinh2660/safeshell/internal/convo"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
+	"github.com/samarthsinh2660/safeshell/internal/project"
 )
 
 // usefulTools are the programs worth telling the model about when installed.
@@ -23,7 +27,8 @@ func onPath(name string) bool {
 
 // gatherEnv describes this machine and directory for the assistant.
 func gatherEnv(cwd string) nl.Env {
-	e := nl.Env{OS: osName(), Shell: filepath.Base(os.Getenv("SHELL")), Cwd: cwd, Has: onPath}
+	e := nl.Env{OS: osName(), Shell: filepath.Base(os.Getenv("SHELL")), Cwd: cwd, Has: onPath, Project: project.Facts(cwd), Recent: recentCommands(),
+		Conversation: conversations().Load(os.Getenv("SAFESHELL_HOOK"))}
 	if des, err := os.ReadDir(cwd); err == nil {
 		for _, de := range des {
 			n := de.Name()
@@ -40,6 +45,26 @@ func gatherEnv(cwd string) nl.Env {
 		}
 	}
 	return e
+}
+
+// conversations is where this terminal's earlier exchanges are kept; tests replace it.
+var conversations = func() convo.Store { return convo.Store{Dir: convo.DefaultDir(), Now: time.Now} }
+
+// recentCommands is what SafeShell saw in the last half hour (the audit log is
+// already masked and leaves out lines that start with a space).
+func recentCommands() []nl.Recent {
+	var out []nl.Recent
+	for _, e := range audit.Recent(auditPath(), time.Now(), 30*time.Minute, 8) {
+		o := "ran"
+		switch {
+		case e.Outcome == "cancelled" && strings.Contains(e.Decision, "block"):
+			o = "blocked"
+		case e.Outcome == "cancelled":
+			o = "cancelled"
+		}
+		out = append(out, nl.Recent{Line: e.Line, Outcome: o})
+	}
+	return out
 }
 
 func osName() string {

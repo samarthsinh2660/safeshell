@@ -173,8 +173,14 @@ The policy is a guard rail in each person's SafeShell, not access control: peopl
 - **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
   The words then go through the same path as typed English, so the usual checks apply.
 
+English requests are understood in context: the assistant is told your git branch, the project's
+Makefile targets or npm scripts, the last few commands SafeShell saw and, per terminal, your last few
+exchanges (30 minutes, 5 turns), so "now do the same for the logs folder" or "undo that" works and it asks
+only when something is truly missing. A cloud model receives this too (secrets masked); see `safeshell help privacy`.
+
 `safeshell ai bench` measures the active model on 49 labelled requests: local Qwen 3B scores 100% (49 of 49),
-and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default), with no unsafe suggestions in either.
+and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default), with no unsafe suggestions in either. It then reports 20 more requests separately (needs project context, follow-ups,
+should ask, should not ask) so the original score stays comparable.
 
 ## Measured
 

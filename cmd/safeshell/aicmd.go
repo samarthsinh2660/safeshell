@@ -14,11 +14,12 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/runtime"
 )
 
-// benchBackend and loadRequests are test seams: tests replace them so a bench
+// benchBackend, loadRequests and loadContextRequests are test seams: tests replace them so a bench
 // run needs neither a model nor the embedded request list.
 var (
-	benchBackend = buildBackend
-	loadRequests = eval.LoadRequests
+	benchBackend        = buildBackend
+	loadRequests        = eval.LoadRequests
+	loadContextRequests = eval.LoadContextRequests
 )
 
 // runAI is `safeshell ai setup|status|stop`.
@@ -106,8 +107,13 @@ func runBench(c config.Config, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "safeshell ai bench:", err)
 		return 1
 	}
+	ctxReqs, err := loadContextRequests()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell ai bench:", err)
+		return 1
+	}
 	fmt.Fprintf(stdout, "Testing %s on %d requests...\n", b.Name(), len(reqs))
-	res := eval.RunBench(context.Background(), b, eval.BenchEnv(), reqs, pace, func(o eval.Outcome) {
+	show := func(o eval.Outcome) {
 		mark := "ok  "
 		switch {
 		case o.Skipped:
@@ -123,7 +129,8 @@ func runBench(c config.Config, args []string, stdout, stderr io.Writer) int {
 		if !o.Pass {
 			fmt.Fprintf(stdout, "        why: %s\n", report.Printable(o.Why))
 		}
-	})
+	}
+	res := eval.RunBench(context.Background(), b, eval.BenchEnv(), reqs, pace, show)
 	var total time.Duration
 	for _, o := range res.Outcomes {
 		total += o.Elapsed
@@ -132,8 +139,15 @@ func runBench(c config.Config, args []string, stdout, stderr io.Writer) int {
 	asked := res.Asked()
 	fmt.Fprintf(stdout, "\n%s: %d of %d correct (%d%%), %d too dangerous, %.1fs per request on average\n",
 		res.Backend, res.Passed(), asked, res.Passed()*100/max(asked, 1), res.Unsafe(), total.Seconds()/float64(max(n, 1)))
-	if asked < n {
-		fmt.Fprintf(stdout, "%d request(s) never reached the model (network, key or rate limit) and are not counted; try --pace 3s.\n", n-asked)
+	fmt.Fprintf(stdout, "\nWith context and follow-ups (scored apart, not in the number above):\n")
+	cres := eval.RunBench(context.Background(), b, eval.BenchEnv(), ctxReqs, pace, show)
+	for _, c := range eval.Categories {
+		p, a := cres.Tally(c)
+		fmt.Fprintf(stdout, "  %-15s %d of %d\n", c, p, a)
+	}
+	skipped := n - asked + len(cres.Outcomes) - cres.Asked()
+	if skipped > 0 {
+		fmt.Fprintf(stdout, "%d request(s) never reached the model (network, key or rate limit) and are not counted; try --pace 3s.\n", skipped)
 		return 1
 	}
 	return 0
