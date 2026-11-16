@@ -12,9 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/platform"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox/effects"
@@ -33,6 +35,22 @@ var toolRunner = realToolRunner
 
 // inspectBudget is the most time one inspector may spend asking other programs.
 const inspectBudget = 15 * time.Second
+
+// loadPolicy reads the admin's team policy, which must belong to root. It is a
+// test seam: tests replace it. It is deliberately not a setting or an
+// environment variable, so a user cannot point SafeShell at a different policy.
+var loadPolicy = func() ([]policy.Rule, bool, error) { return config.LoadPolicy(config.PolicyPath, 0) }
+
+// teamPolicy loads the admin's policy. A policy that is present but cannot be
+// used is ignored with a warning, never silently: the rules still apply at
+// their normal levels, and the warning is printed with every check.
+func teamPolicy() (rules []policy.Rule, warning string) {
+	rules, _, err := loadPolicy()
+	if err != nil {
+		return nil, err.Error()
+	}
+	return rules, ""
+}
 
 // analyze is replaced in tests.
 var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
@@ -55,9 +73,12 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 		}
 	}
 	procs := func(cmds []shellparse.Command) []domain.Effect { return inspectProcesses(callerPid(ctx), cmds) }
-	e := &engine.Engine{Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	rules, warning := teamPolicy()
+	e := &engine.Engine{Rules: rules, Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
-	return e.Analyze(ctx, line, cwd)
+	a := e.Analyze(ctx, line, cwd)
+	a.PolicyWarning = warning
+	return a
 }
 
 // realSandbox runs the OverlayFS sandbox, after checking the machine allows it.
@@ -254,6 +275,7 @@ func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
 	if f.json {
 		printJSON(stdout, a)
 	} else {
+		printPolicyWarning(stderr, a)
 		printAnalysis(stdout, a, cwd, color, f.verbose)
 	}
 	return a.Decision.ExitCode()
@@ -309,10 +331,24 @@ func hiddenNotes(w io.Writer, n int, dim, reset string) {
 	}
 }
 
+// printPolicyWarning says, in one line, that the team policy could not be used.
+func printPolicyWarning(w io.Writer, a engine.Analysis) {
+	if a.PolicyWarning != "" {
+		fmt.Fprintln(w, "Warning:", report.Printable(a.PolicyWarning))
+	}
+}
+
 func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bool) {
 	c := newPalette(color)
 	col := c.level(a.Level)
-	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, a.Level, a.Level.Label(), c.reset, decisionText[a.Decision])
+	decision := decisionText[a.Decision]
+	if a.Team.Block != "" {
+		decision = "BLOCK"
+	}
+	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, a.Level, a.Level.Label(), c.reset, decision)
+	if a.Team.Block != "" {
+		fmt.Fprintf(w, "%sBlocked by your team's policy: %s%s\n", c.bold, report.Printable(a.Team.Block), c.reset)
+	}
 	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, report.Printable(a.Line), c.reset)
 	if a.Level > a.Verdict.Level {
 		fmt.Fprintf(w, "%sThe command text alone looked like %s; what it would really do raised it to %s.%s\n", c.dim, a.Verdict.Level, a.Level, c.reset)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
@@ -247,6 +248,29 @@ func TestNetworkAttemptsInTheSandboxBecomeAnEffect(t *testing.T) {
 	}
 }
 
+func TestTeamPolicyBlocksAndSurvivesLaterEffects(t *testing.T) {
+	rules := []policy.Rule{{Match: []string{"docker", "system", "prune"}, Block: "Ask the platform team."}}
+	a := (&Engine{Rules: rules}).Analyze(context.Background(), "docker system prune -af", "/w")
+	if a.Team.Block != "Ask the platform team." || a.Decision < domain.Block {
+		t.Fatalf("%+v %s", a.Team, a.Decision)
+	}
+	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R0})
+	if a.Decision < domain.Block {
+		t.Error("an AI review must not lift a policy block")
+	}
+	if b := (&Engine{Rules: rules}).Analyze(context.Background(), "docker ps", "/w"); b.Team.Block != "" || b.Decision != domain.Allow {
+		t.Errorf("an unrelated command is untouched: %+v %s", b.Team, b.Decision)
+	}
+}
+
+func TestTeamPolicyMinimumLevelRaisesTheDecision(t *testing.T) {
+	rules := []policy.Rule{{Match: []string{"ls"}, MinLevel: domain.R3}}
+	a := (&Engine{Rules: rules}).Analyze(context.Background(), "ls", "/w")
+	if a.Level != domain.R3 || a.Decision != domain.Block || a.Verdict.Level != domain.R0 {
+		t.Errorf("%s %s (rules said %s)", a.Level, a.Decision, a.Verdict.Level)
+	}
+}
+
 func TestAddEffectCanOnlyRaiseTheLevel(t *testing.T) {
 	a := (&Engine{}).Analyze(context.Background(), "ls", "/w")
 	if a.Level != domain.R0 || a.Decision != domain.Allow {
@@ -259,5 +283,17 @@ func TestAddEffectCanOnlyRaiseTheLevel(t *testing.T) {
 	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R0})
 	if a.Level != domain.R3 || a.Decision != domain.Block {
 		t.Errorf("a lower opinion lowered it: %s %s", a.Level, a.Decision)
+	}
+}
+
+func TestASnapshotRuleRunsTheSandboxEvenForALowRiskCommand(t *testing.T) {
+	sim := &fakeSim{}
+	rules := []policy.Rule{{Match: []string{"touch"}, Snapshot: true}}
+	a := (&Engine{Sim: sim, Rules: rules}).Analyze(context.Background(), "touch notes.txt", "/w")
+	if len(sim.calls) != 1 || a.Sim == nil || a.Decision < domain.Confirm {
+		t.Errorf("calls %d sim %v decision %s: a snapshot needs the files the run changes", len(sim.calls), a.Sim, a.Decision)
+	}
+	if b := (&Engine{Sim: &fakeSim{}}).Analyze(context.Background(), "touch notes.txt", "/w"); b.Sim != nil {
+		t.Error("without the rule a low-risk command is not simulated")
 	}
 }

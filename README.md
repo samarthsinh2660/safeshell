@@ -147,6 +147,22 @@ flowchart LR
 Observed effects and the AI can only raise a rating, never lower it. More in
 [doc/architecture.md](doc/architecture.md).
 
+## Team policy (optional, for administrators)
+
+On a shared machine, an administrator can put rules in `/etc/safeshell/policy.json`. They apply to everyone and can only make SafeShell stricter; user settings cannot override them.
+
+```json
+{"rules": [
+  {"match": "docker system prune", "block": "Ask the platform team first."},
+  {"match": "apt purge", "snapshot": true},
+  {"match": "rm", "min_level": "R3"}
+]}
+```
+
+`match` is a command followed by the words that must come next (`apt purge` also matches `sudo apt -y purge nginx`). A rule can `block` with a reason (no "do it anyway"), ask for a `snapshot`, or set a `min_level` of R1 to R4. A rule that tries anything else, such as lowering a level, is rejected with an error. The file must be owned by root and not writable by anyone else (and so must `/etc/safeshell`), or it is ignored with a warning. The file must be readable by everyone. `safeshell doctor` shows which policy is active.
+
+The policy is a guard rail in each person's SafeShell, not access control: people can still pause their own SafeShell (`safeshell deactivate`) or run commands without the hook. To stop a command for real, use file permissions, sudo rules or groups.
+
 ## AI (optional, off until you choose)
 
 - **Local, default Qwen2.5-Coder 3B.** SafeShell downloads and manages a pinned, checksum-verified `llama.cpp`

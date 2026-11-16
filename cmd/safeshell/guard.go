@@ -88,10 +88,16 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 		return 1 // nothing goes to stdout, so the hook runs nothing
 	}
 	aiReview(&a, stderr)
+	printPolicyWarning(stderr, a)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)
 	} else {
 		learnNote(stderr, a, color)
+	}
+	if a.Team.Block != "" { // the admin's block is final: no "do it anyway" here
+		record(a, line, false)
+		fmt.Fprintln(stderr, "Ask your administrator if you need this to run.")
+		return 1
 	}
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true
@@ -102,7 +108,11 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	}
 	record(a, cmd, ok)
 	if ok && cmd == line { // a replacement command has different effects, so the saved files do not apply
-		if note := protect(a); note != "" {
+		note := protect(a)
+		if note == "" && a.Team.Snapshot {
+			note = "Your team's policy asks for a snapshot first, but SafeShell could not tell which files this will change, so nothing was saved."
+		}
+		if note != "" {
 			fmt.Fprintln(stderr, report.Printable(note))
 		}
 	}

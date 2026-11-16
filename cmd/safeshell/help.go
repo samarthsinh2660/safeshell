@@ -88,6 +88,15 @@ Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when che
      safeshell history         what SafeShell decided, newest first (--json for the raw entries)
 Undo restores deleted and changed files and removes files the command created. If anything cannot
 be restored exactly, it tells you instead of claiming success.`},
+	{"policy", "Team policy for administrators", `An administrator can set rules for everyone on the machine in /etc/safeshell/policy.json:
+     {"rules": [{"match": "docker system prune", "block": "Ask the platform team first."},
+                {"match": "apt purge", "snapshot": true},
+                {"match": "rm", "min_level": "R3"}]}
+"match" is a command and the words that follow it ("apt purge" also matches "sudo apt -y purge x").
+A rule can block with a reason (there is no "do it anyway"), ask for a snapshot, or raise the level.
+Rules can only make SafeShell stricter; user settings cannot override them. The file and /etc/safeshell
+must belong to root and not be writable by anyone else, or the policy is ignored with a warning.
+safeshell doctor  shows which policy is active.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
    safeshell check <cmd>             rate a command without running it
    safeshell analyze <cmd>           the full picture: rating, sandbox result, what it would hit

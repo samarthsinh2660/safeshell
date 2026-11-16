@@ -29,6 +29,7 @@ import (
 func runDoctor(stdout io.Writer) int {
 	code := doctor(stdout, probe())
 	doctorSetup(stdout)
+	doctorPolicy(stdout)
 	doctorAI(stdout)
 	doctorCloud(stdout)
 	cards, _ := os.ReadFile("/proc/asound/cards")
@@ -110,6 +111,19 @@ func doctorSetup(w io.Writer) {
 		size += m.Bytes
 	}
 	doctorRow(w, "info", "snapshots", fmt.Sprintf("%d saved, %s (list them: safeshell snapshots)", len(ms), report.HumanBytes(size)))
+}
+
+// doctorPolicy says which team policy is active, or that none is set.
+func doctorPolicy(w io.Writer) {
+	rules, found, err := loadPolicy()
+	switch {
+	case err != nil:
+		doctorRow(w, "MISSING", "team policy", report.Printable(err.Error()))
+	case !found:
+		doctorRow(w, "info", "team policy", "none set ("+config.PolicyPath+" is where an administrator puts one)")
+	default:
+		doctorRow(w, "ok", "team policy", fmt.Sprintf("%s, %d rules", config.PolicyPath, len(rules)))
+	}
 }
 
 // daemonWait is how long doctor waits for the daemon; tests may shorten it.

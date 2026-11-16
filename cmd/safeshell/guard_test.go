@@ -8,6 +8,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/audit"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/ipc"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"io"
 	"os"
 	"path/filepath"
@@ -107,8 +108,10 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	auditPath = func() string { return filepath.Join(d, "audit.jsonl") }
 	backend = func() (ai.Backend, error) { return nil, nil }                 // tests never reach a real model
 	socketPath = func() string { return filepath.Join(d, "no-daemon.sock") } // nor a real daemon
-	learning = func() bool { return false }                                  // nor the developer's own settings
-	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") }    // nor the real state folder
+	realLoadPolicy = loadPolicy
+	loadPolicy = func() ([]policy.Rule, bool, error) { return nil, false, nil } // nor a policy on this machine
+	learning = func() bool { return false }                                     // nor the developer's own settings
+	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") }       // nor the real state folder
 	code := m.Run()
 	os.RemoveAll(d)
 	os.Exit(code)

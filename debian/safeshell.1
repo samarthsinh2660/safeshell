@@ -93,11 +93,14 @@ What the shell hook runs for each command line: analyse it, ask if needed, and p
 Exit status 0 means run the printed command, 1 means it was cancelled, 2 means wrong usage.
 .TP
 .RB "help [" topic ]
-Short guides: start, safety, english, models, voice, learn, pause, undo, commands, privacy and trouble.
+Short guides: start, safety, english, models, voice, learn, pause, undo, policy, commands, privacy and trouble.
 .TP
 .B version
 Print the version.
 .SH FILES
+.TP
+.I /etc/safeshell/policy.json
+Optional team policy written by an administrator: rules that block a command with a reason, raise its level or ask for a snapshot. It can only make SafeShell stricter. It is used only when root owns it and its folder and nobody else can write to them; otherwise it is ignored with a warning. safeshell doctor shows which policy is active.
 .TP
 .I ~/.config/safeshell/config.json
 Settings.
