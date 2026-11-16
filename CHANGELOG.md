@@ -2,6 +2,26 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.4.0 - 2026-11-16
+
+Shared rules: administrators can set a team policy, and the remaining ways of hiding a command from the checks are closed.
+
+### Added
+- Team policy: on a shared machine an administrator can put rules in `/etc/safeshell/policy.json` that apply to everyone and can only make SafeShell stricter: `block` a command with a reason (no "do it anyway"), raise its `min_level`, or require a `snapshot` first. A rule that tries anything else is rejected with a clear error. The file must belong to root and be writable by no one else, or it is ignored with a warning on every check. `safeshell doctor` and `safeshell help policy` show it. It is a guard rail in each person's SafeShell, not access control. (#28)
+
+### Changed
+- Before anything is sent to a cloud AI, secret values are hidden as `***`, the same way as in the audit log: tokens, keys, passwords, Authorization headers, JSON secret fields, `user:pass@` in web addresses and `-u user:pass`. Local models are unchanged. (#75)
+- `fc` (other than `fc -l`) and zsh `r` are blocked: they run an edited or old command from inside the shell, which SafeShell cannot check or preview. Type the command out instead. (#90)
+
+### Fixed
+- Words are read the way the shell reads them, so `r\m -rf /`, `'r'm` and `"r"m` are recognised as `rm`. (#44)
+- Literal text fed to a shell is checked like `sh -c`: here-documents, here-strings, `printf ... | sh`, `echo ... | bash`, `cat <<X | sh` and `source /dev/stdin`. (#42)
+- Commands inside `su -c`, `runuser`, `pkexec`, `nsenter`, `watch`, `flock`, `strace`, GNU `parallel`, `chroot` and `env -C` are checked; `su`, `runuser` and `pkexec` count as running as root. (#46)
+- GNU sed's `e` (run a command) and `w` (write a file) are rated by what they do. (#43)
+- `git push origin +main` and `git push --mirror` are rated like `--force`, and the safer option is never the same command. (#45)
+- `sudo echo hi > out.txt` is R2: the redirect is opened by your shell, not by root. `sudo tee` is unchanged. (#47)
+- `pkill -u root` is R4, and a very short `pkill` pattern (such as `sh`, which also matches bash, zsh and sshd) is R3 unless `-x` asks for the exact name. (#48)
+
 ## 1.3.0 - 2026-11-14
 
 Trust the sandbox and undo: undo never deletes what it should keep or follows a swapped-in link, secrets stay out of the log, the daemon protects the right shell, and the released `.deb` is a complete Debian package.
