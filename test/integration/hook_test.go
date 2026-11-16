@@ -332,7 +332,7 @@ func TestFcAndRCannotRunHistoryUnchecked(t *testing.T) {
 			sh.waitFor(t, "READY>")
 			sh.send(`eval "$(safeshell hook ` + c.shell + `)"` + "\r")
 			sh.send("touch " + marker + "\r") // R1: runs without a question, and leaves a mark
-			for i := 0; i < 500; i++ { // the shell has run it once
+			for i := 0; i < 500; i++ {        // the shell has run it once
 				if _, err := os.Stat(marker); err == nil {
 					break
 				}
