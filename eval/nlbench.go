@@ -63,7 +63,7 @@ func parse(name, src string, fields int) ([]Request, error) {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		f := strings.Split(line, "	")
+		f := strings.Split(line, "\t")
 		if len(f) != fields {
 			return nil, fmt.Errorf("%s line %d: want %d fields, got %d", name, n, fields, len(f))
 		}

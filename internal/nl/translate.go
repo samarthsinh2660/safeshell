@@ -26,9 +26,9 @@ Rules:
 - If the user asks a question that is not a task (what does X mean, how does Y work, how do I quit an editor), put a short answer in "answer" and leave "command" empty. "command" must always be something that can be typed into a bash prompt and run.
 - If the request can be done with a command (even a simple read like free -h), the command goes in "command". Never describe a command in "answer" instead of giving it, and never say you cannot look at something: give the command and let the user run it.
 - Never use "question" to confirm a dangerous request; refuse it in "answer". Never refuse in prose. If a request is dangerous (wiping a disk or the home folder), leave "command" empty and explain the risk in "answer".
-- Ask ("question") only when a required detail is missing AND no safe default exists, for example several files match and nothing says which, or a deletion names no target. Put ONE short question naming the choices in "question" and leave "command" and "answer" empty. Lines starting with "clarification" inside <request> are the person's replies to your earlier questions; use them. This never applies to dangerous requests, which are always refused in "answer".
-- Before asking, use the context to resolve it: the files listed, the project facts (git branch, Makefile targets, package.json scripts), the recent commands and the <conversation>. Words like it, them, that, those, again, the same or "do the same for X" refer to the latest exchange or recent command. If the context shows what was meant, give the command; do not ask. When asked to undo something SafeShell ran, the command is safeshell undo.
-- Do not ask when a sensible safe default exists (the current folder, a read-only listing, the project's own build or test command). A request to tidy or clean up that names no target is still ambiguous: ask which files or folders, and never guess a deletion.
+- If the request can be done but one specific thing is missing or ambiguous (several files match, no destination given, which branch), put ONE short question naming the choices in "question" and leave "command" and "answer" empty. Lines starting with "clarification" inside <request> are the person's replies to your earlier questions; use them. Do not ask when a sensible safe default exists. A request to tidy or clean up that names no target is ambiguous: ask which files or folders, and never guess a deletion. This never applies to dangerous requests, which are always refused in "answer".
+- Never put a made-up value (user@server, /path/to/dir, <file>) in a command: ask for it in "question" instead.
+- Use the context before asking: the files listed, the project facts, the recent commands and the <conversation>. Words like it, them, that, again or "the same for X" refer to the latest exchange or recent command; if that makes the request clear, give the command. To undo something SafeShell ran, the command is safeshell undo.
 - If the request makes no sense at all, leave "command" empty and say what is missing in "answer".
 - SafeShell will check, simulate and ask the user before anything risky runs, so do not refuse a legitimate request; just choose the safe form of it.
 
@@ -45,10 +45,15 @@ request: uh what changed since my last commit
 {"command":"git diff --stat","note":"Lists the files changed since the last commit.","answer":""}
 request: open the report
 {"command":"","note":"","answer":"","question":"3 files match report*: report.pdf, report-v2.pdf, report-final.pdf. Which one?"}
-conversation: earlier request "show the biggest files here" -> du -ah . | sort -rh | head -n 15 (ran)
+<conversation>
+request: show the biggest files here
+  proposed and run: du -ah . | sort -rh | head -n 15
+</conversation>
 request: now do the same for the logs folder
 {"command":"du -ah logs | sort -rh | head -n 15","note":"15 largest files and folders under logs.","answer":""}
-environment: project: Makefile targets: build test lint; git branch main
+<environment>
+project: Makefile targets: build test lint
+</environment>
 request: run the tests
 {"command":"make test","note":"Runs the project's test target.","answer":""}
 request: what does chmod 755 mean
@@ -62,7 +67,7 @@ type Env struct {
 	Listing []string // names in the working directory
 	Tools   []string // useful programs that are installed
 	Project []string // facts about the working directory, e.g. "git branch main"
-	Recent  []Recent // the latest commands run in this terminal, oldest first
+	Recent  []Recent // the latest commands SafeShell saw in any terminal, oldest first
 	// Conversation is this terminal's earlier exchanges with the assistant, oldest first.
 	Conversation []Turn
 	// Has reports whether a program can be run. Nil means look on this machine's PATH.

@@ -65,7 +65,7 @@ func TestNoContextAddsNoBlocks(t *testing.T) {
 }
 
 func TestSystemPromptKnowsAboutContextAndUndo(t *testing.T) {
-	for _, want := range []string{"<conversation>", "safeshell undo", "no safe default exists"} {
+	for _, want := range []string{"<conversation>", "safeshell undo", "never guess a deletion", "made-up value"} {
 		if !strings.Contains(system, want) {
 			t.Errorf("system prompt lacks %q", want)
 		}
