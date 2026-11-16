@@ -38,14 +38,17 @@ To force it, start the line with ?   (for example:  ? how much disk is free).
 You always see the command first and press Enter to run it. It is then checked like any typed
 command, so a dangerous suggestion is still stopped. Questions ("what does chmod 755 mean") are
 answered and nothing runs. If something is unclear (several files match), SafeShell asks you a
-short question first. Needs an AI model: see  safeshell help models.`},
+short question first.
+It knows the folder you are in (git branch, Makefile targets, npm scripts) and what you did in the
+last half hour, so you can follow up:   now do the same for the logs folder    undo that
+Needs an AI model: see  safeshell help models. What it is told: see  safeshell help privacy.`},
 	{"models", "Choose or change the AI model (/models)", `Type  /models  (in your terminal or as  safeshell models ) to see the menu:
    On this machine: Qwen models, downloaded once, private, free, work offline.
      Qwen2.5-Coder 3B is the default. 1.5B is faster, 7B is the most accurate (about 6 GB RAM).
    In the cloud: Claude (Anthropic), GPT (OpenAI), Gemini (Google). Paste your own API key; it is
      checked, then stored in ~/.config/safeshell/keys.json (readable only by you), or read from
-     ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY. Only the command text is sent, with your
-     home folder name hidden, and never file contents.
+     ANTHROPIC_API_KEY / OPENAI_API_KEY / GEMINI_API_KEY. What is sent (the command or request and
+     its context, secrets masked, never file contents) is listed in  safeshell help privacy.
    To pick a model your key offers: in the menu type  choose N  (N is the cloud number), then a number
      from the list. Outside the menu,  safeshell models list  prints the same list. If the list cannot
      be fetched you are told why and the current model stays.
