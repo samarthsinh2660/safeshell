@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox/netwatch"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -59,8 +60,10 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 			}
 		}
 	}
-	if err := os.MkdirAll(filepath.Join(scratch, "merged"), 0o755); err != nil {
-		return sandbox.Result{}, err
+	for _, d := range []string{"merged", "asks"} {
+		if err := os.MkdirAll(filepath.Join(scratch, d), 0o755); err != nil {
+			return sandbox.Result{}, err
+		}
 	}
 	req, _ := json.Marshal(request{Spec: spec, Shell: shell, Cwd: cwd, Env: env, Root: scratch, Layers: layers})
 
@@ -117,11 +120,9 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		res.ExitCode = out.Exit
 	}
 	res.Warnings = markWritable(out.Warnings)
+	res.RootAsks = parseRootAsks(readCapped(filepath.Join(scratch, "asks", "root")))
 
-	if len(out.Layers) > 0 {
-		layers = out.Layers
-	}
-	for _, l := range layers {
+	for _, l := range toDiff(layers, out.Layers, res.TimedOut, scratch) {
 		d, err := Diff(l.Upper, l.Mount, Options{})
 		if err != nil {
 			return res, fmt.Errorf("read changes of %s: %w", l.Mount, err)
@@ -133,6 +134,45 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		res.Diff.Truncated = res.Diff.Truncated || d.Truncated
 	}
 	return res, nil
+}
+
+// toDiff is what to compare after a run: the layers the child reported, or,
+// when it was killed before reporting, the planned ones plus the extra layers
+// it noted in the scratch folder.
+func toDiff(planned, reported []Layer, timedOut bool, scratch string) []Layer {
+	switch {
+	case len(reported) > 0:
+		return reported
+	case timedOut:
+		return append(planned, dynLayers(scratch)...)
+	}
+	return planned
+}
+
+// readCapped returns up to maxAsksRead bytes of the file, or "" if it cannot be read.
+func readCapped(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	b, _ := io.ReadAll(io.LimitReader(f, maxAsksRead))
+	return string(b)
+}
+
+// dynLayers lists the extra layers the child mounted, from the mount path it
+// wrote beside each one (scratch/dyn/N/mount). It is used when the child was
+// killed before it could report them.
+func dynLayers(scratch string) []Layer {
+	var out []Layer
+	dirs, _ := filepath.Glob(filepath.Join(scratch, "dyn", "*"))
+	for _, dir := range dirs {
+		mount := strings.TrimSpace(readCapped(filepath.Join(dir, "mount")))
+		if filepath.IsAbs(mount) {
+			out = append(out, Layer{Mount: mount, Upper: filepath.Join(dir, "upper"), Work: filepath.Join(dir, "work")})
+		}
+	}
+	return out
 }
 
 // cleanup removes the scratch tree. Overlay work directories are created with

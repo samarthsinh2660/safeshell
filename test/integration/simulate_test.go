@@ -40,6 +40,7 @@ type result struct {
 		Family, Addr string
 		Port, Count  int
 	}
+	RootAsks []string
 }
 
 var ssBin string
@@ -570,5 +571,97 @@ func TestAnUnknownScriptIsStillAllowedWhenTheGapsDoNotMatter(t *testing.T) {
 	}
 	if a.Decision != "allow" || a.Level != "R1" {
 		t.Errorf("decision %s level %s", a.Decision, a.Level)
+	}
+}
+
+func TestAScriptThatAsksForRootIsNotAllowedUnattended(t *testing.T) {
+	needSandbox(t)
+	if _, err := exec.LookPath("sudo"); err != nil {
+		t.Skip("sudo is not installed here")
+	}
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "clean.sh"), []byte("#!/bin/sh\nsudo rm /etc/x\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := analyze(t, "--cwd", d, "./clean.sh")
+	if a.Decision == "allow" || (a.Level != "R3" && a.Level != "R4") {
+		t.Errorf("decision %s level %s", a.Decision, a.Level)
+	}
+	found := false
+	for _, e := range a.Effects {
+		found = found || (e.Evidence == "ESTIMATED" && strings.Contains(e.Summary, "asks for root"))
+	}
+	if !found {
+		t.Errorf("no note about root: %+v", a.Effects)
+	}
+}
+
+func TestRootProgramsAreCaughtByPathAndByAbsolutePath(t *testing.T) {
+	needSandbox(t)
+	if _, err := os.Stat("/usr/bin/sudo"); err != nil {
+		t.Skip("/usr/bin/sudo is not installed here")
+	}
+	r := simulate(t, "sudo true; /usr/bin/sudo true; echo after")
+	if len(r.RootAsks) != 1 || r.RootAsks[0] != "sudo" || !strings.Contains(r.Stdout, "after") {
+		t.Errorf("%+v", r)
+	}
+	if !strings.Contains(r.Stderr, "not available in the preview") {
+		t.Errorf("stderr = %q", r.Stderr)
+	}
+}
+
+// writableExtraDir finds a directory the user can write that the sandbox mounts as an
+// extra layer: a folder beside a mount point inside another mounted folder. Many machines
+// have none, and then the test is skipped.
+func writableExtraDir(t *testing.T) string {
+	t.Helper()
+	mi, _ := os.ReadFile("/proc/self/mountinfo")
+	mounts := map[string]bool{}
+	for _, line := range strings.Split(string(mi), "\n") {
+		if f := strings.Fields(line); len(f) > 4 {
+			mounts[strings.ReplaceAll(f[4], `\040`, " ")] = true
+		}
+	}
+	for m := range mounts {
+		for a := filepath.Dir(m); a != "/" && a != "."; a = filepath.Dir(a) {
+			entries, _ := os.ReadDir(a)
+			for _, e := range entries {
+				c := filepath.Join(a, e.Name())
+				if !e.IsDir() || e.Type()&os.ModeSymlink != 0 || strings.HasPrefix(c, "/proc") || strings.HasPrefix(c, "/sys") ||
+					strings.HasPrefix(c, "/dev") || strings.HasPrefix(c, "/run") || strings.ContainsAny(c, " ,:") || syscall.Access(c, 2) != nil {
+					continue
+				}
+				clash := false
+				for o := range mounts {
+					clash = clash || o == c || strings.HasPrefix(o, c+"/")
+				}
+				if !clash {
+					return c
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func TestChangesInAnExtraMountAreShownAfterATimeout(t *testing.T) {
+	needSandbox(t)
+	dir := writableExtraDir(t)
+	if dir == "" {
+		t.Skip("no writable folder in an extra mount on this machine")
+	}
+	name := "ss-timeout-probe-" + strings.ReplaceAll(t.Name(), "/", "_")
+	if r := simulate(t, "touch "+dir+"/"+name); r.ExitCode != 0 {
+		t.Skipf("the folder %s is not writable in the sandbox: %+v", dir, r)
+	}
+	r := simulate(t, "--timeout", "2s", "touch "+dir+"/"+name+"; sleep 30")
+	if !r.TimedOut {
+		t.Fatalf("did not time out: %+v", r)
+	}
+	if _, ok := r.find("/" + name); !ok {
+		t.Errorf("the change under %s was lost after the timeout: %+v", dir, r.Diff.Changes)
+	}
+	if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+		t.Error("the real folder was touched")
 	}
 }

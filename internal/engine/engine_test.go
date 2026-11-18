@@ -124,6 +124,21 @@ func TestSimulationFailureIsHonest(t *testing.T) {
 	}
 }
 
+func TestAskingForRootIsNotAllowedUnattended(t *testing.T) {
+	res := sandbox.Result{RootAsks: []string{"sudo"}}
+	a := (&Engine{Sim: &fakeSim{res: res}}).Analyze(context.Background(), "./script.sh", "/w")
+	if a.Level < domain.R3 || a.Decision == domain.Allow {
+		t.Errorf("level %s decision %s", a.Level, a.Decision)
+	}
+	var found bool
+	for _, e := range a.Effects {
+		found = found || (e.Evidence == domain.Estimated && strings.Contains(e.Summary, "asks for root"))
+	}
+	if !found {
+		t.Errorf("no root effect: %+v", a.Effects)
+	}
+}
+
 func TestTimeoutAddsAnEstimatedEffect(t *testing.T) {
 	res := sandbox.Result{TimedOut: true, Duration: 30 * time.Second}
 	a := (&Engine{Sim: &fakeSim{res: res}}).Analyze(context.Background(), "rm -rf big", "/w")

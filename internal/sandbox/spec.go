@@ -25,6 +25,10 @@ type Result struct {
 	// Warnings list parts of the filesystem that could not be mirrored; they
 	// are empty inside the sandbox, so commands touching them behave differently.
 	Warnings []Warning
+	// RootAsks names the programs (sudo, su, pkexec, doas, runuser) the command
+	// tried to run for root. They cannot work in the sandbox, so what the command
+	// would do as root is not known.
+	RootAsks []string
 }
 
 // Warning is one part of the filesystem the sandbox could not mirror.

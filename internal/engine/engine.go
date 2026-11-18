@@ -137,6 +137,9 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 	if ne, ok := report.NetEffect(res.Net); ok {
 		a.Effects = append(a.Effects, ne)
 	}
+	if re, ok := report.RootEffect(res.RootAsks); ok {
+		a.Effects = append(a.Effects, re)
+	}
 	if why := a.mirrorGap(res.Warnings); why != "" {
 		a.Effects = append(a.Effects, a.estimated(why))
 	}
