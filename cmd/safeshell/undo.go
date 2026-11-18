@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
@@ -44,7 +45,11 @@ func protect(a engine.Analysis) string {
 	case a.Sim != nil:
 		ts = targets(a.Sim.Diff.Changes)
 	case a.Level >= domain.R2 || a.Team.Snapshot:
-		for _, p := range a.Targets {
+		for _, w := range a.Targets {
+			p := w.Path
+			if fi, err := os.Stat(p); w.Into != "" && err == nil && fi.IsDir() { // mv or cp into a folder: only the file inside it changes
+				p = w.Into
+			}
 			ts = append(ts, snapshot.Target{Path: p, Create: true})
 		}
 		if len(ts) == 0 && a.Team.Snapshot {

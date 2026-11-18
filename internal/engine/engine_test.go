@@ -300,7 +300,7 @@ func TestASnapshotRuleRunsTheSandboxEvenForALowRiskCommand(t *testing.T) {
 
 func TestNoSandboxResultNamesTheFilesFromTheArguments(t *testing.T) {
 	a := (&Engine{Sim: &fakeSim{err: errors.New("boom")}}).Analyze(context.Background(), "rm notes.txt *.log", "/w")
-	if len(a.Targets) != 1 || a.Targets[0] != "/w/notes.txt" || !a.TargetsGap {
+	if len(a.Targets) != 1 || a.Targets[0].Path != "/w/notes.txt" || !a.TargetsGap {
 		t.Errorf("targets %v gap %v", a.Targets, a.TargetsGap)
 	}
 	a = (&Engine{Sim: &fakeSim{res: sandbox.Result{}}}).Analyze(context.Background(), "rm notes.txt", "/w")

@@ -70,7 +70,7 @@ type Analysis struct {
 	// Targets are the files the command is expected to change, read from its
 	// arguments; set only when there is no sandbox result. TargetsGap says some
 	// operand could not be named (a glob or variable), so the list may be short.
-	Targets    []string        `json:"targets,omitempty"`
+	Targets    []rules.Written `json:"targets,omitempty"`
 	TargetsGap bool            `json:"targets_gap,omitempty"`
 	SimNote    string          `json:"sim_note,omitempty"` // why it was not simulated, or why that failed
 	Level      domain.Level    `json:"level"`              // the final level: rules raised by effects

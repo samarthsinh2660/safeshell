@@ -8,29 +8,66 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
 
-// WritePaths lists the absolute paths the commands would change, read from
-// their arguments and redirects alone (relative ones are taken from cwd). It is
+// Written is a file a command changes, named from its arguments.
+type Written struct {
+	Path string `json:"path"`
+	// Into is set for the destination of mv or cp: the file that changes when
+	// Path turns out to be an existing folder (the source keeps its name inside it).
+	Into string `json:"into,omitempty"`
+}
+
+// WritePaths lists the files the commands would change, read from their
+// arguments and redirects alone (relative paths are taken from cwd). It is
 // what a snapshot can save when no sandbox run says which files change.
 // complete is false when some operand could not be named, such as a glob, a
 // variable or a command that takes its files from elsewhere.
-func WritePaths(cmds []shellparse.Command, cwd string) (paths []string, complete bool) {
+func WritePaths(cmds []shellparse.Command, cwd string) (out []Written, complete bool) {
 	complete = true
-	add := func(c shellparse.Command, p string) {
+	abs := func(c shellparse.Command, p string) (string, bool) {
 		switch {
 		case c.Cwd == "?" || p == "" || strings.ContainsAny(p, "*?[]{}$`~"):
 			complete = false
+			return "", false
 		case strings.HasPrefix(p, "/dev/"):
-		default:
-			base := cwd
-			if c.Cwd != "" {
-				base = under(cwd, c.Cwd)
-			}
-			paths = append(paths, under(base, p))
+			return "", false
+		}
+		base := cwd
+		if c.Cwd != "" {
+			base = under(cwd, c.Cwd)
+		}
+		return under(base, p), true
+	}
+	add := func(c shellparse.Command, p string) {
+		if a, ok := abs(c, p); ok {
+			out = append(out, Written{Path: a})
 		}
 	}
 	for _, c := range cmds {
 		ops, ok := operandPaths(c)
 		complete = complete && ok
+		if (c.Name == "mv" || c.Name == "cp") && len(ops) >= 2 {
+			srcs, dst := ops[:len(ops)-1], ops[len(ops)-1]
+			if c.Name == "mv" {
+				for _, s := range srcs {
+					add(c, s)
+				}
+			}
+			intoDir := strings.HasSuffix(dst, "/") || len(srcs) > 1
+			for _, s := range srcs {
+				d, ok := abs(c, dst)
+				if !ok {
+					break
+				}
+				into := path.Join(d, path.Base(s))
+				switch {
+				case intoDir:
+					out = append(out, Written{Path: into})
+				default:
+					out = append(out, Written{Path: d, Into: into})
+				}
+			}
+			ops = nil
+		}
 		for _, p := range ops {
 			add(c, p)
 		}
@@ -40,8 +77,8 @@ func WritePaths(cmds []shellparse.Command, cwd string) (paths []string, complete
 			}
 		}
 	}
-	slices.Sort(paths)
-	return slices.Compact(paths), complete
+	slices.SortFunc(out, func(a, b Written) int { return strings.Compare(a.Path+"\x00"+a.Into, b.Path+"\x00"+b.Into) })
+	return slices.Compact(out), complete
 }
 
 // under makes p absolute, taking relative paths from dir.
@@ -91,11 +128,7 @@ func operandPaths(c shellparse.Command) (ops []string, ok bool) {
 		}) {
 			return nil, false
 		}
-		pos := parseFlags(args).pos
-		if c.Name == "cp" && len(pos) > 0 {
-			pos = pos[len(pos)-1:] // only the destination changes
-		}
-		return pos, true
+		return parseFlags(args).pos, true // WritePaths splits sources from the destination
 	case "chmod", "chown", "chgrp":
 		if pos := parseFlags(args).pos; len(pos) > 0 {
 			return pos[1:], true // the first is the mode or owner

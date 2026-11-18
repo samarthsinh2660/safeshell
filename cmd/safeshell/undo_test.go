@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/samarthsinh2660/safeshell/internal/classify/rules"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/snapshot"
@@ -180,7 +181,7 @@ func TestProtectNamesGapsAndFailures(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "a")
 	os.WriteFile(f, []byte("x"), 0o644)
 	a := sampleAnalysis()
-	a.Targets, a.TargetsGap = []string{f}, true
+	a.Targets, a.TargetsGap = []rules.Written{{Path: f}}, true
 	if got := protect(a); !strings.Contains(got, "Snapshot saved") || !strings.Contains(got, "could not be named") {
 		t.Error(got)
 	}
@@ -191,5 +192,22 @@ func TestProtectNamesGapsAndFailures(t *testing.T) {
 	a.Level, a.Targets = domain.R1, nil
 	if got := protect(a); got != "" {
 		t.Error("a harmless command needs no snapshot, got", got)
+	}
+}
+
+// mv or cp into an existing folder changes one file inside it, so only that
+// file is saved, not the whole folder.
+func TestProtectSavesOnlyTheFileMovedIntoAFolder(t *testing.T) {
+	useStore(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "big"), make([]byte, 4096), 0o644)
+	a := sampleAnalysis()
+	a.Targets = []rules.Written{{Path: dir, Into: filepath.Join(dir, "a")}}
+	if got := protect(a); !strings.Contains(got, "Snapshot saved (0 B)") {
+		t.Errorf("only dir/a (absent) is saved, not the folder: %s", got)
+	}
+	a.Targets = []rules.Written{{Path: filepath.Join(dir, "big"), Into: filepath.Join(dir, "big", "a")}}
+	if got := protect(a); !strings.Contains(got, "Snapshot saved (4.0 KiB)") {
+		t.Errorf("a file destination is saved itself: %s", got)
 	}
 }

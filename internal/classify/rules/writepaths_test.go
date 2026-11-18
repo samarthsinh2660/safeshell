@@ -15,9 +15,13 @@ func TestWritePaths(t *testing.T) {
 	}{
 		{"rm notes.txt", []string{"/w/notes.txt"}, true},
 		{"rm -rf /tmp/a b", []string{"/tmp/a", "/w/b"}, true},
-		{"mv a b", []string{"/w/a", "/w/b"}, true},
+		{"mv a b", []string{"/w/a", "/w/b => /w/b/a"}, true},
+		{"mv a d/", []string{"/w/a", "/w/d/a"}, true},
+		{"mv a b d", []string{"/w/a", "/w/b", "/w/d/a", "/w/d/b"}, true},
+		{"mv a *.d", []string{"/w/a"}, false},
 		{"mv -t dir a", nil, false},
-		{"cp a b", []string{"/w/b"}, true},
+		{"cp a b", []string{"/w/b => /w/b/a"}, true},
+		{"cp -r src/ /srv/", []string{"/srv/src"}, true},
 		{"cp --target-directory=d a", nil, false},
 		{"cp", nil, true},
 		{"sed -i s/a/b/ f g", []string{"/w/f", "/w/g"}, true},
@@ -54,7 +58,14 @@ func TestWritePaths(t *testing.T) {
 		for _, p := range res.Pipelines {
 			cmds = append(cmds, p.Cmds...)
 		}
-		got, complete := WritePaths(cmds, "/w")
+		ws, complete := WritePaths(cmds, "/w")
+		var got []string
+		for _, w := range ws {
+			if w.Into != "" {
+				w.Path += " => " + w.Into
+			}
+			got = append(got, w.Path)
+		}
 		if !slices.Equal(got, tc.want) || complete != tc.complete {
 			t.Errorf("%q = %v, %v; want %v, %v", tc.line, got, complete, tc.want, tc.complete)
 		}
