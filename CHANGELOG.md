@@ -2,18 +2,31 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
-## Unreleased
+## 1.5.0 - 2026-11-19
+
+Undo you can trust, and an assistant that understands what you are doing.
 
 ### Added
+- `safeshell undo` shows which snapshot it will restore (the command, when it ran, the folder and the number of files) and asks first. With no ID it offers the newest from this terminal, then this folder, then any. With no one to ask it restores nothing and prints the exact `safeshell undo ID --yes`. (#93)
+- Undo never overwrites newer work without a full `yes`: files changed since the command ran are listed first. A snapshot already restored is marked undone and skipped by default. (#92)
+- Snapshot limits: the size and the free disk space are checked before anything is copied, and after each snapshot the oldest are deleted once older than 30 days or together over 5 GiB (`snapshots.keep_days` and `snapshots.max_gib` in config.json). `safeshell snapshots prune [--older 30d] [--max 5G]` does it on demand, and `safeshell snapshots` shows the total. (#94)
 - The English assistant understands context. It is told the project in the current folder (git branch, Makefile targets, npm scripts, go.mod, Python, Rust and Docker files; read only, nothing is run) and the commands SafeShell saw in the last 30 minutes. (#175)
 - Follow-ups: each terminal remembers its last 5 English exchanges for 30 minutes (private file, secrets masked), so "now do the same for the logs folder", "now delete them" or "undo that" work. (#175)
 - `safeshell ai bench` also measures 20 requests that need context or follow-ups, reported per category and kept apart from the original 49. (#175)
 - An architecture test fails CI when a pure package touches files, processes or the network, or when anything but `cmd/safeshell` imports the engine. (#174)
 
 ### Changed
+- Without a sandbox result (no user namespaces, or the preview failed), the files a command names (rm, mv, cp, sed -i, truncate, chmod -R, redirects and similar) are snapshotted, and when none can be named you are told it cannot be undone. (#98)
+- A script that runs sudo, su, pkexec, doas or runuser is no longer shown as "changes no files": the preview cannot show what it would do as root, so it is never run unattended. (#71)
 - The assistant is told never to fill in a made-up value such as `user@server` and to use the context before asking you. With a cloud model, the project facts, recent commands and recent exchanges are sent too, secrets masked; `safeshell help privacy` lists everything. (#175)
 
 ### Fixed
+- A pipe, socket or unreadable folder no longer cancels the whole snapshot: pipes are recreated, sockets and devices are recorded, and what could not be read is listed when the snapshot is saved and at undo. (#95)
+- Undo keeps hard links: a file with other names is written back in place, or the other names are reported as not restored. (#96)
+- "Verified" now also checks modification times, permissions and owners (which undo restores), and reports new files added to a saved folder. (#97)
+- After a preview timed out, changes in extra mounts were missing from the report and the snapshot. (#55)
+- Downloads stop at the pinned size, so a server that keeps sending cannot fill the disk, and settings and keys are always written through a fresh private file. (#77)
+- The home folder the rules protect is passed in rather than read inside the rules, so a home outside `/home` is always protected. (#173)
 - An answer longer than 4096 characters to one of the assistant's questions no longer spills into the next question. Thanks to @ShahadatTest. (#171)
 
 ## 1.4.0 - 2026-11-16

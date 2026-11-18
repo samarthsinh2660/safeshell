@@ -1,3 +1,14 @@
+safeshell (1.5.0-1) unstable; urgency=medium
+
+  * New upstream release: undo names the snapshot and asks first, never
+    overwrites newer work, keeps pipes, hard links, times and owners;
+    snapshot size and free-space checks with pruning; snapshots without
+    the sandbox; scripts that ask for root are not run unattended; the
+    English assistant uses project context and follow-ups; downloads are
+    capped at their pinned size.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Thu, 19 Nov 2026 12:00:00 +0530
+
 safeshell (1.4.0-1) unstable; urgency=medium
 
   * New upstream release: team policy in /etc/safeshell/policy.json,
