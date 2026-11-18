@@ -21,7 +21,13 @@ type Config struct {
 	// Learn turns on learning mode: one line after each command that passes
 	// without a warning, saying what it does and the safer form.
 	Learn bool `json:"learn"`
-	AI    struct {
+	// Snapshots caps what undo keeps. After each new snapshot the oldest are
+	// deleted until none is older than KeepDays and all together fit in MaxGiB.
+	Snapshots struct {
+		KeepDays int `json:"keep_days"` // default 30
+		MaxGiB   int `json:"max_gib"`   // default 5
+	} `json:"snapshots"`
+	AI struct {
 		// Mode: auto (local if its files are installed), off, local, cloud, or
 		// hybrid (local first, cloud when local fails).
 		Mode  ai.Mode `json:"mode"`
@@ -91,6 +97,15 @@ func Load(path string) (Config, error) {
 	case "auto", "cuda", "vulkan", "cpu", "on", "off":
 	default:
 		return Config{}, errors.New("ai.local.gpu must be auto, cuda, vulkan or cpu, not " + c.AI.Local.GPU)
+	}
+	if c.Snapshots.KeepDays < 0 || c.Snapshots.MaxGiB < 0 {
+		return Config{}, errors.New("snapshots.keep_days and snapshots.max_gib must be whole numbers above zero")
+	}
+	if c.Snapshots.KeepDays == 0 {
+		c.Snapshots.KeepDays = 30
+	}
+	if c.Snapshots.MaxGiB == 0 {
+		c.Snapshots.MaxGiB = 5
 	}
 	if p := c.AI.Cloud.Provider; p != "" {
 		if _, ok := providers.Find(p); !ok {

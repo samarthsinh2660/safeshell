@@ -67,6 +67,7 @@ func protect(a engine.Analysis, cwd string) string {
 	if err != nil {
 		return "No snapshot taken (" + err.Error() + "): this cannot be undone."
 	}
+	autoPrune(snapshotDir(), m.ID)
 	note := fmt.Sprintf("Snapshot saved (%s). Undo with: safeshell undo", report.HumanBytes(m.Bytes))
 	if len(m.LeftOut) > 0 {
 		note = fmt.Sprintf("Snapshot saved (%s), except %s. Undo with: safeshell undo", report.HumanBytes(m.Bytes), leftOutText(m.LeftOut))
@@ -86,8 +87,13 @@ func runSnapshots(stdout, stderr io.Writer) int {
 	if len(ms) == 0 {
 		fmt.Fprintln(stdout, "No snapshots yet.")
 	}
+	var total int64
 	for _, m := range ms {
+		total += m.Bytes
 		fmt.Fprintf(stdout, "%s  %s  %s\n", m.ID, report.HumanBytes(m.Bytes), report.Printable(m.Line))
+	}
+	if len(ms) > 0 {
+		fmt.Fprintf(stdout, "%d saved, %s in all. Free space with: safeshell snapshots prune\n", len(ms), report.HumanBytes(total))
 	}
 	return 0
 }
