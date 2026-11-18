@@ -130,6 +130,17 @@ func TestDynLayersReadsBackWhatTheChildNoted(t *testing.T) {
 	if len(got) != 1 || got[0].Mount != "/mnt/a" || got[0].Upper != filepath.Join(scratch, "dyn", "1", "upper") || got[0].Work != filepath.Join(scratch, "dyn", "1", "work") {
 		t.Errorf("got %+v", got)
 	}
+
+	planned, reported := []Layer{{Mount: "/"}}, []Layer{{Mount: "/"}, {Mount: "/home"}}
+	if got := toDiff(planned, reported, true, scratch); len(got) != 2 || got[1].Mount != "/home" {
+		t.Errorf("a report from the child wins: %+v", got)
+	}
+	if got := toDiff(planned, nil, true, scratch); len(got) != 2 || got[1].Mount != "/mnt/a" {
+		t.Errorf("after a timeout the noted extra layers are added: %+v", got)
+	}
+	if got := toDiff(planned, nil, false, scratch); len(got) != 1 {
+		t.Errorf("without a timeout only the planned layers: %+v", got)
+	}
 }
 
 func TestMarkWritableKeepsOnlyPathsTheUserCanWrite(t *testing.T) {

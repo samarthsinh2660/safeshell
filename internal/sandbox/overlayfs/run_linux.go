@@ -122,13 +122,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	res.Warnings = markWritable(out.Warnings)
 	res.RootAsks = parseRootAsks(readCapped(filepath.Join(scratch, "asks", "root")))
 
-	switch {
-	case len(out.Layers) > 0:
-		layers = out.Layers
-	case res.TimedOut: // the child never reported: recover its extra layers from the scratch folder
-		layers = append(layers, dynLayers(scratch)...)
-	}
-	for _, l := range layers {
+	for _, l := range toDiff(layers, out.Layers, res.TimedOut, scratch) {
 		d, err := Diff(l.Upper, l.Mount, Options{})
 		if err != nil {
 			return res, fmt.Errorf("read changes of %s: %w", l.Mount, err)
@@ -140,6 +134,19 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		res.Diff.Truncated = res.Diff.Truncated || d.Truncated
 	}
 	return res, nil
+}
+
+// toDiff is what to compare after a run: the layers the child reported, or,
+// when it was killed before reporting, the planned ones plus the extra layers
+// it noted in the scratch folder.
+func toDiff(planned, reported []Layer, timedOut bool, scratch string) []Layer {
+	switch {
+	case len(reported) > 0:
+		return reported
+	case timedOut:
+		return append(planned, dynLayers(scratch)...)
+	}
+	return planned
 }
 
 // readCapped returns up to maxAsksRead bytes of the file, or "" if it cannot be read.
