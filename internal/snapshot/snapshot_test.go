@@ -112,8 +112,8 @@ func TestVerifyReportsWhatDoesNotMatch(t *testing.T) {
 	os.Chmod(filepath.Join(root, "proj/sub/b.sh"), 0o600)
 	os.Remove(filepath.Join(root, "proj/sub/deep/c.txt"))
 	write(t, filepath.Join(root, "ghost"), "", 0o644)
-	if got := Verify(store, m); len(got) != 4 {
-		t.Errorf("want 4 problems, got %v", got)
+	if got := Verify(store, m); len(got) != 6 { // also the changed file's time and its folder's
+		t.Errorf("want 6 problems, got %v", got)
 	}
 }
 
@@ -128,13 +128,14 @@ func TestSizeLimitStopsAndLeavesNothingBehind(t *testing.T) {
 	}
 }
 
-func TestMissingTargetIsSkippedAndSpecialFilesRefused(t *testing.T) {
+func TestMissingTargetIsSkippedAndDevicesAreRecorded(t *testing.T) {
 	root, store := tree(t)
 	if _, err := Create(store, "x", []Target{{Path: filepath.Join(root, "nope")}}, 0); err != nil {
 		t.Errorf("missing path: %v", err)
 	}
-	if _, err := Create(store, "x", []Target{{Path: "/dev/null"}}, 0); err == nil {
-		t.Error("a device must not be snapshotted")
+	m, err := Create(store, "x", []Target{{Path: "/dev/null"}}, 0)
+	if err != nil || len(m.Entries) != 1 || m.Entries[0].Kind != Special {
+		t.Errorf("a device is recorded by kind: %v %+v", err, m.Entries)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -125,13 +126,35 @@ func restoreEntry(store, id string, e Entry) (changed bool, err error) {
 		}
 		_ = os.Lchown(e.Path, e.UID, e.GID)
 		return true, nil
+	case Fifo:
+		if statErr == nil && cur.Mode()&os.ModeNamedPipe != 0 {
+			return fixMeta(e)
+		}
+		if statErr == nil {
+			if err := os.RemoveAll(e.Path); err != nil {
+				return false, err
+			}
+		}
+		_ = os.MkdirAll(filepath.Dir(e.Path), 0o755)
+		if err := syscall.Mkfifo(e.Path, 0o600); err != nil {
+			return false, err
+		}
+		_, err := fixMeta(e)
+		return true, err
+	case Special:
+		return false, nil // cannot be recreated; Verify says so when it is gone
 	case File:
 		if statErr == nil && cur.Mode().IsRegular() {
 			if sum, err := hashFile(e.Path); err == nil && sum == e.SHA {
-				if cur.Mode().Perm() != os.FileMode(e.Mode).Perm() {
-					return true, os.Chmod(e.Path, os.FileMode(e.Mode))
+				return fixMeta(e)
+			}
+			if e.Links > 1 && inode(cur) == e.Inode {
+				// Other names share this file: write the content back into it, so they see it too.
+				if err := rewriteInPlace(filepath.Join(dir(store, id), "blobs", e.SHA), e.Path); err != nil {
+					return false, err
 				}
-				return false, nil
+				_, err := fixMeta(e)
+				return true, err
 			}
 		}
 		if statErr == nil && cur.IsDir() {
@@ -143,6 +166,47 @@ func restoreEntry(store, id string, e Entry) (changed bool, err error) {
 		return true, writeBlob(filepath.Join(dir(store, id), "blobs", e.SHA), e)
 	}
 	return false, fmt.Errorf("unknown entry kind %q", e.Kind)
+}
+
+func inode(fi os.FileInfo) uint64 { return fi.Sys().(*syscall.Stat_t).Ino }
+
+// rewriteInPlace replaces the contents of the file at p without making a new file.
+func rewriteInPlace(blob, p string) error {
+	in, err := os.Open(blob)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(p, os.O_WRONLY|os.O_TRUNC, 0)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
+}
+
+// fixMeta sets the owner, permissions and modification time of e.Path to the saved ones,
+// and says whether anything was different. A change of owner that is not allowed (not root)
+// is left for Verify to report.
+func fixMeta(e Entry) (changed bool, err error) {
+	cur, err := os.Lstat(e.Path)
+	if err != nil {
+		return false, err
+	}
+	st := cur.Sys().(*syscall.Stat_t)
+	if int(st.Uid) == e.UID && int(st.Gid) == e.GID && cur.Mode().Perm() == os.FileMode(e.Mode).Perm() && cur.ModTime().UnixNano() == e.MTime {
+		return false, nil
+	}
+	_ = os.Chown(e.Path, e.UID, e.GID) // clears setuid bits, so it comes before the chmod
+	if err := os.Chmod(e.Path, os.FileMode(e.Mode)); err != nil {
+		return true, err
+	}
+	mt := time.Unix(0, e.MTime)
+	_ = os.Chtimes(e.Path, mt, mt)
+	return true, nil
 }
 
 func writeBlob(blob string, e Entry) error {
@@ -172,9 +236,18 @@ func writeBlob(blob string, e Entry) error {
 	return os.Rename(tmp.Name(), e.Path)
 }
 
-// Verify compares the live files with the manifest and lists every difference.
+// Verify compares the live files with the manifest and lists every difference: contents,
+// permissions, owner, modification time, hard links that were not put back, and entries in a
+// saved folder that the snapshot does not know about.
 func Verify(store string, m Manifest) []string {
 	var bad []string
+	known := map[string]bool{}
+	for _, e := range m.Entries {
+		known[e.Path] = true
+	}
+	for _, l := range m.LeftOut {
+		known[l.Path] = true
+	}
 	for _, e := range m.Entries {
 		cur, err := os.Lstat(e.Path)
 		switch e.Kind {
@@ -185,17 +258,27 @@ func Verify(store string, m Manifest) []string {
 			continue
 		}
 		if err != nil {
-			bad = append(bad, e.Path+" is missing")
+			if e.Kind == Special {
+				bad = append(bad, e.Path+" is missing, and sockets and devices cannot be recreated")
+			} else {
+				bad = append(bad, e.Path+" is missing")
+			}
 			continue
 		}
 		switch e.Kind {
 		case Dir:
 			if !cur.IsDir() {
 				bad = append(bad, e.Path+" is not a folder")
+			} else {
+				bad = append(bad, unknownEntries(e.Path, known)...)
 			}
 		case Symlink:
 			if t, err := os.Readlink(e.Path); err != nil || t != e.Link {
 				bad = append(bad, e.Path+" points somewhere else")
+			}
+		case Fifo:
+			if cur.Mode()&os.ModeNamedPipe == 0 {
+				bad = append(bad, e.Path+" is not a pipe")
 			}
 		case File:
 			if !cur.Mode().IsRegular() {
@@ -203,10 +286,48 @@ func Verify(store string, m Manifest) []string {
 			} else if sum, err := hashFile(e.Path); err != nil || sum != e.SHA {
 				bad = append(bad, e.Path+" has different contents")
 			}
+			if e.Links > 1 && cur.Mode().IsRegular() && inode(cur) != e.Inode {
+				bad = append(bad, e.Path+": "+otherLinks(e.Links-1)+" to this file "+wasWere(e.Links-1)+" not restored")
+			}
 		}
-		if e.Kind != Symlink && err == nil &&
-			cur.Mode().Perm() != os.FileMode(e.Mode).Perm() {
+		if e.Kind == Symlink || e.Kind == Special {
+			continue
+		}
+		if cur.Mode().Perm() != os.FileMode(e.Mode).Perm() {
 			bad = append(bad, e.Path+" has different permissions")
+		}
+		if st := cur.Sys().(*syscall.Stat_t); int(st.Uid) != e.UID || int(st.Gid) != e.GID {
+			bad = append(bad, e.Path+" has a different owner")
+		}
+		if cur.ModTime().UnixNano() != e.MTime {
+			bad = append(bad, e.Path+" has a different modification time")
+		}
+	}
+	return bad
+}
+
+func otherLinks(n uint64) string {
+	if n == 1 {
+		return "1 other hard link"
+	}
+	return fmt.Sprintf("%d other hard links", n)
+}
+
+func wasWere(n uint64) string {
+	if n == 1 {
+		return "was"
+	}
+	return "were"
+}
+
+// unknownEntries lists what is in folder p that the snapshot does not know: files added
+// after the command. Restore leaves them alone; the person is told. A folder that cannot
+// be read is skipped (it was recorded as left out).
+func unknownEntries(p string, known map[string]bool) (bad []string) {
+	des, _ := os.ReadDir(p)
+	for _, de := range des {
+		if c := filepath.Join(p, de.Name()); !known[c] {
+			bad = append(bad, c+" is new: it was added after the snapshot, and undo leaves it alone")
 		}
 	}
 	return bad

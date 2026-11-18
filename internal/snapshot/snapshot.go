@@ -24,7 +24,9 @@ const (
 	File    = "file"
 	Dir     = "dir"
 	Symlink = "symlink"
-	Absent  = "absent" // did not exist; undo removes whatever is there now
+	Absent  = "absent"  // did not exist; undo removes whatever is there now
+	Fifo    = "fifo"    // a named pipe, recreated empty by undo
+	Special = "special" // a socket or device: recorded, but undo cannot recreate it
 )
 
 // ErrTooLarge means the files to protect exceed the size limit.
@@ -52,7 +54,15 @@ type Entry struct {
 	SHA   string `json:"sha256,omitempty"`
 	Link  string `json:"link,omitempty"`
 	MTime int64  `json:"mtime,omitempty"` // unix nanoseconds
+	Inode uint64 `json:"inode,omitempty"` // regular files only; with Links, tells undo about other hard links
+	Links uint64 `json:"links,omitempty"` // hard link count, regular files only
 	After *State `json:"after,omitempty"` // the path once the command had run; nil until sealed (see Seal)
+}
+
+// LeftOut is a path that could not be saved, and why.
+type LeftOut struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
 }
 
 // Manifest describes a snapshot.
@@ -66,6 +76,7 @@ type Manifest struct {
 	Undone  *time.Time `json:"undone,omitempty"`  // when this snapshot was last restored
 	Bytes   int64      `json:"bytes"`
 	Entries []Entry    `json:"entries"`
+	LeftOut []LeftOut  `json:"left_out,omitempty"` // paths that could not be read, so they are not saved
 }
 
 func dir(store, id string) string { return filepath.Join(store, id) }
@@ -113,19 +124,23 @@ func CreateAt(store string, o Origin, line string, targets []Target, limit int64
 			continue
 		}
 		werr := filepath.WalkDir(path, func(p string, de fs.DirEntry, werr error) error {
-			if werr != nil {
-				if errors.Is(werr, fs.ErrNotExist) {
+			if werr == nil {
+				var e Entry
+				var copied int64
+				if e, copied, werr = capture(d, p, limit-m.Bytes, limit > 0); werr == nil {
+					m.Bytes += copied
+					add(e)
 					return nil
 				}
-				return werr
 			}
-			e, copied, err := capture(d, p, limit-m.Bytes, limit > 0)
-			if err != nil {
-				return err
+			if errors.Is(werr, fs.ErrNotExist) {
+				return nil
 			}
-			m.Bytes += copied
-			add(e)
-			return nil
+			if errors.Is(werr, fs.ErrPermission) {
+				m.LeftOut = append(m.LeftOut, LeftOut{Path: p, Reason: reason(werr)})
+				return nil // everything else is still saved
+			}
+			return werr
 		})
 		if werr != nil {
 			return m, werr
@@ -180,10 +195,27 @@ func capture(snap, p string, room int64, limited bool) (Entry, int64, error) {
 			return e, 0, fmt.Errorf("%w (limit reached at %s)", ErrTooLarge, p)
 		}
 		e.Kind, e.Size = File, fi.Size()
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+			e.Inode, e.Links = st.Ino, uint64(st.Nlink)
+		}
 		e.SHA, err = copyBlob(snap, p)
 		return e, fi.Size(), err
 	}
-	return e, 0, fmt.Errorf("%s is a special file (device, socket or pipe) and cannot be snapshotted", p)
+	if fi.Mode()&os.ModeNamedPipe != 0 {
+		e.Kind = Fifo // never opened: that would wait for a writer
+	} else {
+		e.Kind = Special
+	}
+	return e, 0, nil
+}
+
+// reason is the short cause inside err ("permission denied").
+func reason(err error) string {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		err = pe.Err
+	}
+	return err.Error()
 }
 
 func copyBlob(snap, src string) (string, error) {
