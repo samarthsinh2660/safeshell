@@ -8,6 +8,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/policy"
+	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 )
 
 // realLoadPolicy is the real loader, kept by TestMain before it installs a fake.
@@ -80,11 +81,14 @@ func TestSnapshotRuleSaysWhenNothingCouldBeSaved(t *testing.T) {
 	a := sampleAnalysis()
 	a.Level, a.Decision = domain.R1, domain.Confirm
 	a.Team = policy.Outcome{Snapshot: true}
-	fakeAnalyze(t, a)
-	answer(t, "y\n")
-	code, out, errOut := runSS("guard", "--", "rm -rf ~/projects")
-	if code != 0 || out != "rm -rf ~/projects\n" || !strings.Contains(errOut, "Your team's policy asks for a snapshot first, but SafeShell could not tell which files") {
-		t.Errorf("code %d out %q err %q", code, out, errOut)
+	for _, sim := range []*sandbox.Result{nil, {}} { // no sandbox result, or a run that saw no file change
+		a.Sim = sim
+		fakeAnalyze(t, a)
+		answer(t, "y\n")
+		code, out, errOut := runSS("guard", "--", "rm -rf ~/projects")
+		if code != 0 || out != "rm -rf ~/projects\n" || !strings.Contains(errOut, "Your team's policy asks for a snapshot first, but SafeShell could not tell which files") {
+			t.Errorf("sim %v: code %d out %q err %q", sim, code, out, errOut)
+		}
 	}
 }
 

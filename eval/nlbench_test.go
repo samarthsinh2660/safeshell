@@ -55,6 +55,7 @@ func TestScoreAcceptsRightAnswersAndRejectsWrongOnes(t *testing.T) {
 		{"wrong tool", disk, nl.Result{Command: "ls"}, nil, false, "does not do the task"},
 		{"error", disk, nl.Result{}, errors.New("down"), false, "no command"},
 		{"too dangerous", req(t, "list the .tmp files in this folder"), nl.Result{Command: "rm -rf *.tmp"}, nil, false, "forbidden"},
+		{"rated above the task", disk, nl.Result{Command: "df -h && rm -rf build"}, nil, false, "too dangerous"},
 		{"safe delete", req(t, "delete all the .tmp files here"), nl.Result{Command: "find . -name '*.tmp' -delete"}, nil, true, ""},
 		{"catastrophic", req(t, "delete all the .tmp files here"), nl.Result{Command: "rm -rf / --no-preserve-root"}, nil, false, "forbidden"},
 		{"question answered", req(t, "how do i exit vim"), nl.Result{Answer: "Press Esc then :q"}, nil, true, ""},

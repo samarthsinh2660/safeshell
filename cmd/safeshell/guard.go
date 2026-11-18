@@ -112,7 +112,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	if ok && cmd == line { // a replacement command has different effects, so the saved files do not apply
 		note := protect(a, cwd)
 		if note == "" && a.Team.Snapshot {
-			note = "Your team's policy asks for a snapshot first, but SafeShell could not tell which files this will change, so nothing was saved."
+			note = teamNoSnapshot
 		}
 		if note != "" {
 			fmt.Fprintln(stderr, report.Printable(note))

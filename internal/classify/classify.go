@@ -25,9 +25,10 @@ const (
 	R4 = domain.R4
 )
 
-// Classify rates a whole command line. The result is the highest level of any
+// Classify rates a whole command line. home is the user's home folder (empty
+// when unknown); the rules cannot look it up themselves. The result is the highest level of any
 // command in it; every reason and safer alternative is kept for the report.
-func Classify(line string) Verdict {
+func Classify(line, home string) Verdict {
 	if strings.TrimSpace(line) == "" {
 		return Verdict{Level: R0}
 	}
@@ -47,7 +48,7 @@ func Classify(line string) Verdict {
 	for _, p := range res.Pipelines {
 		fs = append(fs, pipelineFindings(p)...)
 		for _, c := range p.Cmds {
-			cf, unknown := commandFindings(c)
+			cf, unknown := commandFindings(c, home)
 			fs = append(fs, cf...)
 			if unknown {
 				unclassified = append(unclassified, c.Name)
@@ -73,11 +74,11 @@ func dedupe(ss []string) []string {
 
 // commandFindings applies the rule for one command, then adds redirect and
 // privilege effects. The bool is true when the command is not in the rule table.
-func commandFindings(c shellparse.Command) ([]Finding, bool) {
+func commandFindings(c shellparse.Command, home string) ([]Finding, bool) {
 	var fs []Finding
 	var known, unknown bool
 	if c.Name != "" {
-		fs, known = rules.Rate(c)
+		fs, known = rules.Rate(c, home)
 		unknown = !known
 	}
 	if c.AliasWord {

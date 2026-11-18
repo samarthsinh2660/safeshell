@@ -47,7 +47,7 @@ sits between you and the shell and answers one question first: **can this be und
 |---|---|---|
 | R0 | Read-only | runs |
 | R1 | Easily reversed | runs |
-| R2 | Reversible with a snapshot | snapshot taken, runs, `safeshell undo` puts it back |
+| R2 | Reversible with a snapshot | snapshot taken, runs, `safeshell undo` puts it back (without a sandbox, the files named in the command are saved; if none can be named, you are told it cannot be undone) |
 | R3 | Irreversible | blocked, with the reason and a safer alternative; you can still override |
 | R4 | Catastrophic | hard block |
 

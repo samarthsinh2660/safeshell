@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"os"
 	"path"
 	"strings"
 
@@ -24,8 +23,9 @@ func Norm(p string) string {
 }
 
 // Critical reports whether deleting or rewriting a path would damage the whole
-// system or home directory, and says what the path is.
-func Critical(raw string) (bool, string) {
+// system or home directory, and says what the path is. home is the user's
+// home folder (empty when unknown), so a home outside /home is still seen.
+func Critical(home, raw string) (bool, string) {
 	p := Norm(raw)
 	base := strings.TrimSuffix(p, "/*")
 	if base == "" {
@@ -34,7 +34,7 @@ func Critical(raw string) (bool, string) {
 	if base == "/" {
 		return true, "the entire filesystem"
 	}
-	if base == "~" || (home() != "" && base == home()) {
+	if base == "~" || (home != "" && base == home) {
 		return true, "your whole home directory"
 	}
 	for _, d := range systemDirs {
@@ -77,11 +77,6 @@ func IsBlockDevice(p string) bool {
 		}
 	}
 	return false
-}
-
-func home() string {
-	h, _ := os.UserHomeDir()
-	return h
 }
 
 // Shq quotes s for display only if it needs it.

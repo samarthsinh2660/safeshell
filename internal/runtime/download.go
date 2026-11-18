@@ -79,8 +79,13 @@ func fetchRange(ctx context.Context, client *http.Client, url, part string, have
 	}
 	defer f.Close()
 	p := &progress{w: w, total: size, done: have, start: time.Now(), base: have}
-	_, err = io.Copy(io.MultiWriter(f, p), resp.Body)
+	// One byte more than expected is enough to tell the server sent too much.
+	n, err := io.Copy(io.MultiWriter(f, p), io.LimitReader(resp.Body, size-have+1))
 	p.finish()
+	if err == nil && n > size-have {
+		_ = os.Remove(part)
+		return fmt.Errorf("the server sent more data than expected, so the download was deleted (%s). Try again later", url)
+	}
 	return err
 }
 

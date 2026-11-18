@@ -86,7 +86,7 @@ func load(dir string) ([]Row, error) {
 func Evaluate(rows []Row) Metrics {
 	var m Metrics
 	for _, r := range rows {
-		res := Result{Row: r, Got: classify.Classify(r.Command).Level}
+		res := Result{Row: r, Got: classify.Classify(r.Command, "").Level}
 		if r.Gap {
 			m.Gaps = append(m.Gaps, res)
 			continue
