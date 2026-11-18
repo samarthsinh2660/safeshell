@@ -105,18 +105,31 @@ func TestSealOnlyTouchesThisTerminalsNewestSnapshotOnce(t *testing.T) {
 	}
 }
 
-func TestSealLooksOnlyThroughTheNewestSnapshots(t *testing.T) {
+func TestSealReadsOnlyThisTerminalsNote(t *testing.T) {
 	store, f := t.TempDir(), filepath.Join(t.TempDir(), "a")
 	write(t, f, "x", 0o644)
 	first, _ := CreateAt(store, Origin{Session: "1"}, "first", []Target{{Path: f}}, 0)
-	for i := 0; i < sealLookback; i++ {
+	for i := 0; i < 30; i++ { // other terminals' snapshots do not get in the way
 		CreateAt(store, Origin{Session: "2"}, "busy", []Target{{Path: f}}, 0)
 	}
 	if err := Seal(store, "1"); err != nil {
 		t.Fatal(err)
 	}
-	if got, _ := Load(store, first.ID); got.Sealed {
-		t.Error("looked past the lookback")
+	if got, _ := Load(store, first.ID); !got.Sealed {
+		t.Error("this terminal's snapshot was not sealed")
+	}
+	// A note that names a missing snapshot, or one from another terminal, is dropped.
+	for _, id := range []string{"20000101T000000.000000000Z", first.ID} {
+		write(t, filepath.Join(store, ".unsealed-3"), id, 0o600)
+		if err := Seal(store, "3"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(store, ".unsealed-3")); err == nil {
+			t.Errorf("note naming %s was kept", id)
+		}
+	}
+	if ms, _ := List(store); len(ms) != 31 {
+		t.Errorf("the notes must not be listed as snapshots: %d", len(ms))
 	}
 }
 

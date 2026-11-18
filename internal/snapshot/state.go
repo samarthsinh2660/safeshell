@@ -2,7 +2,8 @@ package snapshot
 
 import (
 	"os"
-	"sort"
+	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -41,40 +42,35 @@ func record(store string, m *Manifest) error {
 	return writeManifest(store, *m)
 }
 
-// sealLookback is how many of the newest snapshots Seal looks through.
-const sealLookback = 20
+// pending is the small file naming the snapshot a terminal has not sealed
+// yet, so Seal, which runs before every command, reads one file and no manifest
+// in the common case. "" when the session is not a shell pid.
+func pending(store, session string) string {
+	if n, err := strconv.Atoi(session); err != nil || n <= 0 {
+		return ""
+	}
+	return filepath.Join(store, ".unsealed-"+session)
+}
 
 // Seal records what the newest snapshot of this terminal looks like now, once.
 // Call it when the next command in that terminal starts: the earlier command
 // has finished, so this is the state it left, and Changed can tell later edits
-// from it. An empty session never seals (the terminal is unknown).
+// from it. A session that is not a shell pid never seals (the terminal is unknown).
 func Seal(store, session string) error {
-	if session == "" {
+	p := pending(store, session)
+	if p == "" {
 		return nil
 	}
-	des, err := os.ReadDir(store)
+	id, err := os.ReadFile(p)
 	if err != nil {
-		return nil // no store yet: nothing to seal
+		return nil // nothing waiting
 	}
-	names := make([]string, 0, len(des))
-	for _, de := range des {
-		names = append(names, de.Name())
+	_ = os.Remove(p)
+	m, err := Load(store, string(id))
+	if err != nil || m.Session != session || m.Sealed {
+		return nil
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(names)))
-	for i, n := range names {
-		if i == sealLookback {
-			break
-		}
-		m, err := Load(store, n)
-		if err != nil || m.Session != session {
-			continue
-		}
-		if m.Sealed {
-			return nil
-		}
-		return record(store, &m)
-	}
-	return nil
+	return record(store, &m)
 }
 
 // Changed lists the saved paths that exist now but differ from the state

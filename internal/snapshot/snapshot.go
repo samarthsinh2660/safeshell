@@ -132,7 +132,11 @@ func CreateAt(store string, o Origin, line string, targets []Target, limit int64
 		}
 	}
 	sort.Slice(m.Entries, func(i, j int) bool { return m.Entries[i].Path < m.Entries[j].Path })
-	return m, writeManifest(store, m)
+	err = writeManifest(store, m)
+	if p := pending(store, o.Session); err == nil && p != "" {
+		_ = os.WriteFile(p, []byte(id), 0o600) // without it the snapshot is never sealed, so undo cannot warn about later edits
+	}
+	return m, err
 }
 
 func writeManifest(store string, m Manifest) error {
