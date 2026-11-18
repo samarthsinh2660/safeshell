@@ -54,6 +54,18 @@ func FileEffect(d sandbox.FileDiff) domain.Effect {
 	return e
 }
 
+// RootEffect describes a command that tried to run something as root (sudo, su,
+// ...). The sandbox cannot do that, so what it would do is not known: the effect
+// is an estimate at R3, which keeps the command from running unattended.
+func RootEffect(asks []string) (e domain.Effect, ok bool) {
+	if len(asks) == 0 {
+		return e, false
+	}
+	return domain.Effect{Kind: domain.EffectFS, Evidence: domain.Estimated, MinLevel: domain.R3,
+		Summary: "This script asks for root, which the preview cannot show. What it would do as root is not known.",
+		Details: []string{"tried to run " + strings.Join(asks, ", ")}}, true
+}
+
 // ignoredSockets are lookups every libc program makes; they say nothing about the command.
 var ignoredSockets = map[string]bool{"/var/run/nscd/socket": true, "/run/nscd/socket": true}
 

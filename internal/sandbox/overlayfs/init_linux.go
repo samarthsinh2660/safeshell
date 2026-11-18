@@ -92,6 +92,9 @@ func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, err err
 	if err := mountPseudo(merged); err != nil {
 		return nil, nil, err
 	}
+	if err := stageRootShim(req.Root, merged); err != nil {
+		return nil, nil, err
+	}
 	// pivot_root(".", ".") swaps the root without needing a directory for the old one.
 	if err := syscall.Chdir(merged); err != nil {
 		return nil, nil, fmt.Errorf("enter merged root: %w", err)
@@ -102,6 +105,7 @@ func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, err err
 	if err := syscall.Unmount(".", syscall.MNT_DETACH); err != nil {
 		return nil, nil, fmt.Errorf("detach old root: %w", err)
 	}
+	shimRootCommands()
 	return b.done, b.summary(), syscall.Chdir("/")
 }
 
@@ -139,6 +143,9 @@ func (b *builder) overlay(l Layer, depth int) {
 	switch {
 	case err == nil:
 		b.done = append(b.done, l)
+		if depth > 0 { // an extra layer: note where it is mounted, in case the run never reports
+			_ = os.WriteFile(filepath.Join(filepath.Dir(l.Upper), "mount"), []byte(l.Mount), 0o600)
+		}
 	case errors.Is(err, syscall.EINVAL) && depth < maxDepth:
 		b.descend(l.Mount, depth)
 	default:
@@ -220,6 +227,37 @@ func mountPseudo(root string) error {
 		return fmt.Errorf("mount /run: %w", err)
 	}
 	return nil
+}
+
+// stageRootShim puts the stand-in for sudo and friends into the new root's /run
+// and binds the scratch folder that collects its records next to it.
+func stageRootShim(scratch, merged string) error {
+	dir := filepath.Join(merged, "run", "safeshell")
+	asks := filepath.Join(dir, "asks")
+	if err := os.MkdirAll(asks, 0o755); err != nil {
+		return fmt.Errorf("prepare root stand-in: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "shim"), []byte(rootShim), 0o755); err != nil {
+		return fmt.Errorf("prepare root stand-in: %w", err)
+	}
+	if err := syscall.Mount(filepath.Join(scratch, "asks"), asks, "", syscall.MS_BIND, ""); err != nil {
+		return fmt.Errorf("bind root record: %w", err)
+	}
+	return nil
+}
+
+// shimRootCommands covers every installed sudo, su, pkexec, doas and runuser
+// with the stand-in, so a PATH lookup and an absolute path both reach it. It
+// runs after the pivot and only touches mounts inside the sandbox.
+func shimRootCommands() {
+	for _, d := range rootDirs {
+		for _, c := range rootCommands {
+			p := filepath.Join(d, c)
+			if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
+				_ = syscall.Mount("/run/safeshell/shim", p, "", syscall.MS_BIND, "")
+			}
+		}
+	}
 }
 
 // skeleton recreates the top level of "/" in the new root: symlinks (such as

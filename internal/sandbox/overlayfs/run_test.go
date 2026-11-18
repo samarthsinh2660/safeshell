@@ -4,6 +4,7 @@ package overlayfs
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -83,6 +84,51 @@ func TestScratchBase(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", "/definitely/not/here")
 	if got := scratchBase(); got == "/definitely/not/here" {
 		t.Error("a missing runtime dir must be skipped")
+	}
+}
+
+func TestParseRootAsksKeepsKnownProgramsOnce(t *testing.T) {
+	got := parseRootAsks("sudo\nrm\nsu\nsudo\n  doas \n\n")
+	if strings.Join(got, ",") != "sudo,su,doas" {
+		t.Errorf("got %q", got)
+	}
+	if len(parseRootAsks("")) != 0 {
+		t.Error("an empty record names nothing")
+	}
+}
+
+func TestReadCappedReadsAtMostTheCap(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "f")
+	if err := os.WriteFile(p, []byte(strings.Repeat("x", maxAsksRead+10)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readCapped(p); len(got) != maxAsksRead {
+		t.Errorf("read %d bytes", len(got))
+	}
+	if readCapped(p+".missing") != "" {
+		t.Error("a missing file reads as empty")
+	}
+}
+
+func TestDynLayersReadsBackWhatTheChildNoted(t *testing.T) {
+	scratch := t.TempDir()
+	mk := func(n, mount string) {
+		d := filepath.Join(scratch, "dyn", n)
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if mount != "" {
+			if err := os.WriteFile(filepath.Join(d, "mount"), []byte(mount), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	mk("1", "/mnt/a")
+	mk("2", "") // never mounted: no record
+	mk("3", "relative")
+	got := dynLayers(scratch)
+	if len(got) != 1 || got[0].Mount != "/mnt/a" || got[0].Upper != filepath.Join(scratch, "dyn", "1", "upper") || got[0].Work != filepath.Join(scratch, "dyn", "1", "work") {
+		t.Errorf("got %+v", got)
 	}
 }
 
