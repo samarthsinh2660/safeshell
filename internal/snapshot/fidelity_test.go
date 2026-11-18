@@ -306,3 +306,15 @@ func TestOldManifestStillRestores(t *testing.T) {
 		t.Errorf("%v %+v", err, r)
 	}
 }
+
+// Only "permission denied" is left out; any other read error still stops the
+// snapshot rather than saving a partial copy without saying so.
+func TestOtherReadErrorsStillStopTheSnapshot(t *testing.T) {
+	store := t.TempDir()
+	if _, err := Create(store, "x", []Target{{Path: "/proc/self/mem"}}, 0); err == nil { // reading it from the start fails with an I/O error
+		t.Fatal("an I/O error must not be treated as left out")
+	}
+	if ms, _ := List(store); len(ms) != 0 {
+		t.Errorf("a failed snapshot must leave nothing behind: %d", len(ms))
+	}
+}
