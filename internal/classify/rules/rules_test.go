@@ -29,12 +29,12 @@ func TestCritical(t *testing.T) {
 	yes := []string{"/", "/*", "~", "~/", "~/*", "$HOME", "$HOME/*", "/etc", "/etc/*", "/usr/", "/home", "/home/*", "/home/alice", "/var", "/boot", "/tmp/.."}
 	no := []string{"/tmp", "/tmp/x", "~/projects", "/home/alice/projects", "/etc/nginx/nginx.conf", "build", ".", "/usr/local/bin/tool", "/var/log/app.log"}
 	for _, p := range yes {
-		if ok, _ := Critical(p); !ok {
+		if ok, _ := Critical("", p); !ok {
 			t.Errorf("Critical(%q) = false, want true", p)
 		}
 	}
 	for _, p := range no {
-		if ok, what := Critical(p); ok {
+		if ok, what := Critical("", p); ok {
 			t.Errorf("Critical(%q) = true (%s), want false", p, what)
 		}
 	}

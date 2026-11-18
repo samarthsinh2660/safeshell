@@ -80,7 +80,7 @@ func daemonHandlers(shutdown func()) map[string]ipc.Handler {
 			if err := json.Unmarshal(p, &a); err != nil || a.Line == "" {
 				return nil, &ipc.Error{Code: ipc.CodeBadParams, Message: "need {line}"}
 			}
-			return classify.Classify(a.Line), nil
+			return classify.Classify(a.Line, userHome()), nil
 		},
 		"analyze": func(ctx context.Context, p json.RawMessage) (any, error) {
 			var a analyzeParams

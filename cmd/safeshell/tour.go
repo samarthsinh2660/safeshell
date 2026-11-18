@@ -83,7 +83,7 @@ func tourSteps(w io.Writer, dir string, color bool) error {
 	c := newPalette(color)
 	show := func(n int, what, line string) {
 		fmt.Fprintf(w, "\n%sStep %d of 4: %s%s\n", c.bold, n, what, c.reset)
-		printCheck(w, line, classify.Classify(line), color)
+		printCheck(w, line, classify.Classify(line, userHome()), color)
 	}
 	file := filepath.Join(dir, "notes.txt")
 	if err := os.WriteFile(file, []byte("my notes\n"), 0o600); err != nil {

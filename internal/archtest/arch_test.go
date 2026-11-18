@@ -55,18 +55,9 @@ const thirdParty = "mvdan.cc/sh/v3/"
 // composition is the only package that may import the engine.
 const composition = "cmd/safeshell"
 
-// known are violations that exist today and are tracked as follow-ups. The
-// test fails when one stops being true, so the list only shrinks.
-var known = map[string]string{
-	"internal/classify/rules/paths.go os": "Critical() asks the OS for the home directory; the caller should pass the home folder in",
-}
-
-type problem struct{ imp, text string }
-
 // check returns one plain-English line per broken rule in the Go files of
-// fsys, and which known violations it saw.
-func check(fsys fs.FS) (problems []string, usedKnown map[string]bool) {
-	usedKnown = map[string]bool{}
+// fsys.
+func check(fsys fs.FS) (problems []string) {
 	for _, root := range scanned {
 		_ = fs.WalkDir(fsys, root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".go") || strings.HasSuffix(p, "_test.go") {
@@ -81,25 +72,18 @@ func check(fsys fs.FS) (problems []string, usedKnown map[string]bool) {
 				problems = append(problems, fmt.Sprintf("%s: cannot be read or parsed (%v)", p, err))
 				return nil
 			}
-			for _, pr := range checkFile(path.Dir(p), p, f) {
-				key := p + " " + pr.imp
-				if _, ok := known[key]; ok {
-					usedKnown[key] = true
-					continue
-				}
-				problems = append(problems, pr.text)
-			}
+			problems = append(problems, checkFile(path.Dir(p), p, f)...)
 			return nil
 		})
 	}
 	sort.Strings(problems)
-	return problems, usedKnown
+	return problems
 }
 
-func checkFile(pkg, file string, f *ast.File) []problem {
-	var out []problem
+func checkFile(pkg, file string, f *ast.File) []string {
+	var out []string
 	add := func(imp, format string, a ...any) {
-		out = append(out, problem{imp, fmt.Sprintf("%s imports %q: %s", file, imp, fmt.Sprintf(format, a...))})
+		out = append(out, fmt.Sprintf("%s imports %q: %s", file, imp, fmt.Sprintf(format, a...)))
 	}
 	timeName := ""
 	for _, spec := range f.Imports {
@@ -133,7 +117,7 @@ func checkFile(pkg, file string, f *ast.File) []problem {
 		ast.Inspect(f, func(n ast.Node) bool {
 			if s, ok := n.(*ast.SelectorExpr); ok && s.Sel.Name == "Now" {
 				if id, ok := s.X.(*ast.Ident); ok && id.Name == timeName {
-					out = append(out, problem{"time.Now", fmt.Sprintf("%s uses time.Now: pure package %s must be given the time instead of reading the clock", file, pkg)})
+					out = append(out, fmt.Sprintf("%s uses time.Now: pure package %s must be given the time instead of reading the clock", file, pkg))
 				}
 			}
 			return true
@@ -143,14 +127,8 @@ func checkFile(pkg, file string, f *ast.File) []problem {
 }
 
 func TestArchitectureRules(t *testing.T) {
-	problems, used := check(os.DirFS("../.."))
-	for _, p := range problems {
+	for _, p := range check(os.DirFS("../..")) {
 		t.Error(p)
-	}
-	for key, why := range known {
-		if !used[key] {
-			t.Errorf("%s is listed as a known violation (%s) but no longer happens: remove it from the known list", key, why)
-		}
 	}
 }
 
@@ -175,7 +153,7 @@ func TestCheckCatchesViolations(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, _ := check(fstest.MapFS{tc.file: src(tc.src)})
+			got := check(fstest.MapFS{tc.file: src(tc.src)})
 			if len(got) != 1 || !strings.Contains(got[0], tc.want) {
 				t.Fatalf("want one problem containing %q, got %q", tc.want, got)
 			}
@@ -193,14 +171,7 @@ func TestCheckAllowsTheDesignedImports(t *testing.T) {
 		"internal/audit/a.go":      src(`import "os"`),
 		"internal/audit/a_test.go": src(`import _ ` + mod + `engine"`),
 	}
-	if got, _ := check(fsys); len(got) != 0 {
+	if got := check(fsys); len(got) != 0 {
 		t.Fatalf("unexpected problems: %q", got)
-	}
-}
-
-func TestKnownViolationIsMarkedUsed(t *testing.T) {
-	got, used := check(fstest.MapFS{"internal/classify/rules/paths.go": src(`import "os"`)})
-	if len(got) != 0 || !used["internal/classify/rules/paths.go os"] {
-		t.Fatalf("got %q used %v", got, used)
 	}
 }

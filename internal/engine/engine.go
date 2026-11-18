@@ -59,6 +59,7 @@ type Engine struct {
 	Sim        Simulator
 	Inspectors []Inspector
 	Rules      []policy.Rule // the admin's team policy; nil when there is none
+	Home       string        // the user's home folder, so a home outside /home is protected
 }
 
 // Analysis is everything learned about one command line.
@@ -84,7 +85,7 @@ type Analysis struct {
 // Analyze rates line, inspects the real system, simulates when the rules say the
 // result is worth seeing, and decides.
 func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
-	a := Analysis{Line: line, Verdict: classify.Classify(line)}
+	a := Analysis{Line: line, Verdict: classify.Classify(line, e.Home)}
 
 	var cmds []shellparse.Command
 	if res, err := shellparse.Parse(line); err == nil {

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/classify"
@@ -25,7 +26,7 @@ func runCheck(args []string, stdout, stderr io.Writer, color bool) int {
 		return 2
 	}
 	line := strings.Join(args, " ")
-	v := classify.Classify(line)
+	v := classify.Classify(line, userHome())
 	if asJSON {
 		printJSON(stdout, v)
 	} else {
@@ -54,4 +55,10 @@ func printCheck(w io.Writer, line string, v domain.Verdict, color bool) {
 	if len(v.Unclassified) > 0 {
 		fmt.Fprintf(w, "\n%sNot recognised yet: %s (rated R1; run  safeshell analyze  to test them in a sandbox)%s\n", c.dim, report.Printable(strings.Join(v.Unclassified, ", ")), c.reset)
 	}
+}
+
+// userHome is the home folder the rules protect; empty when it is unknown.
+func userHome() string {
+	h, _ := os.UserHomeDir()
+	return h
 }

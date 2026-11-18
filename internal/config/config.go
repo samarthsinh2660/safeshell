@@ -106,11 +106,29 @@ func Save(path string, c Config) error {
 		return err
 	}
 	b, _ := json.MarshalIndent(c, "", "  ")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	return writePrivate(path, b)
+}
+
+// writePrivate writes b to a fresh temporary file next to path, makes it
+// private before any content goes in, and renames it into place. A leftover
+// file with a loose mode can never leak its permissions into path.
+func writePrivate(path string, b []byte) error {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	tmp := f.Name()
+	_, err = f.Write(b)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 // SetLearn changes only the "learn" key of the file at path and keeps every
@@ -130,11 +148,7 @@ func SetLearn(path string, on bool) error {
 		return err
 	}
 	b, _ := json.MarshalIndent(raw, "", "  ")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return writePrivate(path, b)
 }
 
 // KeysPath is the file holding API keys (mode 0600).
@@ -187,9 +201,5 @@ func SaveKey(p providers.Provider, key string) error {
 		return err
 	}
 	b, _ := json.MarshalIndent(m, "", "  ")
-	tmp := KeysPath() + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, KeysPath())
+	return writePrivate(KeysPath(), b)
 }
