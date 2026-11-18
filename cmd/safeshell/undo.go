@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
+	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
@@ -31,17 +33,44 @@ func targets(changes []sandbox.Change) []snapshot.Target {
 	return ts
 }
 
+const teamNoSnapshot = "Your team's policy asks for a snapshot first, but SafeShell could not tell which files this will change, so nothing was saved."
+
 // protect saves what the analysed command is expected to change, just before
-// it runs. It returns a one-line note for the person; "" when nothing needed saving.
+// it runs: the files the sandbox saw change, or, with no sandbox result, the
+// files its arguments name. It returns a one-line note for the person; "" when
+// nothing needed saving.
 func protect(a engine.Analysis) string {
-	if a.Sim == nil || len(a.Sim.Diff.Changes) == 0 {
+	var ts []snapshot.Target
+	switch {
+	case a.Sim != nil:
+		ts = targets(a.Sim.Diff.Changes)
+	case a.Level >= domain.R2 || a.Team.Snapshot:
+		for _, w := range a.Targets {
+			p := w.Path
+			if fi, err := os.Stat(p); w.Into != "" && err == nil && fi.IsDir() { // mv or cp into a folder: only the file inside it changes
+				p = w.Into
+			}
+			ts = append(ts, snapshot.Target{Path: p, Create: true})
+		}
+		if len(ts) == 0 && a.Team.Snapshot {
+			return teamNoSnapshot
+		}
+		if len(ts) == 0 {
+			return "No snapshot was taken: SafeShell could not tell which files this will change, so it cannot be undone."
+		}
+	}
+	if len(ts) == 0 {
 		return ""
 	}
-	m, err := snapshot.Create(snapshotDir(), report.MaskSecrets(a.Line), targets(a.Sim.Diff.Changes), snapshotLimit)
+	m, err := snapshot.Create(snapshotDir(), report.MaskSecrets(a.Line), ts, snapshotLimit)
 	if err != nil {
 		return "No snapshot taken (" + err.Error() + "): this cannot be undone."
 	}
-	return fmt.Sprintf("Snapshot saved (%s). Undo with: safeshell undo", report.HumanBytes(m.Bytes))
+	note := fmt.Sprintf("Snapshot saved (%s). Undo with: safeshell undo", report.HumanBytes(m.Bytes))
+	if a.TargetsGap {
+		note += ". Some files could not be named, so changes to those cannot be undone."
+	}
+	return note
 }
 
 func runSnapshots(stdout, stderr io.Writer) int {

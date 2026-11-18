@@ -79,7 +79,7 @@ func init() {
 
 // Rate applies the rule for c's program. known is false when no rule or list
 // mentions the program; it is then rated R1 and left for the sandbox to examine.
-func Rate(c shellparse.Command) (fs []Finding, known bool) {
+func Rate(c shellparse.Command, home string) (fs []Finding, known bool) {
 	if interpPrograms[c.Name] {
 		return rateInterp(c)
 	}
@@ -89,7 +89,9 @@ func Rate(c shellparse.Command) (fs []Finding, known bool) {
 		name = "mkfs"
 	}
 	if r, ok := table[name]; ok {
-		return r(c, parseFlags(skipGlobals(name, c.Args))), true
+		f := parseFlags(skipGlobals(name, c.Args))
+		f.home = home
+		return r(c, f), true
 	}
 	if slices.Contains(readOnly, c.Name) {
 		return one(fnd(R0, c, "Only reads information.")), true

@@ -234,6 +234,15 @@ func TestTheCallersPidTravelsInTheContext(t *testing.T) {
 	}
 }
 
+func TestTheHomeFolderGivenToTheEngineIsProtected(t *testing.T) {
+	if got := (&Engine{Home: "/srv/me"}).Analyze(context.Background(), "rm -rf /srv/me", "/w").Level; got != domain.R4 {
+		t.Errorf("home outside /home: got %s, want R4", got)
+	}
+	if got := (&Engine{}).Analyze(context.Background(), "rm -rf /srv/me", "/w").Level; got == domain.R4 {
+		t.Errorf("no home given: got %s, want below R4", got)
+	}
+}
+
 func TestTheCallersEnvironmentReachesTheSandbox(t *testing.T) {
 	sim := &fakeSim{res: del("x", 1)}
 	e := &Engine{Sim: sim}
@@ -310,5 +319,16 @@ func TestASnapshotRuleRunsTheSandboxEvenForALowRiskCommand(t *testing.T) {
 	}
 	if b := (&Engine{Sim: &fakeSim{}}).Analyze(context.Background(), "touch notes.txt", "/w"); b.Sim != nil {
 		t.Error("without the rule a low-risk command is not simulated")
+	}
+}
+
+func TestNoSandboxResultNamesTheFilesFromTheArguments(t *testing.T) {
+	a := (&Engine{Sim: &fakeSim{err: errors.New("boom")}}).Analyze(context.Background(), "rm notes.txt *.log", "/w")
+	if len(a.Targets) != 1 || a.Targets[0].Path != "/w/notes.txt" || !a.TargetsGap {
+		t.Errorf("targets %v gap %v", a.Targets, a.TargetsGap)
+	}
+	a = (&Engine{Sim: &fakeSim{res: sandbox.Result{}}}).Analyze(context.Background(), "rm notes.txt", "/w")
+	if a.Targets != nil {
+		t.Errorf("a sandbox result replaces the guess: %v", a.Targets)
 	}
 }

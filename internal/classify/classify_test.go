@@ -6,11 +6,32 @@ import (
 	"testing"
 )
 
+// rate classifies line with no home folder known.
+func rate(line string) Verdict { return Classify(line, "") }
+
+func TestHomeFolderPassedIn(t *testing.T) {
+	for _, tc := range []struct {
+		line, home string
+		want       Level
+	}{
+		{"rm -rf /srv/me", "/srv/me", R4},
+		{"rm -rf /srv/me/", "/srv/me", R4},
+		{"rm -rf /srv/me/project", "/srv/me", R3},
+		{"rm -rf ~", "/srv/me", R4},
+		{"rm -rf ~", "", R4},
+		{"rm -rf /data/me", "", R3},
+	} {
+		if got := Classify(tc.line, tc.home).Level; got != tc.want {
+			t.Errorf("Classify(%q, %q) = %s, want %s", tc.line, tc.home, got, tc.want)
+		}
+	}
+}
+
 func TestEmptyAndUnparsable(t *testing.T) {
-	if v := Classify("   "); v.Level != R0 || len(v.Findings) != 0 {
+	if v := rate("   "); v.Level != R0 || len(v.Findings) != 0 {
 		t.Errorf("blank line: %+v", v)
 	}
-	v := Classify("echo 'unterminated")
+	v := rate("echo 'unterminated")
 	if v.Level != R2 || len(v.Findings) != 1 || !strings.Contains(v.Findings[0].Reason, "Could not be understood") {
 		t.Errorf("unparsable line must be R2 with an explanation: %+v", v)
 	}
@@ -28,17 +49,17 @@ func TestSudoRaisesOneLevelAndCaps(t *testing.T) {
 		{"sudo dd if=/dev/zero of=/dev/sda", R4},
 	}
 	for _, c := range cases {
-		if got := Classify(c.line).Level; got != c.want {
+		if got := rate(c.line).Level; got != c.want {
 			t.Errorf("%q = %s, want %s", c.line, got, c.want)
 		}
 	}
-	if r := Classify("sudo rm file").Findings[0].Reason; !strings.Contains(r, "runs as root") {
+	if r := rate("sudo rm file").Findings[0].Reason; !strings.Contains(r, "runs as root") {
 		t.Errorf("reason should say it runs as root: %q", r)
 	}
 }
 
 func TestRemoteHostIsNamed(t *testing.T) {
-	v := Classify("ssh prod-1 'rm -rf /srv/data'")
+	v := rate("ssh prod-1 'rm -rf /srv/data'")
 	found := false
 	for _, f := range v.Findings {
 		if f.Level == R3 && strings.HasPrefix(f.Reason, "On remote host prod-1:") {
@@ -51,10 +72,10 @@ func TestRemoteHostIsNamed(t *testing.T) {
 }
 
 func TestVerdictIsTheMaxOverAllCommands(t *testing.T) {
-	if got := Classify("ls && cp a b && rm -rf build").Level; got != R3 {
+	if got := rate("ls && cp a b && rm -rf build").Level; got != R3 {
 		t.Errorf("got %s, want R3 (worst command wins)", got)
 	}
-	if got := Classify("echo hi; rm -rf /").Level; got != R4 {
+	if got := rate("echo hi; rm -rf /").Level; got != R4 {
 		t.Errorf("got %s, want R4 even when hidden after a harmless command", got)
 	}
 }
@@ -70,7 +91,7 @@ func TestDangerHiddenInSubstitutionsAndNesting(t *testing.T) {
 		"(cd /tmp; rm -rf /)",
 		"eval 'rm -rf /'",
 	} {
-		if got := Classify(line).Level; got != R4 {
+		if got := rate(line).Level; got != R4 {
 			t.Errorf("%q = %s, want R4", line, got)
 		}
 	}
@@ -90,7 +111,7 @@ func TestPipeToShell(t *testing.T) {
 		{"cat script.sh | bash", R1},             // local, visible source
 		{"bash script.sh", R1},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
@@ -114,37 +135,37 @@ func TestRedirectTargets(t *testing.T) {
 		{"echo 1 > /proc/sys/kernel/panic", R4},
 		{"> data.db", R2},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
 }
 
 func TestUnclassifiedCommandsAreReportedOnce(t *testing.T) {
-	v := Classify("zzz-tool a && zzz-tool b && ls")
+	v := rate("zzz-tool a && zzz-tool b && ls")
 	if v.Level != R1 || len(v.Unclassified) != 1 || v.Unclassified[0] != "zzz-tool" {
 		t.Errorf("got level %s unclassified %v", v.Level, v.Unclassified)
 	}
-	if v := Classify("ls"); len(v.Unclassified) != 0 {
+	if v := rate("ls"); len(v.Unclassified) != 0 {
 		t.Errorf("known command reported as unclassified: %v", v.Unclassified)
 	}
 }
 
 func TestAlternativesOnlyForRiskyCommands(t *testing.T) {
-	v := Classify("rm -rf build")
+	v := rate("rm -rf build")
 	if len(v.Alternatives) == 0 || !strings.HasPrefix(v.Alternatives[0].Command, "trash-put") {
 		t.Errorf("rm -rf should suggest trash-put: %+v", v.Alternatives)
 	}
-	if v := Classify("echo x > a.txt && echo x > a.txt"); len(v.Alternatives) != 1 {
+	if v := rate("echo x > a.txt && echo x > a.txt"); len(v.Alternatives) != 1 {
 		t.Errorf("identical alternatives must be listed once: %+v", v.Alternatives)
 	}
-	if v := Classify("git push origin main"); len(v.Alternatives) != 0 {
+	if v := rate("git push origin main"); len(v.Alternatives) != 0 {
 		t.Errorf("R2 with no safer form should have no alternatives: %+v", v.Alternatives)
 	}
 }
 
 func TestRedirectAlternativeKeepsTheCommand(t *testing.T) {
-	v := Classify("echo hi > notes.txt")
+	v := rate("echo hi > notes.txt")
 	if len(v.Alternatives) != 1 || v.Alternatives[0].Command != "echo hi >> notes.txt" {
 		t.Errorf("alternatives = %+v", v.Alternatives)
 	}
@@ -156,7 +177,7 @@ func TestRedirectAlternativeKeepsTheCommand(t *testing.T) {
 }
 
 func TestForceWithLeaseIsSuggestedForForcePush(t *testing.T) {
-	v := Classify("git push --force origin main")
+	v := rate("git push --force origin main")
 	if len(v.Alternatives) != 1 || v.Alternatives[0].Command != "git push --force-with-lease origin main" {
 		t.Errorf("alternatives = %+v", v.Alternatives)
 	}
@@ -166,7 +187,7 @@ func TestLevelStringsAndJSON(t *testing.T) {
 	if R3.String() != "R3" || R3.Label() != "Irreversible" {
 		t.Errorf("level naming wrong: %s %s", R3, R3.Label())
 	}
-	b, err := json.Marshal(Classify("rm -rf build"))
+	b, err := json.Marshal(rate("rm -rf build"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +202,7 @@ func TestRulesNeverPanicOnOddArguments(t *testing.T) {
 		"chmod", "dd of=", "find", "psql", "aws", "systemctl", "sudo", "sudo -u", "env", "xargs", "ssh", "ssh -p",
 		"terraform", "crontab", "tar", "unzip -", "curl", "rsync",
 	} {
-		_ = Classify(line)
+		_ = rate(line)
 	}
 }
 
@@ -190,7 +211,7 @@ func FuzzClassify(f *testing.F) {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, s string) {
-		v := Classify(s)
+		v := rate(s)
 		if v.Level < R0 || v.Level > R4 {
 			t.Fatalf("level out of range: %d", v.Level)
 		}
@@ -212,7 +233,7 @@ func TestWorkingDirectoryChangesMeaning(t *testing.T) {
 		{"cd $X && rm -rf *", R3},
 		{"cd /tmp && chmod 777 file", R2}, // the mode is not a path
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
@@ -229,7 +250,7 @@ func TestDatabaseInputOnStdin(t *testing.T) {
 		{`echo "DELETE FROM users WHERE id=1" | psql`, R2},
 		{`echo "SELECT 1" | psql`, R0},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
@@ -249,11 +270,11 @@ func TestInlineInterpreterCode(t *testing.T) {
 		{`python3 script.py`, R1},
 		{`sudo python3 -c "import shutil; shutil.rmtree('build')"`, R4},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
-	if v := Classify("python3 script.py"); len(v.Unclassified) != 1 {
+	if v := rate("python3 script.py"); len(v.Unclassified) != 1 {
 		t.Errorf("a script file should be handed to the sandbox as unclassified: %+v", v.Unclassified)
 	}
 }
@@ -275,7 +296,7 @@ func TestGlobalOptionsDoNotHideTheSubcommand(t *testing.T) {
 		{"kubectl --server x delete ns y", R3},
 		{"git --namespace foo push -f", R3},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
@@ -301,7 +322,7 @@ func TestCpAndTeeRateLikeRedirectToTheSameTarget(t *testing.T) {
 		{"echo x | tee -a", R1},
 		{"cp a /etc/b", R2},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
@@ -358,7 +379,7 @@ func TestCommandsThatRunLaterAreRatedLikeWhatTheyHide(t *testing.T) {
 		"echo '0 3 * * * tar czf b.tgz d' | crontab -":                  R1,
 		"echo hi >> ~/notes.txt":                                        R1,
 	} {
-		if got := Classify(line).Level; got != want {
+		if got := rate(line).Level; got != want {
 			t.Errorf("%q = %s, want %s", line, got, want)
 		}
 	}
@@ -367,13 +388,13 @@ func TestCommandsThatRunLaterAreRatedLikeWhatTheyHide(t *testing.T) {
 // A cd inside deferred code or a substitution runs elsewhere and must not
 // change how the next command on the line is rated.
 func TestDeferredCdDoesNotChangeLaterCommands(t *testing.T) {
-	want := Classify("rm -rf usr")
+	want := rate("rm -rf usr")
 	for _, line := range []string{
 		"alias up='cd /'; rm -rf usr",
 		"export X=$(cd / && pwd); rm -rf usr",
 		"trap 'cd /' EXIT; rm -rf usr",
 	} {
-		got := Classify(line)
+		got := rate(line)
 		if got.Level != want.Level || got.Findings[len(got.Findings)-1].Command != "rm -rf usr" {
 			t.Errorf("%q = %s %+v, want like plain rm -rf usr (%s)", line, got.Level, got.Findings, want.Level)
 		}
@@ -381,7 +402,7 @@ func TestDeferredCdDoesNotChangeLaterCommands(t *testing.T) {
 }
 
 func TestBareAssignmentIsReportedAsTyped(t *testing.T) {
-	if got := Classify("FOO=bar").Findings[0].Command; got != "FOO=bar" {
+	if got := rate("FOO=bar").Findings[0].Command; got != "FOO=bar" {
 		t.Errorf("reported as %q", got)
 	}
 }
@@ -397,7 +418,7 @@ func TestHiddenFormsOfRmRfAreR4(t *testing.T) {
 		"watch rm -rf /", "flock /tmp/l rm -rf /",
 		"strace -f -o /tmp/t rm -rf /", "parallel rm -rf ::: /", "parallel -j4 rm -rf {} ::: / /home", "parallel ::: 'rm -rf /'", "chroot / rm -rf /", "env -C / rm -rf *",
 	} {
-		if got := Classify(line).Level; got != R4 {
+		if got := rate(line).Level; got != R4 {
 			t.Errorf("%q = %s, want R4", line, got)
 		}
 	}
@@ -413,7 +434,7 @@ func TestSendingSecretFilesIsR3(t *testing.T) {
 		"cat ~/.ssh/id_rsa.pub | nc host 80":       R1,
 		"nc -l 8080":                               R1,
 	} {
-		if got := Classify(line).Level; got != want {
+		if got := rate(line).Level; got != want {
 			t.Errorf("%q = %s, want %s", line, got, want)
 		}
 	}

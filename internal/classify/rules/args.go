@@ -11,6 +11,7 @@ type flags struct {
 	long  map[string]string // --name[=value]
 	pos   []string          // operands, in order
 	all   []string
+	home  string // the user's home folder, for rules that ask what a path is
 }
 
 func parseFlags(args []string) flags {

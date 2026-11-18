@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/samarthsinh2660/safeshell/internal/classify"
+	"github.com/samarthsinh2660/safeshell/internal/classify/rules"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/report"
@@ -58,17 +59,23 @@ type Engine struct {
 	Sim        Simulator
 	Inspectors []Inspector
 	Rules      []policy.Rule // the admin's team policy; nil when there is none
+	Home       string        // the user's home folder, so a home outside /home is protected
 }
 
 // Analysis is everything learned about one command line.
 type Analysis struct {
-	Line     string          `json:"line"`
-	Verdict  domain.Verdict  `json:"verdict"` // from the rules alone
-	Effects  []domain.Effect `json:"effects"` // observed, inspected and estimated
-	Sim      *sandbox.Result `json:"sim,omitempty"`
-	SimNote  string          `json:"sim_note,omitempty"` // why it was not simulated, or why that failed
-	Level    domain.Level    `json:"level"`              // the final level: rules raised by effects
-	Decision domain.Decision `json:"decision"`
+	Line    string          `json:"line"`
+	Verdict domain.Verdict  `json:"verdict"` // from the rules alone
+	Effects []domain.Effect `json:"effects"` // observed, inspected and estimated
+	Sim     *sandbox.Result `json:"sim,omitempty"`
+	// Targets are the files the command is expected to change, read from its
+	// arguments; set only when there is no sandbox result. TargetsGap says some
+	// operand could not be named (a glob or variable), so the list may be short.
+	Targets    []rules.Written `json:"targets,omitempty"`
+	TargetsGap bool            `json:"targets_gap,omitempty"`
+	SimNote    string          `json:"sim_note,omitempty"` // why it was not simulated, or why that failed
+	Level      domain.Level    `json:"level"`              // the final level: rules raised by effects
+	Decision   domain.Decision `json:"decision"`
 	// Team is what the admin's policy asks of this line; PolicyWarning says the
 	// policy file could not be used (set by the caller that loaded it).
 	Team          policy.Outcome `json:"team"`
@@ -78,7 +85,7 @@ type Analysis struct {
 // Analyze rates line, inspects the real system, simulates when the rules say the
 // result is worth seeing, and decides.
 func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
-	a := Analysis{Line: line, Verdict: classify.Classify(line)}
+	a := Analysis{Line: line, Verdict: classify.Classify(line, e.Home)}
 
 	var cmds []shellparse.Command
 	if res, err := shellparse.Parse(line); err == nil {
@@ -92,6 +99,10 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 
 	a.Team = policy.Evaluate(e.Rules, cmds)
 	a.simulate(ctx, e.Sim, cwd)
+	if a.Sim == nil {
+		paths, complete := rules.WritePaths(cmds, cwd)
+		a.Targets, a.TargetsGap = paths, !complete
+	}
 	a.decide()
 	return a
 }

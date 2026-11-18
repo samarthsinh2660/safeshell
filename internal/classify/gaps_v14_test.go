@@ -45,7 +45,7 @@ func TestRuleGapsV14(t *testing.T) {
 		{"pkill --exact sh", R2},
 		{"pkill", R2},
 	} {
-		if got := Classify(tc.line).Level; got != tc.want {
+		if got := rate(tc.line).Level; got != tc.want {
 			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
 		}
 	}
@@ -58,7 +58,7 @@ func TestAlternativeIsNeverTheCommandItself(t *testing.T) {
 		"sed -i 's/a/b/' f", "pkill -9 -u root", "pkill a", "kill -9 1234", "killall node",
 	}
 	for _, l := range lines {
-		for _, a := range Classify(l).Alternatives {
+		for _, a := range rate(l).Alternatives {
 			if a.Command == l {
 				t.Errorf("%q: alternative is the command itself", l)
 			}
@@ -70,12 +70,12 @@ func TestAlternativeIsNeverTheCommandItself(t *testing.T) {
 		"git push origin +HEAD:main":   "git push --force-with-lease origin HEAD:main",
 		"git push --force origin main": "git push --force-with-lease origin main",
 	} {
-		if v := Classify(l); len(v.Alternatives) != 1 || v.Alternatives[0].Command != want {
+		if v := rate(l); len(v.Alternatives) != 1 || v.Alternatives[0].Command != want {
 			t.Errorf("%q alternatives = %+v, want %q", l, v.Alternatives, want)
 		}
 	}
 	for _, l := range []string{"git push origin --delete main", "git push --mirror", "git push origin :main"} {
-		if v := Classify(l); len(v.Alternatives) != 0 {
+		if v := rate(l); len(v.Alternatives) != 0 {
 			t.Errorf("%q should have no safer option: %+v", l, v.Alternatives)
 		}
 	}

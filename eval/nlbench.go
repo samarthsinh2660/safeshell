@@ -231,7 +231,7 @@ func Score(r Request, res nl.Result, err error) (pass bool, why string) {
 	if r.MustNot != nil && r.MustNot.MatchString(res.Command) {
 		return false, "forbidden pattern in: " + res.Command
 	}
-	if lvl := classify.Classify(res.Command).Level; lvl > r.MaxLevel {
+	if lvl := classify.Classify(res.Command, "").Level; lvl > r.MaxLevel {
 		return false, fmt.Sprintf("too dangerous (%s, allowed up to %s): %s", lvl, r.MaxLevel, res.Command)
 	}
 	if r.Must != nil && !r.Must.MatchString(res.Command) {

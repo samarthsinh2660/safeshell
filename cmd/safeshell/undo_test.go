@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/samarthsinh2660/safeshell/internal/classify/rules"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/snapshot"
@@ -131,5 +133,81 @@ func TestSnapshotManifestMasksSecrets(t *testing.T) {
 	ms, _ := snapshot.List(snapshotDir())
 	if len(ms) != 1 || ms[0].Line != "API_KEY=*** rm x.txt" {
 		t.Errorf("manifests %+v", ms)
+	}
+}
+
+// noSandbox makes every simulation fail, as on a machine without user namespaces.
+func noSandbox(t *testing.T) {
+	t.Helper()
+	fakeSim(t, sandbox.Result{}, errors.New("no user namespaces"))
+}
+
+func TestWithoutSandboxTheNamedFileIsSnapshottedAndUndoRestoresIt(t *testing.T) {
+	useStore(t)
+	noSandbox(t)
+	t.Setenv("SAFESHELL_NODAEMON", "1")
+	d := t.TempDir()
+	t.Chdir(d)
+	f := filepath.Join(d, "notes.txt")
+	os.WriteFile(f, []byte("precious"), 0o644)
+	answer(t, "y\n")
+	code, _, errOut := runSS("guard", "--", "rm notes.txt")
+	if code != 0 || !strings.Contains(errOut, "Snapshot saved") {
+		t.Fatalf("code %d err %q", code, errOut)
+	}
+	os.Remove(f)
+	if code, out, _ := runSS("undo"); code != 0 || !strings.Contains(out, "Verified") {
+		t.Fatalf("undo %d %q", code, out)
+	}
+	if b, _ := os.ReadFile(f); string(b) != "precious" {
+		t.Errorf("restored %q", b)
+	}
+}
+
+func TestWithoutSandboxAnUnknownTargetWarnsThereIsNoUndo(t *testing.T) {
+	useStore(t)
+	noSandbox(t)
+	t.Setenv("SAFESHELL_NODAEMON", "1")
+	t.Chdir(t.TempDir())
+	answer(t, "y\n")
+	_, _, errOut := runSS("guard", "--", "rm *.txt")
+	if !strings.Contains(errOut, "No snapshot was taken") || !strings.Contains(errOut, "cannot be undone") {
+		t.Errorf("err %q", errOut)
+	}
+}
+
+func TestProtectNamesGapsAndFailures(t *testing.T) {
+	useStore(t)
+	f := filepath.Join(t.TempDir(), "a")
+	os.WriteFile(f, []byte("x"), 0o644)
+	a := sampleAnalysis()
+	a.Targets, a.TargetsGap = []rules.Written{{Path: f}}, true
+	if got := protect(a); !strings.Contains(got, "Snapshot saved") || !strings.Contains(got, "could not be named") {
+		t.Error(got)
+	}
+	snapshotDir = func() string { return "/proc/none" }
+	if got := protect(a); !strings.Contains(got, "No snapshot taken") {
+		t.Error(got)
+	}
+	a.Level, a.Targets = domain.R1, nil
+	if got := protect(a); got != "" {
+		t.Error("a harmless command needs no snapshot, got", got)
+	}
+}
+
+// mv or cp into an existing folder changes one file inside it, so only that
+// file is saved, not the whole folder.
+func TestProtectSavesOnlyTheFileMovedIntoAFolder(t *testing.T) {
+	useStore(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "big"), make([]byte, 4096), 0o644)
+	a := sampleAnalysis()
+	a.Targets = []rules.Written{{Path: dir, Into: filepath.Join(dir, "a")}}
+	if got := protect(a); !strings.Contains(got, "Snapshot saved (0 B)") {
+		t.Errorf("only dir/a (absent) is saved, not the folder: %s", got)
+	}
+	a.Targets = []rules.Written{{Path: filepath.Join(dir, "big"), Into: filepath.Join(dir, "big", "a")}}
+	if got := protect(a); !strings.Contains(got, "Snapshot saved (4.0 KiB)") {
+		t.Errorf("a file destination is saved itself: %s", got)
 	}
 }
