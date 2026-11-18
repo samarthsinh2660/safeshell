@@ -15,7 +15,7 @@ func ruleRm(c shellparse.Command, f flags) []Finding {
 		out = append(out, fnd(R4, c, "Turns off the safety check that stops `rm` from deleting the whole filesystem."))
 	}
 	for _, p := range f.pos {
-		ok, what := Critical(p)
+		ok, what := Critical(f.home, p)
 		switch {
 		case ok && recursive:
 			out = append(out, fnd(R4, c, "Recursively deletes "+what+". This would destroy the system or all your data."))
@@ -72,7 +72,7 @@ func ruleShred(c shellparse.Command, f flags) []Finding {
 func ruleMv(c shellparse.Command, f flags) []Finding {
 	var out []Finding
 	for i, p := range f.pos {
-		if ok, what := Critical(p); ok && i < len(f.pos)-1 {
+		if ok, what := Critical(f.home, p); ok && i < len(f.pos)-1 {
 			out = append(out, fnd(R4, c, "Moves "+what+" away, which breaks the system or loses access to your files."))
 		}
 	}
@@ -163,7 +163,7 @@ func ruleTee(c shellparse.Command, f flags) []Finding {
 func ruleFind(c shellparse.Command, f flags) []Finding {
 	if f.hasAny("-delete") {
 		for _, p := range f.pos {
-			if ok, what := Critical(p); ok {
+			if ok, what := Critical(f.home, p); ok {
 				return one(fnd(R4, c, "Deletes every match under "+what+"."))
 			}
 		}

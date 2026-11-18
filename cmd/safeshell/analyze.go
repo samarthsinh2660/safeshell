@@ -74,7 +74,7 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	}
 	procs := func(cmds []shellparse.Command) []domain.Effect { return inspectProcesses(callerPid(ctx), cmds) }
 	rules, warning := teamPolicy()
-	e := &engine.Engine{Rules: rules, Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	e := &engine.Engine{Rules: rules, Home: userHome(), Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	a := e.Analyze(ctx, line, cwd)
 	a.PolicyWarning = warning

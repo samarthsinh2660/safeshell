@@ -92,7 +92,7 @@ func TestFcAndRAreRatedByWhetherTheyOnlyList(t *testing.T) {
 	}
 	for _, tc := range tests {
 		c := shellparse.Command{Name: tc.name, Args: tc.args}
-		fs, known := Rate(c)
+		fs, known := Rate(c, "")
 		if !known || len(fs) != 1 || fs[0].Level != tc.want {
 			t.Errorf("%s %v = %v (known %v), want %s", tc.name, tc.args, fs, known, tc.want)
 		}

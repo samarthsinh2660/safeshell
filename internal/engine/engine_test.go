@@ -219,6 +219,15 @@ func TestTheCallersPidTravelsInTheContext(t *testing.T) {
 	}
 }
 
+func TestTheHomeFolderGivenToTheEngineIsProtected(t *testing.T) {
+	if got := (&Engine{Home: "/srv/me"}).Analyze(context.Background(), "rm -rf /srv/me", "/w").Level; got != domain.R4 {
+		t.Errorf("home outside /home: got %s, want R4", got)
+	}
+	if got := (&Engine{}).Analyze(context.Background(), "rm -rf /srv/me", "/w").Level; got == domain.R4 {
+		t.Errorf("no home given: got %s, want below R4", got)
+	}
+}
+
 func TestTheCallersEnvironmentReachesTheSandbox(t *testing.T) {
 	sim := &fakeSim{res: del("x", 1)}
 	e := &Engine{Sim: sim}

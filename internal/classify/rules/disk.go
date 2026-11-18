@@ -44,7 +44,7 @@ func rulePerm(c shellparse.Command, f flags) []Finding {
 	recursive := f.has('R', "recursive")
 	var out []Finding
 	for _, p := range f.pos {
-		if ok, what := Critical(p); ok && recursive {
+		if ok, what := Critical(f.home, p); ok && recursive {
 			out = append(out, fnd(R4, c, "Changes permissions or owners across "+what+". This can break logins, sudo and the whole system.").
 				WithAlt("chmod -R u+rwX,go-w "+Shq(p), "adds only what you need, and does not open files to everyone"))
 		}
