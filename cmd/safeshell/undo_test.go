@@ -43,6 +43,7 @@ func TestGuardSnapshotsThenUndoRestores(t *testing.T) {
 	os.Remove(f) // the approved command runs
 	os.WriteFile(made, []byte("x"), 0o644)
 
+	answer(t, "yes\n")
 	code, out, errOut := runSS("undo")
 	if code != 0 || !strings.Contains(out, "Verified") {
 		t.Fatalf("undo: %d %q %q", code, out, errOut)
@@ -109,6 +110,7 @@ func TestUndoReportsWhatCouldNotBeRestored(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores permissions")
 	}
+	answer(t, "yes\n")
 	code, out, _ := runSS("undo")
 	if code != 1 || !strings.Contains(out, "NOT fully undone") {
 		t.Errorf("%d %q", code, out)
@@ -129,7 +131,7 @@ func TestSnapshotManifestMasksSecrets(t *testing.T) {
 	a := sampleAnalysis()
 	a.Line = "API_KEY=abc123 rm x.txt"
 	a.Sim = &sandbox.Result{Diff: sandbox.FileDiff{Changes: []sandbox.Change{{Path: strings.TrimPrefix(f, "/"), Kind: sandbox.Deleted}}}}
-	protect(a)
+	protect(a, "/work")
 	ms, _ := snapshot.List(snapshotDir())
 	if len(ms) != 1 || ms[0].Line != "API_KEY=*** rm x.txt" {
 		t.Errorf("manifests %+v", ms)
@@ -182,15 +184,15 @@ func TestProtectNamesGapsAndFailures(t *testing.T) {
 	os.WriteFile(f, []byte("x"), 0o644)
 	a := sampleAnalysis()
 	a.Targets, a.TargetsGap = []rules.Written{{Path: f}}, true
-	if got := protect(a); !strings.Contains(got, "Snapshot saved") || !strings.Contains(got, "could not be named") {
+	if got := protect(a, ""); !strings.Contains(got, "Snapshot saved") || !strings.Contains(got, "could not be named") {
 		t.Error(got)
 	}
 	snapshotDir = func() string { return "/proc/none" }
-	if got := protect(a); !strings.Contains(got, "No snapshot taken") {
+	if got := protect(a, ""); !strings.Contains(got, "No snapshot taken") {
 		t.Error(got)
 	}
 	a.Level, a.Targets = domain.R1, nil
-	if got := protect(a); got != "" {
+	if got := protect(a, ""); got != "" {
 		t.Error("a harmless command needs no snapshot, got", got)
 	}
 }
@@ -203,11 +205,11 @@ func TestProtectSavesOnlyTheFileMovedIntoAFolder(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "big"), make([]byte, 4096), 0o644)
 	a := sampleAnalysis()
 	a.Targets = []rules.Written{{Path: dir, Into: filepath.Join(dir, "a")}}
-	if got := protect(a); !strings.Contains(got, "Snapshot saved (0 B)") {
+	if got := protect(a, ""); !strings.Contains(got, "Snapshot saved (0 B)") {
 		t.Errorf("only dir/a (absent) is saved, not the folder: %s", got)
 	}
 	a.Targets = []rules.Written{{Path: filepath.Join(dir, "big"), Into: filepath.Join(dir, "big", "a")}}
-	if got := protect(a); !strings.Contains(got, "Snapshot saved (4.0 KiB)") {
+	if got := protect(a, ""); !strings.Contains(got, "Snapshot saved (4.0 KiB)") {
 		t.Errorf("a file destination is saved itself: %s", got)
 	}
 }
