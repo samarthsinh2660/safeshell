@@ -178,9 +178,9 @@ func TestSaveFailsCleanly(t *testing.T) {
 	if Save(filepath.Join(file, "sub", "c.json"), Config{}) == nil {
 		t.Error("a folder that cannot be made")
 	}
-	tmpBlocked := filepath.Join(d, "a.json")
-	os.Mkdir(tmpBlocked+".tmp", 0o700)
-	if Save(tmpBlocked, Config{}) == nil {
+	ro := filepath.Join(d, "ro")
+	os.Mkdir(ro, 0o500)
+	if Save(filepath.Join(ro, "a.json"), Config{}) == nil && os.Geteuid() != 0 {
 		t.Error("a temporary file that cannot be written")
 	}
 	target := filepath.Join(d, "b.json")
@@ -210,8 +210,8 @@ func TestSaveKeyFailsCleanly(t *testing.T) {
 
 	cfg = t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
-	os.MkdirAll(KeysPath()+".tmp", 0o700)
-	if SaveKey(p, "sk-1234567890") == nil {
+	os.MkdirAll(filepath.Dir(KeysPath()), 0o500)
+	if SaveKey(p, "sk-1234567890") == nil && os.Geteuid() != 0 {
 		t.Error("a temporary file that cannot be written")
 	}
 
@@ -272,5 +272,36 @@ func TestSetLearnChangesOnlyItsKey(t *testing.T) {
 		if err := SetLearn(filepath.Join(ro, "new", "c.json"), true); err == nil {
 			t.Error("a folder that cannot be made must be an error")
 		}
+	}
+}
+
+func TestSavesAreSecretEvenWithALooseLeftoverTmpFile(t *testing.T) {
+	p, _ := providers.Find("openai")
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	os.MkdirAll(filepath.Dir(KeysPath()), 0o700)
+	for _, tmp := range []string{KeysPath() + ".tmp", Path() + ".tmp"} {
+		os.WriteFile(tmp, []byte("old"), 0o644)
+		os.Chmod(tmp, 0o644)
+	}
+	if err := SaveKey(p, "sk-1234567890"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Save(Path(), Config{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetLearn(Path(), true); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{KeysPath(), Path()} {
+		if st, _ := os.Stat(f); st.Mode().Perm() != 0o600 {
+			t.Errorf("%s mode %v", f, st.Mode().Perm())
+		}
+	}
+	if k, err := Key(p); err != nil || k != "sk-1234567890" {
+		t.Errorf("key %q %v", k, err)
+	}
+	if m, _ := filepath.Glob(filepath.Join(filepath.Dir(KeysPath()), "*.json.*.tmp")); len(m) != 0 {
+		t.Errorf("temporary files left: %v", m)
 	}
 }
