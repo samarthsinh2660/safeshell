@@ -95,8 +95,11 @@ Undo shows which command it will undo (when, where, how many files) and asks bef
 Without a terminal to ask, it restores nothing and prints the command to confirm. If you changed
 those files again after the command, it lists them and needs a full "yes". A snapshot that was
 already undone is skipped unless you give its ID.
-Undo restores deleted and changed files and removes files the command created. If anything cannot
-be restored exactly, it tells you instead of claiming success.
+Undo restores deleted and changed files (contents, permissions and times; pipes are recreated) and
+removes files the command created. If anything cannot be restored exactly, it tells you instead of
+claiming success: a file that had other hard links, a socket or device, a new file added to a saved
+folder (it is left alone), or a changed time or owner. Paths SafeShell could not read are left out of
+the snapshot, and both the note when it is saved and undo name them.
 Nothing is saved when the files are over 2 GiB or the disk has too little room; it says so before
 copying anything. After each snapshot the oldest are deleted once they are older than 30 days or
 together over 5 GiB. Change that in ~/.config/safeshell/config.json:

@@ -69,6 +69,9 @@ func protect(a engine.Analysis, cwd string) string {
 	}
 	autoPrune(snapshotDir(), m.ID)
 	note := fmt.Sprintf("Snapshot saved (%s). Undo with: safeshell undo", report.HumanBytes(m.Bytes))
+	if len(m.LeftOut) > 0 {
+		note = fmt.Sprintf("Snapshot saved (%s), except %s. Undo with: safeshell undo", report.HumanBytes(m.Bytes), leftOutText(m.LeftOut))
+	}
 	if a.TargetsGap {
 		note += ". Some files could not be named, so changes to those cannot be undone."
 	}
@@ -165,6 +168,10 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 	if err := snapshot.MarkUndone(store, id); err != nil {
 		fmt.Fprintln(stdout, "Note: could not mark this snapshot as undone:", err)
 	}
+	if len(m.LeftOut) > 0 {
+		fmt.Fprintln(stdout, "Verified: every saved file matches what it was before. The items that could not be read were not saved, so they are not restored.")
+		return 0
+	}
 	fmt.Fprintln(stdout, "Verified: every file matches what it was before.")
 	return 0
 }
@@ -177,6 +184,9 @@ func describeUndo(w io.Writer, m snapshot.Manifest, newer []string) {
 		fmt.Fprintf(w, "  folder: %s\n", report.Printable(m.Dir))
 	}
 	fmt.Fprintf(w, "  saved:  %s\n", report.Files(len(m.Entries)))
+	if len(m.LeftOut) > 0 {
+		fmt.Fprintf(w, "  not saved: %s\n", leftOutText(m.LeftOut))
+	}
 	if m.Undone != nil {
 		fmt.Fprintf(w, "This was already undone on %s.\n", m.Undone.Local().Format("2006-01-02 15:04"))
 	}
@@ -190,4 +200,21 @@ func describeUndo(w io.Writer, m snapshot.Manifest, newer []string) {
 			fmt.Fprintf(w, "  - %s\n", report.Printable(p))
 		}
 	}
+}
+
+// leftOutText says which paths a snapshot could not save, and that undo cannot bring them back.
+func leftOutText(l []snapshot.LeftOut) string {
+	what := "1 item"
+	if len(l) > 1 {
+		what = fmt.Sprintf("%d items", len(l))
+	}
+	var parts []string
+	for i, o := range l {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("and %d more", len(l)-3))
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s (%s)", report.Printable(o.Path), o.Reason))
+	}
+	return what + " that could not be read, so undo cannot bring them back: " + strings.Join(parts, ", ")
 }
