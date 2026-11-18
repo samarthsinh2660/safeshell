@@ -84,6 +84,9 @@ func Create(store, line string, targets []Target, limit int64) (Manifest, error)
 
 // CreateAt is Create that also records where the command ran.
 func CreateAt(store string, o Origin, line string, targets []Target, limit int64) (m Manifest, err error) {
+	if err = preflight(store, targets, limit, diskSpace); err != nil {
+		return m, err
+	}
 	id := time.Now().UTC().Format("20060102T150405.000000000Z")
 	d := dir(store, id)
 	if err = os.MkdirAll(filepath.Join(d, "blobs"), 0o700); err != nil {

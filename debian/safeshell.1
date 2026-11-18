@@ -69,7 +69,18 @@ Put back what an approved command changed, and verify it. With no ID it offers t
 answers the question.
 .TP
 .B snapshots
-List saved snapshots.
+List saved snapshots and their total size.
+.TP
+.BR "snapshots prune" " [--older " AGE "] [--max " SIZE ]
+Delete the oldest snapshots until none is older than
+.I AGE
+(such as 30d or 12h) and all together fit in
+.I SIZE
+(such as 5G or 500M). Without options the limits come from
+.I snapshots.keep_days
+and
+.I snapshots.max_gib
+in the config file (30 days and 5 GiB by default); the same limits are applied automatically after each new snapshot. A snapshot is refused before anything is copied when the files are over 2 GiB or the disk holding snapshots has too little free space.
 .TP
 .BI "history [-n " LINES "] [--json]"
 Print decisions SafeShell recorded, newest first.

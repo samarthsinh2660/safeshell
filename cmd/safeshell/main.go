@@ -55,7 +55,7 @@ Usage:
   safeshell learn [on|off|status]           learning mode: one line after each command that passes, saying what it does
                                             and the safer form (off by default)
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
-  safeshell snapshots                       list saved snapshots
+  safeshell snapshots [prune]               list saved snapshots / delete old ones (--older 30d, --max 5G)
   safeshell history [-n 20] [--json]        the decisions SafeShell recorded, newest first
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
   safeshell install [--ai]                  add the hook to your shell startup file (and set up the AI)
@@ -136,6 +136,9 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 	case "undo":
 		return runUndo(args[1:], stdout, stderr)
 	case "snapshots":
+		if len(args) > 1 && args[1] == "prune" {
+			return runSnapshotsPrune(args[2:], stdout, stderr)
+		}
 		if !unexpectedArgs("snapshots", args[1:], stderr) {
 			return 2
 		}

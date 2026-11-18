@@ -88,14 +88,19 @@ Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when che
      safeshell undo            offer the latest change from this terminal (else this folder, else any)
      safeshell undo ID         undo a specific one
      safeshell undo --yes      skip the question (for scripts; it also overwrites newer edits)
-     safeshell snapshots       list what is saved
+     safeshell snapshots       list what is saved, with the total size
+     safeshell snapshots prune delete old ones: --older 30d --max 5G (default: the config limits)
      safeshell history         what SafeShell decided, newest first (--json for the raw entries)
 Undo shows which command it will undo (when, where, how many files) and asks before it restores.
 Without a terminal to ask, it restores nothing and prints the command to confirm. If you changed
 those files again after the command, it lists them and needs a full "yes". A snapshot that was
 already undone is skipped unless you give its ID.
 Undo restores deleted and changed files and removes files the command created. If anything cannot
-be restored exactly, it tells you instead of claiming success.`},
+be restored exactly, it tells you instead of claiming success.
+Nothing is saved when the files are over 2 GiB or the disk has too little room; it says so before
+copying anything. After each snapshot the oldest are deleted once they are older than 30 days or
+together over 5 GiB. Change that in ~/.config/safeshell/config.json:
+     "snapshots": {"keep_days": 30, "max_gib": 5}`},
 	{"policy", "Team policy for administrators", `An administrator can set rules for everyone on the machine in /etc/safeshell/policy.json:
      {"rules": [{"match": "docker system prune", "block": "Ask the platform team first."},
                 {"match": "apt purge", "snapshot": true},
