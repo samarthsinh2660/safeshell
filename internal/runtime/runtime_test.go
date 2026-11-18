@@ -109,6 +109,22 @@ func TestDownloadStartsOverWhenTheServerIgnoresRanges(t *testing.T) {
 	}
 }
 
+func TestDownloadRejectsMoreDataThanDeclared(t *testing.T) {
+	data := payload(20_000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(data) }))
+	defer srv.Close()
+	dest := filepath.Join(t.TempDir(), "f.bin")
+	err := Download(context.Background(), nil, srv.URL, dest, sum(data), 10_000, nil)
+	if err == nil || !strings.Contains(err.Error(), "more data than expected") {
+		t.Fatalf("err %v", err)
+	}
+	for _, p := range []string{dest, dest + ".part"} {
+		if _, e := os.Stat(p); e == nil {
+			t.Errorf("%s was kept", p)
+		}
+	}
+}
+
 func TestDownloadHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
