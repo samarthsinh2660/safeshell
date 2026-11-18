@@ -15,6 +15,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/shellhook"
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
+	"github.com/samarthsinh2660/safeshell/internal/snapshot"
 	"github.com/samarthsinh2660/safeshell/internal/ui"
 )
 
@@ -79,6 +80,7 @@ func changesShell(line string) bool {
 
 // guardLine analyses one command line, asks if needed, and prints what to run.
 func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed bool) int {
+	_ = snapshot.Seal(snapshotDir(), os.Getenv("SAFESHELL_HOOK")) // the previous command here has finished: note what it left, so undo can spot later edits
 	ctx, stop := interruptible()
 	a := analyzeFast(ctx, line, cwd, stderr)
 	interrupted := ctx.Err() != nil
@@ -108,7 +110,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	}
 	record(a, cmd, ok)
 	if ok && cmd == line { // a replacement command has different effects, so the saved files do not apply
-		note := protect(a)
+		note := protect(a, cwd)
 		if note == "" && a.Team.Snapshot {
 			note = "Your team's policy asks for a snapshot first, but SafeShell could not tell which files this will change, so nothing was saved."
 		}

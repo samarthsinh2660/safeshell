@@ -52,22 +52,38 @@ type Entry struct {
 	SHA   string `json:"sha256,omitempty"`
 	Link  string `json:"link,omitempty"`
 	MTime int64  `json:"mtime,omitempty"` // unix nanoseconds
+	After *State `json:"after,omitempty"` // the path once the command had run; nil until sealed (see Seal)
 }
 
 // Manifest describes a snapshot.
 type Manifest struct {
-	ID      string    `json:"id"`
-	Created time.Time `json:"created"`
-	Line    string    `json:"line"`
-	Bytes   int64     `json:"bytes"`
-	Entries []Entry   `json:"entries"`
+	ID      string     `json:"id"`
+	Created time.Time  `json:"created"`
+	Line    string     `json:"line"`
+	Dir     string     `json:"dir,omitempty"`     // folder the command ran in; empty when unknown (older snapshots)
+	Session string     `json:"session,omitempty"` // terminal that ran it (the hook's shell pid); empty when unknown
+	Sealed  bool       `json:"sealed,omitempty"`  // every entry's After is recorded
+	Undone  *time.Time `json:"undone,omitempty"`  // when this snapshot was last restored
+	Bytes   int64      `json:"bytes"`
+	Entries []Entry    `json:"entries"`
 }
 
 func dir(store, id string) string { return filepath.Join(store, id) }
 
+// Origin says where a command ran. Either part may be empty when unknown.
+type Origin struct {
+	Dir     string
+	Session string
+}
+
 // Create saves targets under store and returns the manifest. limit is the most
 // file data to copy; 0 means no limit.
-func Create(store, line string, targets []Target, limit int64) (m Manifest, err error) {
+func Create(store, line string, targets []Target, limit int64) (Manifest, error) {
+	return CreateAt(store, Origin{}, line, targets, limit)
+}
+
+// CreateAt is Create that also records where the command ran.
+func CreateAt(store string, o Origin, line string, targets []Target, limit int64) (m Manifest, err error) {
 	id := time.Now().UTC().Format("20060102T150405.000000000Z")
 	d := dir(store, id)
 	if err = os.MkdirAll(filepath.Join(d, "blobs"), 0o700); err != nil {
@@ -79,7 +95,7 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 			_ = os.RemoveAll(d)
 		}
 	}()
-	m = Manifest{ID: id, Created: time.Now().UTC(), Line: line}
+	m = Manifest{ID: id, Created: time.Now().UTC(), Line: line, Dir: o.Dir, Session: o.Session}
 	seen := map[string]bool{}
 	add := func(e Entry) {
 		if !seen[e.Path] {
@@ -116,8 +132,12 @@ func Create(store, line string, targets []Target, limit int64) (m Manifest, err 
 		}
 	}
 	sort.Slice(m.Entries, func(i, j int) bool { return m.Entries[i].Path < m.Entries[j].Path })
+	return m, writeManifest(store, m)
+}
+
+func writeManifest(store string, m Manifest) error {
 	b, _ := json.MarshalIndent(m, "", "  ")
-	return m, os.WriteFile(filepath.Join(d, "manifest.json"), b, 0o600)
+	return os.WriteFile(filepath.Join(dir(store, m.ID), "manifest.json"), b, 0o600)
 }
 
 // resolveParents resolves the links in p's parent folders, keeping p's own name (a link

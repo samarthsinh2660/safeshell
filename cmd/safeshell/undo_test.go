@@ -41,6 +41,7 @@ func TestGuardSnapshotsThenUndoRestores(t *testing.T) {
 	os.Remove(f) // the approved command runs
 	os.WriteFile(made, []byte("x"), 0o644)
 
+	answer(t, "yes\n")
 	code, out, errOut := runSS("undo")
 	if code != 0 || !strings.Contains(out, "Verified") {
 		t.Fatalf("undo: %d %q %q", code, out, errOut)
@@ -107,6 +108,7 @@ func TestUndoReportsWhatCouldNotBeRestored(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores permissions")
 	}
+	answer(t, "yes\n")
 	code, out, _ := runSS("undo")
 	if code != 1 || !strings.Contains(out, "NOT fully undone") {
 		t.Errorf("%d %q", code, out)
@@ -127,7 +129,7 @@ func TestSnapshotManifestMasksSecrets(t *testing.T) {
 	a := sampleAnalysis()
 	a.Line = "API_KEY=abc123 rm x.txt"
 	a.Sim = &sandbox.Result{Diff: sandbox.FileDiff{Changes: []sandbox.Change{{Path: strings.TrimPrefix(f, "/"), Kind: sandbox.Deleted}}}}
-	protect(a)
+	protect(a, "/work")
 	ms, _ := snapshot.List(snapshotDir())
 	if len(ms) != 1 || ms[0].Line != "API_KEY=*** rm x.txt" {
 		t.Errorf("manifests %+v", ms)

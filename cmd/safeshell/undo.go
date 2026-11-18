@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/report"
@@ -33,11 +35,11 @@ func targets(changes []sandbox.Change) []snapshot.Target {
 
 // protect saves what the analysed command is expected to change, just before
 // it runs. It returns a one-line note for the person; "" when nothing needed saving.
-func protect(a engine.Analysis) string {
+func protect(a engine.Analysis, cwd string) string {
 	if a.Sim == nil || len(a.Sim.Diff.Changes) == 0 {
 		return ""
 	}
-	m, err := snapshot.Create(snapshotDir(), report.MaskSecrets(a.Line), targets(a.Sim.Diff.Changes), snapshotLimit)
+	m, err := snapshot.CreateAt(snapshotDir(), snapshot.Origin{Dir: cwd, Session: os.Getenv("SAFESHELL_HOOK")}, report.MaskSecrets(a.Line), targets(a.Sim.Diff.Changes), snapshotLimit)
 	if err != nil {
 		return "No snapshot taken (" + err.Error() + "): this cannot be undone."
 	}
@@ -59,10 +61,15 @@ func runSnapshots(stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runUndo restores a snapshot (the newest by default) and checks the result.
+// runUndo restores a snapshot after showing which one and asking. With no id
+// it offers the newest from this terminal, else this folder, else any.
 func runUndo(args []string, stdout, stderr io.Writer) int {
 	store := snapshotDir()
 	var id string
+	yes := false
+	for len(args) > 0 && args[0] == "--yes" {
+		yes, args = true, args[1:]
+	}
 	if !unknownOption("undo", args, stderr) {
 		return 2
 	}
@@ -78,7 +85,12 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "safeshell undo: there is nothing to undo.")
 			return 1
 		}
-		id = ms[0].ID
+		pick, ok := snapshot.Pick(ms, snapshot.Origin{Dir: cwdOr(""), Session: os.Getenv("SAFESHELL_HOOK")})
+		if !ok {
+			fmt.Fprintln(stderr, "safeshell undo: everything saved has already been undone. To restore one again, run  safeshell snapshots  and then  safeshell undo ID --yes")
+			return 1
+		}
+		id = pick.ID
 	}
 	m, err := snapshot.Load(store, id)
 	if errors.Is(err, snapshot.ErrBadID) {
@@ -89,7 +101,20 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "safeshell undo: no such snapshot:", id)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Undoing: %s\n", report.Printable(m.Line))
+	newer := snapshot.Changed(m)
+	describeUndo(stdout, m, newer)
+	if !yes {
+		in := guardInput()
+		if !isTerminal(in) {
+			fmt.Fprintf(stdout, "Nothing was restored, because there is no one to ask. To restore it, run:  safeshell undo %s --yes\n", m.ID)
+			return 1
+		}
+		fmt.Fprint(stdout, "Restore it? Type yes to continue: ")
+		if ans, _ := readLine(in); !strings.EqualFold(ans, "yes") && (len(newer) > 0 || !strings.EqualFold(ans, "y")) {
+			fmt.Fprintln(stdout, "\nNothing was restored.")
+			return 1
+		}
+	}
 	r, err := snapshot.Restore(store, id)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell undo:", err)
@@ -103,6 +128,32 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 		}
 		return 1
 	}
+	if err := snapshot.MarkUndone(store, id); err != nil {
+		fmt.Fprintln(stdout, "Note: could not mark this snapshot as undone:", err)
+	}
 	fmt.Fprintln(stdout, "Verified: every file matches what it was before.")
 	return 0
+}
+
+// describeUndo says which snapshot is about to be restored and what that would overwrite.
+func describeUndo(w io.Writer, m snapshot.Manifest, newer []string) {
+	fmt.Fprintf(w, "Undo this command: %s\n", report.Printable(m.Line))
+	fmt.Fprintf(w, "  run:    %s\n", m.Created.Local().Format("2006-01-02 15:04"))
+	if m.Dir != "" {
+		fmt.Fprintf(w, "  folder: %s\n", report.Printable(m.Dir))
+	}
+	fmt.Fprintf(w, "  saved:  %s\n", report.Files(len(m.Entries)))
+	if m.Undone != nil {
+		fmt.Fprintf(w, "This was already undone on %s.\n", m.Undone.Local().Format("2006-01-02 15:04"))
+	}
+	if len(newer) > 0 {
+		fmt.Fprintf(w, "WARNING: %s changed since then. Restoring will overwrite that newer work:\n", report.Files(len(newer)))
+		for i, p := range newer {
+			if i == 5 {
+				fmt.Fprintf(w, "  - and %d more\n", len(newer)-5)
+				break
+			}
+			fmt.Fprintf(w, "  - %s\n", report.Printable(p))
+		}
+	}
 }

@@ -126,6 +126,8 @@ func TestShellHookStopsADangerousCommandAndLetsSafeOnesRun(t *testing.T) {
 
 	// ...and undo brings it back, verified.
 	sh.send("safeshell undo\r")
+	sh.waitFor(t, "Type yes to continue")
+	sh.send("yes\r")
 	sh.waitFor(t, "Verified")
 	if b, err := os.ReadFile(filepath.Join(victim, "a.txt")); err != nil || string(b) != "x" {
 		t.Errorf("undo did not restore the file: %v %q", err, b)

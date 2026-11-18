@@ -63,8 +63,10 @@ once to install the tools it needs (cmake, g++ and a recorder, with apt-get afte
 .B \-\-yes
 skips the question), build the speech engine and download the model.
 .TP
-.RB "undo [" ID ]
-Put back what the last approved command changed, and verify it.
+.RB "undo [--yes] [" ID ]
+Put back what an approved command changed, and verify it. With no ID it offers the newest snapshot from this terminal, else this folder, else any, shows the command, time, folder and file count, and asks before restoring. Files changed since the command ran are listed and need a full "yes". A snapshot already undone is skipped unless its ID is given. With no terminal to ask, nothing is restored and the command to confirm is printed.
+.B \-\-yes
+answers the question.
 .TP
 .B snapshots
 List saved snapshots.

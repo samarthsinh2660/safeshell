@@ -85,10 +85,15 @@ Nothing needs to be restarted. While paused, commands run without a check and wi
 For one terminal only:  SAFESHELL_OFF=1  (unset SAFESHELL_OFF to check again).
 Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when checking is paused.`},
 	{"undo", "Undo and snapshots", `When you approve a risky command, SafeShell first saves the files it will change.
-     safeshell undo            put back the most recent change and verify every file matches
+     safeshell undo            offer the latest change from this terminal (else this folder, else any)
      safeshell undo ID         undo a specific one
+     safeshell undo --yes      skip the question (for scripts; it also overwrites newer edits)
      safeshell snapshots       list what is saved
      safeshell history         what SafeShell decided, newest first (--json for the raw entries)
+Undo shows which command it will undo (when, where, how many files) and asks before it restores.
+Without a terminal to ask, it restores nothing and prints the command to confirm. If you changed
+those files again after the command, it lists them and needs a full "yes". A snapshot that was
+already undone is skipped unless you give its ID.
 Undo restores deleted and changed files and removes files the command created. If anything cannot
 be restored exactly, it tells you instead of claiming success.`},
 	{"policy", "Team policy for administrators", `An administrator can set rules for everyone on the machine in /etc/safeshell/policy.json:

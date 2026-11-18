@@ -164,9 +164,10 @@ func TestSnapshotsAndUndoPrintTheCommandEscaped(t *testing.T) {
 	if !strings.Contains(out, `rm x\x1b[2K`) {
 		t.Errorf("snapshots: %q", out)
 	}
+	answer(t, "yes\n")
 	_, out, _ = runSS("undo")
 	noRawEscape(t, "undo", out)
-	if !strings.Contains(out, `Undoing: rm x\x1b[2K`) {
+	if !strings.Contains(out, `Undo this command: rm x\x1b[2K`) {
 		t.Errorf("undo: %q", out)
 	}
 }
