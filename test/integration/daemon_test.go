@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,8 +40,12 @@ func TestDaemonAnalysesLikeTheCommandLineAndSeesTheCallersEnvironment(t *testing
 	needSandbox(t)
 	sock := startDaemon(t)
 	d := fixture(t)
+	var ping struct{ Version string }
+	if err := ipc.Call(context.Background(), sock, "ping", nil, &ping); err != nil {
+		t.Fatal(err)
+	}
 	var a engine.Analysis
-	err := ipc.Call(context.Background(), sock, "analyze", map[string]any{"line": "rm -rf proj", "cwd": d}, &a)
+	err := ipc.Call(context.Background(), sock, "analyze", map[string]any{"line": "rm -rf proj", "cwd": d, "version": ping.Version}, &a)
 	if err != nil || a.Level.String() != "R3" || a.Decision.String() != "block" || len(a.Effects) == 0 || a.Effects[0].Evidence.String() != "OBSERVED" {
 		t.Fatalf("%+v %v", a, err)
 	}
@@ -51,7 +56,7 @@ func TestDaemonAnalysesLikeTheCommandLineAndSeesTheCallersEnvironment(t *testing
 	// The command must run with the caller's environment, not the daemon's.
 	env := append(os.Environ(), "SS_ENVPROBE=from-the-callers-shell")
 	err = ipc.Call(context.Background(), sock, "analyze", map[string]any{
-		"line": `python3 -c "import os; print(os.environ.get('SS_ENVPROBE'))"`, "cwd": d, "env": env}, &a)
+		"line": `python3 -c "import os; print(os.environ.get('SS_ENVPROBE'))"`, "cwd": d, "env": env, "version": ping.Version}, &a)
 	if err != nil || a.Sim == nil || !strings.Contains(a.Sim.Stdout, "from-the-callers-shell") {
 		t.Errorf("environment not passed through: %v %+v", err, a.Sim)
 	}
@@ -74,4 +79,20 @@ func TestDaemonSocketIsPrivate(t *testing.T) {
 	if err != nil || st.Mode().Perm() != 0o600 {
 		t.Errorf("socket mode %v %v", st, err)
 	}
+}
+
+func TestDaemonOfAnotherVersionRefusesAndExits(t *testing.T) {
+	needSandbox(t) // like the other daemon tests: it needs the built binary, which CI's unit job does not have
+	sock := startDaemon(t)
+	err := ipc.Call(context.Background(), sock, "analyze", map[string]any{"line": "ls", "cwd": "/", "version": "not-this-build"}, nil)
+	var e *ipc.Error
+	if !errors.As(err, &e) || e.Code != ipc.CodeVersion {
+		t.Fatalf("want a version mismatch, got %v", err)
+	}
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		if _, err := os.Lstat(sock); err != nil {
+			return
+		}
+	}
+	t.Error("the daemon did not exit after refusing")
 }

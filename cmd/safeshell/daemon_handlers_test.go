@@ -15,7 +15,7 @@ import (
 
 func TestDaemonHandlersRejectBadParamsAndReportTheAI(t *testing.T) {
 	useAI(t, fakeAI{}, nil)
-	h := daemonHandlers(func() {})
+	h := daemonHandlers(func() {}, version, func() {})
 	ctx := context.Background()
 	var e *ipc.Error
 	for _, method := range []string{"check", "analyze"} {
@@ -33,7 +33,7 @@ func TestDaemonHandlersRejectBadParamsAndReportTheAI(t *testing.T) {
 
 func TestDaemonShutdownHandlerStopsTheServerAfterReplying(t *testing.T) {
 	stopped := make(chan struct{})
-	h := daemonHandlers(func() { close(stopped) })
+	h := daemonHandlers(func() { close(stopped) }, version, func() {})
 	if _, err := h["shutdown"](context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -70,5 +70,35 @@ func TestDaemonServesUntilItIsToldToStop(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Error("the daemon did not stop")
+	}
+}
+
+// A daemon replaced by another version exits with an error, so systemd's
+// Restart=on-failure brings up the installed one.
+func TestDaemonOfAnotherVersionExitsWithAnError(t *testing.T) {
+	rt := privateDir(t)
+	t.Setenv("XDG_RUNTIME_DIR", rt)
+	useAI(t, nil, nil)
+	done := make(chan int, 1)
+	errs := make(chan string, 1)
+	go func() { code, _, e := runSS("daemon"); done <- code; errs <- e }()
+	sock := filepath.Join(rt, "safeshell.sock")
+	for i := 0; i < 500; i++ {
+		if _, err := os.Stat(sock); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	err := ipc.Call(context.Background(), sock, "analyze", analyzeParams{Line: "ls", Cwd: "/", Version: "another"}, nil)
+	if err == nil {
+		t.Fatal("a caller of another version must be refused")
+	}
+	select {
+	case code := <-done:
+		if e := <-errs; code != 1 || !strings.Contains(e, "different SafeShell version") {
+			t.Errorf("exit %d %q", code, e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the daemon did not exit")
 	}
 }

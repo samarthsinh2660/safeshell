@@ -86,7 +86,7 @@ in the config file (30 days and 5 GiB by default); the same limits are applied a
 Print decisions SafeShell recorded, newest first.
 .TP
 .B daemon [stop]
-Keep SafeShell warm in the background for faster checks.
+Keep SafeShell warm in the background for faster checks. A daemon left running from an older version exits on its first request and checks run directly until it is restarted. stop waits for the daemon to exit.
 .TP
 .B deactivate, activate
 Pause checking in every terminal, open and new, and turn it back on. Nothing needs restarting; while paused the hook costs nothing. SAFESHELL_OFF=1 pauses one terminal only.

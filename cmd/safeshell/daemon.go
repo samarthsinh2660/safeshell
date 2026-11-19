@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -20,6 +22,8 @@ type analyzeParams struct {
 	Line string   `json:"line"`
 	Cwd  string   `json:"cwd"`
 	Env  []string `json:"env,omitempty"`
+	// Version is the caller's SafeShell version; a daemon of another version refuses and exits.
+	Version string `json:"version,omitempty"`
 }
 
 // runDaemon serves analyses over a private Unix socket, so the shell hook does
@@ -33,6 +37,10 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		} else if err != nil {
 			fmt.Fprintln(stdout, "The SafeShell daemon is not running.")
 			return 0
+		}
+		if !socketGone(path, stopWait) {
+			fmt.Fprintln(stdout, "The SafeShell daemon is still stopping. Run `safeshell daemon stop` again in a moment.")
+			return 1
 		}
 		fmt.Fprintln(stdout, "The SafeShell daemon was stopped.")
 		return 0
@@ -53,19 +61,41 @@ func runDaemon(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	defer os.Remove(path)
-	srv := &ipc.Server{Handlers: daemonHandlers(stop)}
+	var replaced atomic.Bool
+	srv := &ipc.Server{Handlers: daemonHandlers(stop, version, func() { replaced.Store(true) })}
 	fmt.Fprintf(stdout, "SafeShell daemon listening on %s\n", path)
 	if err := srv.Serve(ctx, l); err != nil {
 		fmt.Fprintln(stderr, "safeshell daemon:", err)
 		return 1
 	}
+	if replaced.Load() { // exit with an error so systemd's Restart=on-failure starts the installed version
+		fmt.Fprintln(stderr, "safeshell daemon: a different SafeShell version asked, so this one stopped and the installed one takes over.")
+		return 1
+	}
 	return 0
 }
 
-func daemonHandlers(shutdown func()) map[string]ipc.Handler {
+// stopWait is how long `daemon stop` waits for the daemon to go away; tests shorten it.
+var stopWait = 5 * time.Second
+
+// socketGone waits up to d for the socket file to disappear, which the daemon does as it exits.
+func socketGone(path string, d time.Duration) bool {
+	for end := time.Now().Add(d); ; time.Sleep(20 * time.Millisecond) {
+		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+			return true
+		}
+		if time.Now().After(end) {
+			return false
+		}
+	}
+}
+
+// daemonHandlers serves ver. A caller of any other version is refused, replaced
+// is called and the daemon exits, so the next check starts a fresh daemon with the current rules.
+func daemonHandlers(shutdown func(), ver string, replaced func()) map[string]ipc.Handler {
 	return map[string]ipc.Handler{
 		"ping": func(context.Context, json.RawMessage) (any, error) {
-			return map[string]any{"protocol": ipc.Protocol, "pid": os.Getpid()}, nil
+			return map[string]any{"protocol": ipc.Protocol, "pid": os.Getpid(), "version": ver}, nil
 		},
 		"status": func(context.Context, json.RawMessage) (any, error) {
 			b, _ := backend()
@@ -86,6 +116,11 @@ func daemonHandlers(shutdown func()) map[string]ipc.Handler {
 			var a analyzeParams
 			if err := json.Unmarshal(p, &a); err != nil || a.Line == "" {
 				return nil, &ipc.Error{Code: ipc.CodeBadParams, Message: "need {line, cwd}"}
+			}
+			if a.Version != ver {
+				replaced()
+				go func() { time.Sleep(50 * time.Millisecond); shutdown() }() // after this reply is sent
+				return nil, &ipc.Error{Code: ipc.CodeVersion, Message: "version mismatch: this daemon is an older or newer SafeShell, so it is exiting"}
 			}
 			// The asking process is the one whose shell a kill must not hit; the kernel says who it is.
 			return analyze(engine.WithCaller(engine.WithEnv(ctx, a.Env), ipc.PeerPID(ctx)), a.Line, a.Cwd), nil
@@ -113,7 +148,7 @@ func analyzeFast(ctx context.Context, line, cwd string, stderr io.Writer) engine
 		var a engine.Analysis
 		c, cancel := context.WithTimeout(ctx, 3*time.Minute)
 		defer cancel()
-		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ()}, &a)
+		err := ipc.Call(c, socketPath(), "analyze", analyzeParams{line, cwd, os.Environ(), version}, &a)
 		if err == nil {
 			return a
 		}
