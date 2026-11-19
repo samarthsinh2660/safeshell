@@ -38,7 +38,7 @@ func (d Dirs) InstallEngine(ctx context.Context, client *http.Client, b Build, w
 		if err := Download(ctx, client, as.URL(), archive, as.SHA, as.Size, w); err != nil {
 			return err
 		}
-		if err := ExtractTarGz(archive, tmp); err != nil {
+		if err := ExtractTarGz(archive, tmp, w); err != nil {
 			_ = os.RemoveAll(tmp)
 			return err
 		}

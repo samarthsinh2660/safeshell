@@ -2,9 +2,11 @@ package voice
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,8 +70,12 @@ func TestDefaultRunnersAndWhisperThroughExec(t *testing.T) {
 	if err != nil || string(out) != "hello there\n" {
 		t.Errorf("%q %v", out, err)
 	}
-	out, err = combinedRunner(context.Background(), os.Args[0])
-	if err != nil || !strings.Contains(string(out), "hello there") || !strings.Contains(string(out), "warning") {
+	var buf bytes.Buffer
+	if (Setup{}).run() == nil {
+		t.Error("the default runner is exec")
+	}
+	err = streamRunner(context.Background(), &buf, os.Args[0])
+	if out := buf.String(); err != nil || !strings.Contains(out, "hello there") || !strings.Contains(out, "warning") {
 		t.Errorf("%q %v", out, err)
 	}
 	if text, err := (WhisperCLI{Bin: os.Args[0]}).Transcribe(context.Background(), filepath.Join(t.TempDir(), "r.wav")); err != nil || text != "hello there" {
@@ -108,14 +114,14 @@ func tarball(t *testing.T) string {
 func TestUnpackAndBuild(t *testing.T) {
 	s := setup(t, "cmake", "g++")
 	archive := tarball(t)
-	s.Run = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+	s.Run = func(_ context.Context, _ io.Writer, _ string, args ...string) error {
 		if args[0] == "--build" {
 			_ = os.MkdirAll(filepath.Join(args[1], "bin"), 0o755)
 			_ = os.WriteFile(filepath.Join(args[1], "bin", "whisper-cli"), []byte("bin"), 0o644)
 		} else if _, err := os.Stat(filepath.Join(args[1], "CMakeLists.txt")); err != nil {
 			t.Error("the source must be unpacked before configuring")
 		}
-		return nil, nil
+		return nil
 	}
 	bin, err := s.unpackAndBuild(context.Background(), archive)
 	if err != nil || bin != s.EnginePath() {
@@ -140,8 +146,9 @@ func TestUnpackAndBuildFailures(t *testing.T) {
 	for i := 1; i <= 15; i++ {
 		lines = append(lines, "line"+string(rune('a'+i)))
 	}
-	s.Run = func(context.Context, string, ...string) ([]byte, error) {
-		return []byte(strings.Join(lines, "\n")), errors.New("exit 2")
+	s.Run = func(_ context.Context, w io.Writer, _ string, _ ...string) error {
+		_, _ = w.Write([]byte(strings.Join(lines, "\n")))
+		return errors.New("exit 2")
 	}
 	archive := tarball(t)
 	_, err := s.unpackAndBuild(context.Background(), archive)
@@ -157,7 +164,7 @@ func TestBuildFileErrors(t *testing.T) {
 	s := setup(t)
 	dir := t.TempDir()
 	build := filepath.Join(dir, "build")
-	s.Run = func(context.Context, string, ...string) ([]byte, error) { return nil, nil }
+	s.Run = func(context.Context, io.Writer, string, ...string) error { return nil }
 	// The build produced no binary.
 	if err := s.build(context.Background(), dir, build, filepath.Join(dir, "out", "whisper-cli")); err == nil || !strings.Contains(err.Error(), "produced no speech engine") {
 		t.Errorf("%v", err)
@@ -197,5 +204,31 @@ func TestEnsureModelWhenPresent(t *testing.T) {
 	f.Close()
 	if p, err := s.EnsureModel(context.Background()); err != nil || p != s.ModelPath() {
 		t.Errorf("%q %v", p, err)
+	}
+}
+
+func TestBuildShowsCmakePercentages(t *testing.T) {
+	s := setup(t, "cmake", "g++")
+	s.Run = func(_ context.Context, w io.Writer, _ string, args ...string) error {
+		if args[0] == "--build" {
+			_, _ = w.Write([]byte("Scanning dependencies\n[ 10%] Building a.o\n[ 30%] Building b.o\n[ 5"))
+			_, _ = w.Write([]byte("5%] Building c.o\n[ 80%] x\n[100%] Linking\n"))
+			_ = os.MkdirAll(filepath.Join(args[1], "bin"), 0o755)
+			_ = os.WriteFile(filepath.Join(args[1], "bin", "whisper-cli"), []byte("bin"), 0o644)
+		}
+		return nil
+	}
+	dir := t.TempDir()
+	if err := s.build(context.Background(), dir, filepath.Join(dir, "b"), filepath.Join(dir, "out")); err != nil {
+		t.Fatal(err)
+	}
+	out := s.Out.(*strings.Builder).String()
+	for _, want := range []string{"Configuring the build...", " 30%\n", " 55%\n", " 80%\n", "100%\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in %q", want, out)
+		}
+	}
+	if strings.Contains(out, "\r") {
+		t.Errorf("a non-terminal gets plain lines: %q", out)
 	}
 }

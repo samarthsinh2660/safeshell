@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -162,7 +163,7 @@ func TestExtractStripsTopFolderKeepsModesAndLinks(t *testing.T) {
 		entry{name: "llama-b1/libx.so", typ: tar.TypeSymlink, link: "libx.so.0"},
 	)
 	dest := filepath.Join(t.TempDir(), "e")
-	if err := ExtractTarGz(a, dest); err != nil {
+	if err := ExtractTarGz(a, dest, nil); err != nil {
 		t.Fatal(err)
 	}
 	if fi, err := os.Stat(filepath.Join(dest, "llama-server")); err != nil || fi.Mode()&0o111 == 0 {
@@ -181,7 +182,7 @@ func TestExtractRefusesEscapes(t *testing.T) {
 		"nested dotdot": {name: "top/a/../../../evil", typ: tar.TypeReg, mode: 0o644, body: "x"},
 	} {
 		dest := filepath.Join(t.TempDir(), "e")
-		if err := ExtractTarGz(archive(t, e), dest); err == nil {
+		if err := ExtractTarGz(archive(t, e), dest, nil); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
 	}
@@ -195,7 +196,7 @@ func TestExtractRefusesWritingThroughChainedSymlinks(t *testing.T) {
 		entry{name: "top/a/a/L", typ: tar.TypeSymlink, link: "../.."},
 		entry{name: "top/L/escaped.txt", typ: tar.TypeReg, mode: 0o644, body: "x"},
 	)
-	if err := ExtractTarGz(a, dest); err == nil {
+	if err := ExtractTarGz(a, dest, nil); err == nil {
 		t.Error("a write through a symlink that leaves the folder was accepted")
 	}
 	if _, err := os.Stat(filepath.Join(parent, "x", "escaped.txt")); err == nil {
@@ -211,7 +212,7 @@ func TestExtractRefusesMakingFoldersThroughASymlink(t *testing.T) {
 		entry{name: "top/out/L", typ: tar.TypeSymlink, link: ".."},
 		entry{name: "top/L/dir/", typ: tar.TypeDir, mode: 0o755},
 	)
-	if err := ExtractTarGz(a, dest); err == nil {
+	if err := ExtractTarGz(a, dest, nil); err == nil {
 		t.Error("a folder made through a symlink that leaves the folder was accepted")
 	}
 	if _, err := os.Stat(filepath.Join(parent, "dir")); err == nil {
@@ -227,7 +228,7 @@ func TestExtractReportsAnInstallFolderItCannotOpen(t *testing.T) {
 	if err := os.Mkdir(dest, 0o000); err != nil {
 		t.Fatal(err)
 	}
-	if err := ExtractTarGz(archive(t, entry{name: "top/f", typ: tar.TypeReg, mode: 0o644}), dest); err == nil {
+	if err := ExtractTarGz(archive(t, entry{name: "top/f", typ: tar.TypeReg, mode: 0o644}), dest, nil); err == nil {
 		t.Error("a folder that cannot be opened was accepted")
 	}
 }
@@ -491,5 +492,120 @@ func TestInstallPreferredDownloadsNothingWhenEnginesArePresent(t *testing.T) {
 	err := d.InstallPreferred(context.Background(), nil, "riscv64", "auto", &out)
 	if err == nil || !strings.Contains(err.Error(), "riscv64") {
 		t.Errorf("an architecture with no engine: %v", err)
+	}
+}
+
+// fakeTTY is a writer that says it is a terminal.
+type fakeTTY struct{ bytes.Buffer }
+
+func (*fakeTTY) Terminal() bool { return true }
+
+func TestProgressPlainLinesAndTerminal(t *testing.T) {
+	var plain bytes.Buffer
+	p := newProgress(&plain, 100, 0, true)
+	for i := 0; i < 100; i++ {
+		_, _ = p.Write([]byte{0})
+	}
+	p.Finish()
+	if got := strings.Count(plain.String(), "\n"); got != 4 || strings.Contains(plain.String(), "\r") {
+		t.Errorf("want 4 plain lines and no CR: %q", plain.String())
+	}
+	var tty fakeTTY
+	q := newProgress(&tty, 100, 0, false)
+	_, _ = q.Write([]byte{0})
+	q.Finish()
+	if !strings.Contains(tty.String(), "\r") {
+		t.Errorf("a terminal rewrites one line: %q", tty.String())
+	}
+	r := NewPercent(&plain)
+	r.Update(100)
+	if !strings.HasSuffix(plain.String(), "100%\n") {
+		t.Errorf("%q", plain.String())
+	}
+	// Nothing to write to: no panic.
+	n := newProgress(nil, 10, 0, true)
+	n.Update(5)
+	n.Finish()
+}
+
+func TestProgressTimeLeft(t *testing.T) {
+	var buf bytes.Buffer
+	p := newProgress(&buf, 1000, 0, true)
+	p.done = 100
+	if p.timeLeft() != "" {
+		t.Error("no estimate before 3 seconds of data")
+	}
+	p.start = time.Now().Add(-10 * time.Second) // 10 B/s, 900 B to go
+	if got := p.timeLeft(); !strings.Contains(got, "about 2 min left") {
+		t.Errorf("%q", got)
+	}
+	p.done = 990 // 1 s left
+	if got := p.timeLeft(); !strings.Contains(got, "1 s left") {
+		t.Errorf("%q", got)
+	}
+	p.print()
+	p.start = time.Now().Add(time.Hour) // a clock that has not started: no speed
+	if p.speed() != 0 {
+		t.Error("no speed before the start")
+	}
+	if !strings.Contains(buf.String(), "MB/s  1 s left") {
+		t.Error("the line shows time left next to the speed")
+	}
+}
+
+func TestIsTerminal(t *testing.T) {
+	if isTerminal(&bytes.Buffer{}) || isTerminal(nil) {
+		t.Error("a buffer is not a terminal")
+	}
+	f, _ := os.Open(os.DevNull) // a character device
+	defer f.Close()
+	if !isTerminal(f) {
+		t.Error("a character device counts as a terminal")
+	}
+	f.Close()
+	if isTerminal(f) {
+		t.Error("a closed file is not a terminal")
+	}
+	r, w, _ := os.Pipe()
+	defer r.Close()
+	defer w.Close()
+	if isTerminal(w) {
+		t.Error("a pipe is not a terminal")
+	}
+}
+
+func TestChecksumAndUnpackReportProgress(t *testing.T) {
+	data := bytes.Repeat([]byte("x"), 1000)
+	path := filepath.Join(t.TempDir(), "f")
+	_ = os.WriteFile(path, data, 0o600)
+	sum := sha256.Sum256(data)
+	var out bytes.Buffer
+	if ok, err := fileMatches(path, hex.EncodeToString(sum[:]), &out); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	if !strings.Contains(out.String(), "Checking the download...") || !strings.Contains(out.String(), "100%") {
+		t.Errorf("%q", out.String())
+	}
+	out.Reset()
+	a := archive(t, entry{name: "top/f", typ: tar.TypeReg, mode: 0o644, body: "hi"})
+	if err := ExtractTarGz(a, filepath.Join(t.TempDir(), "d"), &out); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Unpacking...") || !strings.Contains(out.String(), "100%") {
+		t.Errorf("%q", out.String())
+	}
+}
+
+func TestFileSizeOfClosedFile(t *testing.T) {
+	f, _ := os.Open(os.DevNull)
+	f.Close()
+	if fileSize(f) != 0 {
+		t.Error("an unreadable file has size 0")
+	}
+}
+
+func TestChecksumOfSomethingUnreadableIsAnError(t *testing.T) {
+	if ok, err := fileMatches(t.TempDir(), "x", nil); ok || err == nil { // a folder opens but cannot be read
+		t.Errorf("ok %v err %v", ok, err)
 	}
 }

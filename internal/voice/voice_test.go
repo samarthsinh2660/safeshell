@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -232,9 +233,9 @@ func TestEnsureEngineRejectsWrongArchiveBeforeExtracting(t *testing.T) {
 	defer srv.Close()
 	s := setup(t, "cmake", "g++", "make")
 	s.Client = &http.Client{Transport: redirect{srv.URL}}
-	s.Run = func(context.Context, string, ...string) ([]byte, error) {
+	s.Run = func(context.Context, io.Writer, string, ...string) error {
 		t.Error("nothing may be built from an archive that failed its checksum")
-		return nil, nil
+		return nil
 	}
 	_, err := s.EnsureEngine(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "checksum") || !strings.Contains(err.Error(), "safeshell voice setup") {
@@ -269,13 +270,13 @@ func TestBuildRunsCmakeAndCopiesBinary(t *testing.T) {
 	dir := t.TempDir()
 	src, build := filepath.Join(dir, "src"), filepath.Join(dir, "build")
 	var calls [][]string
-	s.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+	s.Run = func(_ context.Context, _ io.Writer, name string, args ...string) error {
 		calls = append(calls, append([]string{name}, args...))
 		if args[0] == "--build" {
 			_ = os.MkdirAll(filepath.Join(build, "bin"), 0o755)
 			_ = os.WriteFile(filepath.Join(build, "bin", "whisper-cli"), []byte("binary"), 0o644)
 		}
-		return nil, nil
+		return nil
 	}
 	if err := s.build(context.Background(), src, build, s.EnginePath()); err != nil {
 		t.Fatal(err)
@@ -293,7 +294,10 @@ func TestBuildRunsCmakeAndCopiesBinary(t *testing.T) {
 	if fi, err := os.Stat(s.EnginePath()); err != nil || fi.Mode().Perm() != 0o755 {
 		t.Errorf("installed binary: %v %v", fi, err)
 	}
-	s.Run = func(context.Context, string, ...string) ([]byte, error) { return []byte("boom"), errors.New("exit 2") }
+	s.Run = func(_ context.Context, w io.Writer, _ string, _ ...string) error {
+		_, _ = w.Write([]byte("boom"))
+		return errors.New("exit 2")
+	}
 	if err := s.build(context.Background(), src, build, s.EnginePath()); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Errorf("%v", err)
 	}
