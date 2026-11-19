@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net"
 	"os"
@@ -355,5 +356,45 @@ func TestHandlersSeeTheClientsPidFromTheKernel(t *testing.T) {
 	}
 	if PeerPID(context.Background()) != 0 {
 		t.Error("no connection means no peer pid")
+	}
+}
+
+func TestServeReturnsPromptlyWhileAnIdleClientIsConnected(t *testing.T) {
+	path := filepath.Join(privateDir(t), "s.sock")
+	l, err := Listen(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { (&Server{Handlers: echo()}).Serve(ctx, l); close(done) }()
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	time.Sleep(100 * time.Millisecond) // let the server take the connection
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Serve did not return while an idle client was connected")
+	}
+	c.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := c.Read(make([]byte, 1)); err != io.EOF {
+		t.Errorf("the idle connection must be closed: %v", err)
+	}
+}
+
+func TestAnIdleConnectionIsClosedAfterTheIdleTimeout(t *testing.T) {
+	path := start(t, &Server{Handlers: echo(), Idle: 100 * time.Millisecond})
+	c, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	if _, err := c.Read(make([]byte, 1)); err != io.EOF {
+		t.Errorf("expected the server to hang up: %v", err)
 	}
 }

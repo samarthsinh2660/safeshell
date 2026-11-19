@@ -190,6 +190,16 @@ On a shared machine, an administrator can put rules in `/etc/safeshell/policy.js
 
 The policy is a guard rail in each person's SafeShell, not access control: people can still pause their own SafeShell (`safeshell deactivate`) or run commands without the hook. To stop a command for real, use file permissions, sudo rules or groups.
 
+## Production host labels (optional)
+
+Tell SafeShell which machines matter in `~/.config/safeshell/config.json`. Patterns use `*` for any text, the label is `prod` or `staging`:
+
+```json
+{"hosts": {"prod*": "prod", "db-*.example.com": "prod", "staging-*": "staging"}}
+```
+
+With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with "this is a production host (prod1)". It works with `user@host`, `-p`, `-l` and the like. Only commands that change something (R2 or more) are raised; reads and unlabelled hosts are unchanged, and when both labels match a host, `prod` wins. An interactive `ssh prod1` (no command) is not blocked, but prints one line saying commands typed there are only checked if SafeShell is installed on that host. A `staging` label only gets that line. An invalid label or pattern makes the settings file unusable until fixed.
+
 ## AI (optional, off until you choose)
 
 - **Local, default Qwen2.5-Coder 3B.** SafeShell downloads and manages a pinned, checksum-verified `llama.cpp`

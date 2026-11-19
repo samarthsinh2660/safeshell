@@ -124,6 +124,12 @@ A rule can block with a reason (there is no "do it anyway"), ask for a snapshot,
 Rules can only make SafeShell stricter; user settings cannot override them. The file and /etc/safeshell
 must belong to root and not be writable by anyone else, or the policy is ignored with a warning.
 safeshell doctor  shows which policy is active.`},
+	{"hosts", "Mark production hosts for ssh", `Say which machines matter in ~/.config/safeshell/config.json (* matches any text; labels are prod or staging):
+     "hosts": {"prod*": "prod", "db-*.example.com": "prod", "staging-*": "staging"}
+A command that changes something on a prod host over ssh ("ssh prod1 'rm -rf /var/tmp/x'") is raised one
+level, at most R4, with "this is a production host". Reads and other hosts are unchanged.
+An interactive "ssh prod1" is not blocked, but prints a line saying commands typed there are only
+checked if SafeShell is installed on that host.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
    safeshell check <cmd>             rate a command without running it
    safeshell check --script FILE     rate every command in a script, with its line number

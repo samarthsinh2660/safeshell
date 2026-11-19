@@ -632,3 +632,19 @@ func TestParseScriptErrorNamesTheLine(t *testing.T) {
 		t.Errorf("err = %v", err)
 	}
 }
+
+func TestSSHSplit(t *testing.T) {
+	for _, c := range []struct {
+		args         []string
+		host, remote string
+	}{
+		{[]string{"prod1"}, "prod1", ""},
+		{[]string{"-p", "2222", "-l", "deploy", "-t", "prod1", "ls", "-l"}, "prod1", "ls -l"},
+		{[]string{"-N"}, "", ""},
+		{nil, "", ""},
+	} {
+		if h, r := SSHSplit(c.args); h != c.host || r != c.remote {
+			t.Errorf("%v: %q %q", c.args, h, r)
+		}
+	}
+}

@@ -109,6 +109,7 @@ func commandFindings(c shellparse.Command, home string) ([]Finding, bool) {
 	fs = append(fs, redirectFindings(c)...)
 	if c.Remote != "" {
 		for i := range fs {
+			fs[i].Host = c.Remote
 			fs[i].Reason = "On remote host " + c.Remote + ": " + fs[i].Reason
 		}
 	}

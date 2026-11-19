@@ -30,6 +30,7 @@ const (
 	CodeNoMethod       = -32601
 	CodeBadParams      = -32602
 	CodeServer         = -32000
+	CodeVersion        = -32001 // the caller and the daemon are different SafeShell versions
 )
 
 const maxLine = 1 << 20
@@ -64,6 +65,7 @@ type Server struct {
 	Handlers map[string]Handler
 	Deadline time.Duration // per call; default 2 minutes
 	UID      int           // the only user allowed to connect; default: the daemon's own
+	Idle     time.Duration // an idle connection is closed after this long; default 10 minutes
 }
 
 // SocketPath is where the daemon listens: $XDG_RUNTIME_DIR/safeshell.sock. It is
@@ -189,7 +191,12 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 			continue
 		}
 		wg.Add(1)
-		go func() { defer wg.Done(); s.conn(context.WithValue(ctx, peerPIDKey{}, pid), c) }()
+		go func() {
+			defer wg.Done()
+			stop := context.AfterFunc(ctx, func() { c.Close() }) // on shutdown no idle client keeps the daemon alive
+			defer stop()
+			s.conn(context.WithValue(ctx, peerPIDKey{}, pid), c)
+		}()
 	}
 }
 
@@ -197,7 +204,12 @@ func (s *Server) conn(ctx context.Context, c net.Conn) {
 	defer c.Close()
 	r := bufio.NewReaderSize(c, 64<<10)
 	enc := json.NewEncoder(c)
+	idle := s.Idle
+	if idle == 0 {
+		idle = 10 * time.Minute
+	}
 	for {
+		_ = c.SetReadDeadline(time.Now().Add(idle))
 		line, err := readLine(r)
 		if err != nil {
 			if errors.Is(err, errTooLong) {
