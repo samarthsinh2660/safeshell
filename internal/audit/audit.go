@@ -13,7 +13,8 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
-// Entry is one decision. Outcome is "allowed", "cancelled", "ran", or
+// Entry is one decision. Outcome is "allowed", "cancelled", "ran", "agent-allowed",
+// "agent-denied" (a command an AI agent asked about), or
 // "replaced" (a safer option was run instead of the original).
 type Entry struct {
 	Time     time.Time `json:"time"`

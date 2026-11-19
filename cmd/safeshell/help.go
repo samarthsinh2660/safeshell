@@ -84,6 +84,17 @@ The setting is "learn": true in ~/.config/safeshell/config.json.`},
 Nothing needs to be restarted. While paused, commands run without a check and without delay.
 For one terminal only:  SAFESHELL_OFF=1  (unset SAFESHELL_OFF to check again).
 Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when checking is paused.`},
+	{"agents", "Check commands run by AI agents", `AI coding agents run commands outside your hooked shell. Connect them so SafeShell checks each one first:
+     safeshell agent snippet claude     the hook to add to Claude Code's settings.json (PreToolUse, matcher Bash)
+     safeshell agent snippet wrapper    a script that runs one command only when SafeShell allows it (needs jq)
+SafeShell never edits an agent's settings; you paste the snippet yourself.
+     safeshell guard --agent            reads one JSON command on stdin and answers on stdout
+It takes a Claude Code hook input or {"command": "...", "cwd": "..."} and answers allow or deny with the
+reason and a safer option, never a question. Nobody is there to confirm, so anything that is not a plain
+allow (a confirm, a block, a team policy block) is denied, as is a check that takes too long.
+Input it cannot read is denied too: the shell hook lets a line through when SafeShell breaks, an agent hook does not.
+Every answer is in  safeshell history  as agent-allowed or agent-denied.
+Exit status: 0 allowed (a Claude Code hook is always answered with 0), 2 denied.`},
 	{"undo", "Undo and snapshots", `When you approve a risky command, SafeShell first saves the files it will change.
      safeshell undo            offer the latest change from this terminal (else this folder, else any)
      safeshell undo ID         undo a specific one
@@ -128,6 +139,8 @@ safeshell doctor  shows which policy is active.`},
    safeshell ai setup|status|stop|bench    manage the built-in AI / measure it
    safeshell daemon [stop]           keep SafeShell warm in the background for faster checks
    safeshell guard -- <cmd>          what the shell hook runs for each command you type
+   safeshell guard --agent           check a command an AI agent wants to run (JSON in, allow or deny out)
+   safeshell agent snippet claude|wrapper   print the Claude Code hook, or a script that checks each command
    safeshell voice [setup|status]    speak a request (Ctrl-X Ctrl-V in your terminal)
    safeshell install / safeshell uninstall  add or remove the hook in your shell startup file
    safeshell hook bash|zsh           print the shell hook

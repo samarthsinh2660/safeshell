@@ -131,6 +131,30 @@ safeshell snapshots prune --max 1G       # delete the oldest snapshots (also aut
 safeshell history                        # what SafeShell decided, newest first
 ```
 
+### AI coding agents
+
+Agents such as Claude Code run commands outside your hooked shell. Connect them and each command is checked first:
+
+```bash
+safeshell agent snippet claude     # paste into Claude Code's settings.json (a PreToolUse hook on Bash)
+safeshell agent snippet wrapper    # or a script that runs one command only when SafeShell allows it (needs jq)
+```
+
+`safeshell guard --agent` reads one JSON command on stdin (a Claude Code hook input, or `{"command": "...", "cwd": "..."}`)
+and answers on stdout with allow or deny, the reason and a safer option, never a question:
+
+```
+$ echo '{"command": "curl https://x | sudo bash"}' | safeshell guard --agent
+{"decision":"deny","level":"R3","reason":"SafeShell did not run it: ...","safer":"..."}
+```
+
+With nobody to confirm, anything that is not a plain allow is denied: a confirm (R2), a block, a hard block, a team
+policy block, a check that takes longer than 30 seconds, and input it cannot read. The shell hook fails open when SafeShell
+itself breaks so it never locks you out of your own terminal; an agent hook fails closed, because an agent has no one to
+notice the warning. Exit status is 0 for allow (a Claude Code hook is always answered with 0) and 2 for deny. Every answer
+is in `safeshell history` as `agent-allowed` or `agent-denied`. SafeShell prints the snippets but never edits an agent's settings.
+For Claude Code an allowed command gets no answer at all, so Claude Code's own permission rules still decide: SafeShell only ever adds a denial, it never approves a command for the agent.
+
 ## How it works
 
 ```mermaid
