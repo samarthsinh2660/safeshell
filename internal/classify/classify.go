@@ -25,6 +25,8 @@ const (
 	R4 = domain.R4
 )
 
+const forkBombReason = "A fork bomb: it starts copies of itself until the machine runs out of resources and freezes."
+
 // Classify rates a whole command line. home is the user's home folder (empty
 // when unknown); the rules cannot look it up themselves. The result is the highest level of any
 // command in it; every reason and safer alternative is kept for the report.
@@ -43,17 +45,12 @@ func Classify(line, home string) Verdict {
 	var fs []Finding
 	var unclassified []string
 	if res.ForkBomb {
-		fs = append(fs, Finding{Level: R4, Command: line, Reason: "A fork bomb: it starts copies of itself until the machine runs out of resources and freezes."})
+		fs = append(fs, Finding{Level: R4, Command: line, Reason: forkBombReason})
 	}
 	for _, p := range res.Pipelines {
-		fs = append(fs, pipelineFindings(p)...)
-		for _, c := range p.Cmds {
-			cf, unknown := commandFindings(c, home)
-			fs = append(fs, cf...)
-			if unknown {
-				unclassified = append(unclassified, c.Name)
-			}
-		}
+		pf, unknown := rateStatement(p, home)
+		fs = append(fs, pf...)
+		unclassified = append(unclassified, unknown...)
 	}
 	v := Verdict{Findings: fs, Unclassified: dedupe(unclassified)}
 	v.Level = domain.MaxLevel(fs)
@@ -65,6 +62,21 @@ func Classify(line, home string) Verdict {
 		}
 	}
 	return v
+}
+
+// rateStatement applies every rule to one pipeline. It also returns the names
+// of the commands the rule table does not know.
+func rateStatement(p shellparse.Pipeline, home string) ([]Finding, []string) {
+	fs := pipelineFindings(p)
+	var unclassified []string
+	for _, c := range p.Cmds {
+		cf, unknown := commandFindings(c, home)
+		fs = append(fs, cf...)
+		if unknown {
+			unclassified = append(unclassified, c.Name)
+		}
+	}
+	return fs, unclassified
 }
 
 func dedupe(ss []string) []string {

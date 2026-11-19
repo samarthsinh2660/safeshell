@@ -26,8 +26,14 @@ which prints its help and does nothing else.
 .BI "check [--json] " command
 Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 means R4.
 .TP
+.BI "check --script " FILE
+Rate every command in a shell script without running it. Each command that is not R0 is listed with the line it starts on, the level and the reason; the result is the highest level. A script that is not valid shell is refused with the line to fix (exit status 2).
+.TP
 .BI "analyze [--json] [--verbose] [--cwd " DIR "] " command
 Rate a command, run it in the sandbox, and report the real files, processes and disks it would touch.
+.TP
+.BI "analyze [--verbose] [--cwd " DIR "] --script " FILE
+The line-by-line rating of a script, then the whole script run in the sandbox. The result is the highest of the line levels and what the run showed. Without a sandbox the run is estimated only. Exit status as for a command.
 .TP
 .BI "simulate [--json] [--verbose] [--cwd " DIR "] [--timeout " DURATION "] " command
 Run a command in the sandbox and show what it changed. Real files are never touched.

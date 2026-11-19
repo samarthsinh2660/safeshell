@@ -624,6 +624,35 @@ func TestDeferredCodeDepthIsBounded(t *testing.T) {
 	}
 }
 
+func TestParseScriptKeepsTheStartLineOfEachStatement(t *testing.T) {
+	res, err := ParseScript("# c\nls\nif true; then\n  rm \\\n   x\nfi\nsh -c 'rm y'\nb() { b|b & }; b\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []int
+	for _, p := range res.Pipelines {
+		lines = append(lines, p.Line)
+	}
+	for _, want := range []int{2, 3, 4, 7, 8} {
+		if !slices.Contains(lines, want) {
+			t.Errorf("no pipeline on line %d: %v", want, lines)
+		}
+	}
+	if slices.Contains(lines, 5) || slices.Contains(lines, 1) {
+		t.Errorf("a continuation or comment line has no statement: %v", lines)
+	}
+	if !res.ForkBomb || res.ForkBombLine != 8 {
+		t.Errorf("fork bomb on line %d, want 8", res.ForkBombLine)
+	}
+}
+
+func TestParseScriptErrorNamesTheLine(t *testing.T) {
+	_, err := ParseScript("ls\necho 'open\n")
+	if err == nil || !strings.HasPrefix(err.Error(), "line 2: ") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestSSHSplit(t *testing.T) {
 	for _, c := range []struct {
 		args         []string

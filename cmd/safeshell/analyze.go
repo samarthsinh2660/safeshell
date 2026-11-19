@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/samarthsinh2660/safeshell/internal/classify"
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
@@ -234,6 +235,7 @@ func inspectServices(cmds []shellparse.Command) []domain.Effect {
 type flags struct {
 	json, verbose bool
 	cwd           string
+	script        string        // analyze only: a file to analyse instead of a command line
 	timeout       time.Duration // only read when parseFlags was asked for it
 }
 
@@ -248,13 +250,15 @@ func parseFlags(cmd string, args []string, withTimeout bool, stderr io.Writer) (
 			f.json = true
 		case args[0] == "--verbose":
 			f.verbose = true
-		case args[0] == "--cwd" || (withTimeout && args[0] == "--timeout"):
+		case args[0] == "--cwd" || (cmd == "analyze" && args[0] == "--script") || (withTimeout && args[0] == "--timeout"):
 			if len(args) < 2 {
 				fmt.Fprint(stderr, usage)
 				return f, nil, false
 			}
 			if args[0] == "--cwd" {
 				f.cwd = args[1]
+			} else if args[0] == "--script" {
+				f.script = args[1]
 			} else if d, err := time.ParseDuration(args[1]); err != nil {
 				fmt.Fprintf(stderr, "safeshell %s: bad --timeout %q (try 5s)\n", cmd, args[1])
 				return f, nil, false
@@ -267,6 +271,13 @@ func parseFlags(cmd string, args []string, withTimeout bool, stderr io.Writer) (
 			return f, nil, false
 		}
 		args = args[1:]
+	}
+	if f.script != "" { // the script is the whole input; no command words and no JSON
+		if len(args) > 0 || f.json {
+			fmt.Fprint(stderr, usage)
+			return f, nil, false
+		}
+		return f, nil, true
 	}
 	args, _ = endOptions(cmd, args, stderr) // what is left is "--" or the command, never an option
 	if len(args) == 0 {
@@ -282,6 +293,12 @@ func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
 		return 2
 	}
 	line := strings.Join(args, " ")
+	var lines []classify.LineFinding
+	if f.script != "" {
+		if line, lines, ok = readScript("analyze", []string{f.script}, stderr); !ok {
+			return 2
+		}
+	}
 	cwd := cwdOr(f.cwd)
 	ctx, stop := interruptible()
 	defer stop()
@@ -290,9 +307,13 @@ func runAnalyze(args []string, stdout, stderr io.Writer, color bool) int {
 		fmt.Fprintln(stderr, interruptedMsg)
 		return exitInterrupted
 	}
-	if f.json {
+	switch {
+	case f.json:
 		printJSON(stdout, a)
-	} else {
+	case f.script != "":
+		printPolicyWarning(stderr, a)
+		printScriptAnalysis(stdout, lines, a, cwd, color, f.verbose)
+	default:
 		printPolicyWarning(stderr, a)
 		printAnalysis(stdout, a, cwd, color, f.verbose)
 	}
@@ -393,6 +414,12 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 		}
 		fmt.Fprintf(w, "  %s  %s\n", f.Level, report.Printable(f.Reason))
 	}
+	printObserved(w, a, cwd, c, verbose)
+	printAlternatives(w, c, a.Verdict.Alternatives)
+}
+
+// printObserved prints what was seen on the machine and in the sandbox.
+func printObserved(w io.Writer, a engine.Analysis, cwd string, c palette, verbose bool) {
 	for _, e := range a.Effects {
 		fmt.Fprintf(w, "\n%s%s%s  %s: %s\n", c.bold, e.Evidence, c.reset, e.Kind, report.Printable(e.Summary))
 		for _, d := range e.Details {
@@ -409,5 +436,23 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 		}
 		hiddenNotes(w, hidden, c.dim, c.reset)
 	}
-	printAlternatives(w, c, a.Verdict.Alternatives)
+}
+
+// printScriptAnalysis is printAnalysis for a script: the line-by-line rating,
+// then what the sandbox and the system showed for the script as a whole. The
+// overall level is the highest of the lines and of what was observed.
+func printScriptAnalysis(w io.Writer, lines []classify.LineFinding, a engine.Analysis, cwd string, color, verbose bool) {
+	c := newPalette(color)
+	level := max(classify.ScriptLevel(lines), a.Level)
+	printScriptLines(w, lines, c)
+	if a.Level > classify.ScriptLevel(lines) {
+		fmt.Fprintf(w, "\n%sThe lines alone looked like %s; what the script would really do raised it to %s.%s\n", c.dim, classify.ScriptLevel(lines), a.Level, c.reset)
+	}
+	printObserved(w, a, cwd, c, verbose)
+	decision := decisionText[a.Decision]
+	if a.Team.Block != "" {
+		fmt.Fprintf(w, "\n%sBlocked by your team's policy: %s%s\n", c.bold, report.Printable(a.Team.Block), c.reset)
+		decision = "BLOCK"
+	}
+	fmt.Fprintf(w, "\n%s%s %s%s  %s\n", c.bold+c.level(level), level, level.Label(), c.reset, decision)
 }

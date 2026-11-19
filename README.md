@@ -124,6 +124,8 @@ Without the hook you can use the pieces directly:
 ```bash
 safeshell check 'rm -rf ~/projects'      # rate a command without running it
 safeshell analyze 'make clean'           # sandbox run + processes, disks and safer options
+safeshell check --script deploy.sh       # rate every command in a script, with its line number
+safeshell analyze --script deploy.sh     # the same, plus a sandbox run of the whole script
 safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
 safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
 safeshell snapshots                      # what undo can restore, and how much room it takes

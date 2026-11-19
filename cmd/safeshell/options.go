@@ -27,7 +27,7 @@ func wantsHelp(cmd string, args []string) bool {
 		switch {
 		case a == "-h" || a == "--help":
 			return true
-		case free && (a == "--cwd" || a == "--timeout"):
+		case free && (a == "--cwd" || a == "--timeout" || a == "--script"):
 			i++ // skip the value
 		case free && (!strings.HasPrefix(a, "-") || a == "--"):
 			return false
