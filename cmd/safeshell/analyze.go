@@ -52,6 +52,23 @@ func teamPolicy() (rules []policy.Rule, warning string) {
 	return rules, ""
 }
 
+// loadHosts reads the user's host labels from the config file. It is a test
+// seam: tests replace it. A config that cannot be read gives no labels and a
+// warning, never silence.
+var loadHosts = func() (map[string]string, error) {
+	c, err := config.Load(config.Path())
+	return c.Hosts, err
+}
+
+// hostLabels returns the user's host labels, or a warning saying they were not used.
+func hostLabels() (hosts map[string]string, warning string) {
+	hosts, err := loadHosts()
+	if err != nil {
+		return nil, "host labels were ignored because the settings file could not be used: " + err.Error()
+	}
+	return hosts, ""
+}
+
 // analyze is replaced in tests.
 var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	env := callerEnv(ctx)
@@ -74,10 +91,11 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	}
 	procs := func(cmds []shellparse.Command) []domain.Effect { return inspectProcesses(callerPid(ctx), cmds) }
 	rules, warning := teamPolicy()
-	e := &engine.Engine{Rules: rules, Home: userHome(), Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	hosts, hostWarning := hostLabels()
+	e := &engine.Engine{Rules: rules, Hosts: hosts, Home: userHome(), Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	a := e.Analyze(ctx, line, cwd)
-	a.PolicyWarning = warning
+	a.PolicyWarning = strings.TrimSpace(warning + " " + hostWarning)
 	return a
 }
 
@@ -338,6 +356,13 @@ func printPolicyWarning(w io.Writer, a engine.Analysis) {
 	}
 }
 
+// printHostNote says, in one line, that an interactive ssh session on a labelled host is not checked.
+func printHostNote(w io.Writer, a engine.Analysis) {
+	if a.Host.Note != "" {
+		fmt.Fprintln(w, report.Printable(a.Host.Note))
+	}
+}
+
 func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bool) {
 	c := newPalette(color)
 	col := c.level(a.Level)
@@ -350,6 +375,9 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 		fmt.Fprintf(w, "%sBlocked by your team's policy: %s%s\n", c.bold, report.Printable(a.Team.Block), c.reset)
 	}
 	fmt.Fprintf(w, "%s$ %s%s\n", c.dim, report.Printable(a.Line), c.reset)
+	if a.Host.Reason != "" {
+		fmt.Fprintf(w, "%sRaised because %s.%s\n", c.dim, report.Printable(a.Host.Reason), c.reset)
+	}
 	if a.Level > a.Verdict.Level {
 		fmt.Fprintf(w, "%sThe command text alone looked like %s; what it would really do raised it to %s.%s\n", c.dim, a.Verdict.Level, a.Level, c.reset)
 	}

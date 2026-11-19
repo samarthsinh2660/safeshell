@@ -332,3 +332,23 @@ func TestNoSandboxResultNamesTheFilesFromTheArguments(t *testing.T) {
 		t.Errorf("a sandbox result replaces the guess: %v", a.Targets)
 	}
 }
+
+func TestProdHostRaisesARemoteWriteAndLeavesOthersAlone(t *testing.T) {
+	hosts := map[string]string{"prod*": "prod"}
+	a := (&Engine{Hosts: hosts}).Analyze(context.Background(), "ssh prod1 'rm -rf /var/tmp/x'", "/w")
+	if a.Verdict.Level != domain.R3 || a.Level != domain.R4 || a.Decision != domain.HardBlock || !strings.Contains(a.Host.Reason, "production host (prod1)") {
+		t.Errorf("%s %s %s %+v", a.Verdict.Level, a.Level, a.Decision, a.Host)
+	}
+	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R0})
+	if a.Level != domain.R4 {
+		t.Error("a later effect must not lower the host raise")
+	}
+	for _, line := range []string{"ssh dev1 'rm -rf /var/tmp/x'", "ssh prod1 'ls /var'"} {
+		if b := (&Engine{Hosts: hosts}).Analyze(context.Background(), line, "/w"); b.Level != b.Verdict.Level || b.Host.Reason != "" {
+			t.Errorf("%s: %s %+v", line, b.Level, b.Host)
+		}
+	}
+	if b := (&Engine{Hosts: hosts}).Analyze(context.Background(), "ssh prod1", "/w"); b.Host.Note == "" || b.Level != domain.R1 || b.Decision != domain.Allow {
+		t.Errorf("the interactive note must not block: %s %s %+v", b.Level, b.Decision, b.Host)
+	}
+}
