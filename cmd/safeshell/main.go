@@ -42,6 +42,9 @@ Usage:
                                             the real files are never touched
   safeshell guard [--cwd DIR] -- <command...>
                                             what the shell hook runs: analyse, ask, print the command to run
+  safeshell guard --agent                   for AI coding agents: one JSON command on stdin, an allow or deny answer
+                                            on stdout, never a question; anything that is not allowed is denied
+  safeshell agent snippet claude|wrapper    print the hook for Claude Code, or a script that runs commands through SafeShell
   safeshell explain [--why] <command...>    the analysis plus a plain-English explanation (needs AI);
                                             --why shows which rule and evidence set the level (no AI needed)
   safeshell ask <what you want in English>
@@ -71,6 +74,7 @@ Quote the command so your shell passes it through untouched:
 
 Exit status of 'safeshell check' and 'analyze': 0 = R0-R2, 3 = R3 (irreversible), 4 = R4 (catastrophic).
 Exit status of 'safeshell guard': 0 = run the printed command, 1 = cancelled, 2 = wrong usage.
+Exit status of 'safeshell guard --agent': 0 = allowed (a Claude Code hook is always answered with 0), 2 = denied.
 Ctrl-C during 'analyze' or 'simulate' stops it with status 130; nothing is run.
 `
 
@@ -147,6 +151,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runHistory(args[1:], stdout, stderr)
 	case "guard":
 		return runGuard(args[1:], stdout, stderr, color)
+	case "agent":
+		return runAgent(args[1:], stdout, stderr)
 	case "hook":
 		return runHook(args[1:], stdout, stderr)
 	case "version", "--version":
