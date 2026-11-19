@@ -96,7 +96,7 @@ func TestAnalyzeFastFallsBackToLocalAnalysisWhenTheDaemonIsAnotherVersion(t *tes
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		(&ipc.Server{Handlers: daemonHandlers(func() { cancel(); close(exited) }, "an-older-version")}).Serve(ctx, l)
+		(&ipc.Server{Handlers: daemonHandlers(func() { cancel(); close(exited) }, "an-older-version", func() {})}).Serve(ctx, l)
 		close(done)
 	}()
 	t.Cleanup(func() { cancel(); <-done })
@@ -138,7 +138,10 @@ func TestDaemonStopSaysStillStoppingWhenTheSocketStays(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	// A daemon whose shutdown does nothing keeps its socket.
-	go func() { (&ipc.Server{Handlers: daemonHandlers(func() {}, version)}).Serve(ctx, l); close(done) }()
+	go func() {
+		(&ipc.Server{Handlers: daemonHandlers(func() {}, version, func() {})}).Serve(ctx, l)
+		close(done)
+	}()
 	t.Cleanup(func() { cancel(); <-done })
 	if code, out, _ := runSS("daemon", "stop"); code != 1 || !strings.Contains(out, "still stopping") {
 		t.Errorf("%d %q", code, out)

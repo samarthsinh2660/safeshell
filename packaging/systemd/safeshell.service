@@ -2,8 +2,8 @@
 #   mkdir -p ~/.config/systemd/user && cp safeshell.service ~/.config/systemd/user/
 #   systemctl --user enable --now safeshell
 # Uses the first safeshell found in ~/.local/bin (scripts/install.sh, tarball), /usr/local/bin, /usr/bin (the .deb).
-# After an upgrade a daemon of the old version exits on its first request (checks run directly meanwhile);
-# run `systemctl --user restart safeshell` to bring the new one up.
+# After an upgrade a daemon of the old version exits with an error on its first request, so systemd
+# starts the installed version again (checks run directly in the meantime).
 [Unit]
 Description=SafeShell daemon (keeps command checks fast)
 

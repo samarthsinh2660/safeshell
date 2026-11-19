@@ -19,8 +19,8 @@ Sandbox on Ubuntu 24.04 and later
 Upgrades and the background daemon
   A daemon that is still running after an upgrade is the old version. It
   notices on its first request, refuses it and exits, and that check runs
-  directly, so no check ever uses old rules. Restart it with
-  `systemctl --user restart safeshell` (or `safeshell daemon stop`).
+  directly, so no check ever uses old rules. If it runs as the systemd
+  user unit, systemd then starts the new version by itself.
 
 Optional AI
   Nothing is downloaded when the package is installed. `safeshell ai setup`

@@ -75,7 +75,10 @@ func TestTheDaemonProtectsTheShellOfTheProcessThatAsked(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { (&ipc.Server{Handlers: daemonHandlers(func() {}, version)}).Serve(ctx, l); close(done) }()
+	go func() {
+		(&ipc.Server{Handlers: daemonHandlers(func() {}, version, func() {})}).Serve(ctx, l)
+		close(done)
+	}()
 	t.Cleanup(func() { cancel(); <-done })
 	// The caller is whoever the kernel says is on the other end of the socket; a pid
 	// written into the request is ignored, so no client can choose whose shell is protected.

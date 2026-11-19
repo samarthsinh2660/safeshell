@@ -209,7 +209,7 @@ func withDaemon(t *testing.T, a engine.Analysis, seenEnv *[]string) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { (&ipc.Server{Handlers: daemonHandlers(cancel, version)}).Serve(ctx, l); close(done) }()
+	go func() { (&ipc.Server{Handlers: daemonHandlers(cancel, version, func() {})}).Serve(ctx, l); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
 }
 
