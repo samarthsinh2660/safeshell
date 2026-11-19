@@ -16,6 +16,12 @@ Sandbox on Ubuntu 24.04 and later
   profile for /usr/bin/safeshell that allows exactly this one program to use
   them. `safeshell doctor` shows what your machine supports.
 
+Upgrades and the background daemon
+  A daemon that is still running after an upgrade is the old version. It
+  notices on its first request, refuses it and exits, and that check runs
+  directly, so no check ever uses old rules. Restart it with
+  `systemctl --user restart safeshell` (or `safeshell daemon stop`).
+
 Optional AI
   Nothing is downloaded when the package is installed. `safeshell ai setup`
   (or /models inside the terminal) downloads a pinned, checksum-verified

@@ -15,7 +15,7 @@ import (
 
 func TestDaemonHandlersRejectBadParamsAndReportTheAI(t *testing.T) {
 	useAI(t, fakeAI{}, nil)
-	h := daemonHandlers(func() {})
+	h := daemonHandlers(func() {}, version)
 	ctx := context.Background()
 	var e *ipc.Error
 	for _, method := range []string{"check", "analyze"} {
@@ -33,7 +33,7 @@ func TestDaemonHandlersRejectBadParamsAndReportTheAI(t *testing.T) {
 
 func TestDaemonShutdownHandlerStopsTheServerAfterReplying(t *testing.T) {
 	stopped := make(chan struct{})
-	h := daemonHandlers(func() { close(stopped) })
+	h := daemonHandlers(func() { close(stopped) }, version)
 	if _, err := h["shutdown"](context.Background(), nil); err != nil {
 		t.Fatal(err)
 	}
