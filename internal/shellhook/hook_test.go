@@ -10,8 +10,8 @@ import (
 
 func TestScriptsExistAndParse(t *testing.T) {
 	for _, sh := range []string{"bash", "zsh"} {
-		s, err := Script(sh)
-		if err != nil || !strings.Contains(s, "safeshell guard") {
+		s, err := Script(sh, "/opt/ss/safeshell")
+		if err != nil || !strings.Contains(s, `"$__ss_bin" guard`) {
 			t.Fatalf("%s: %v", sh, err)
 		}
 		bin, err := exec.LookPath(sh)
@@ -24,30 +24,30 @@ func TestScriptsExistAndParse(t *testing.T) {
 			t.Errorf("%s syntax: %v %s", sh, err, out)
 		}
 	}
-	if _, err := Script("fish"); err == nil {
+	if _, err := Script("fish", "/opt/ss/safeshell"); err == nil {
 		t.Error("fish is not supported yet and must say so")
 	}
 }
 
 func TestScriptsBindVoice(t *testing.T) {
 	for sh, bind := range map[string]string{"bash": `bind -m $__ss_k -x '"\C-x\C-v": __ss_voice'`, "zsh": `bindkey '^X^V' __ss_voice`} {
-		s, _ := Script(sh)
-		for _, want := range []string{bind, "safeshell voice --text </dev/tty 2>/dev/tty", `[[ -n "${SAFESHELL_OFF-}" ]] && return 0`} {
+		s, _ := Script(sh, "/opt/ss/safeshell")
+		for _, want := range []string{bind, `"$__ss_bin" voice --text </dev/tty 2>/dev/tty`, `[[ -n "${SAFESHELL_OFF-}" ]] && return 0`} {
 			if !strings.Contains(s, want) {
 				t.Errorf("%s hook is missing %q", sh, want)
 			}
 		}
 	}
-	if s, _ := Script("bash"); !strings.Contains(s, "READLINE_LINE=$out") {
+	if s, _ := Script("bash", "/opt/ss/safeshell"); !strings.Contains(s, "READLINE_LINE=$out") {
 		t.Error("bash must put the transcript on the line")
 	}
-	if s, _ := Script("zsh"); !strings.Contains(s, "BUFFER=$out") {
+	if s, _ := Script("zsh", "/opt/ss/safeshell"); !strings.Contains(s, "BUFFER=$out") {
 		t.Error("zsh must put the transcript on the line")
 	}
 }
 
 func TestBashBindsEveryKeymapAndDisablesEditingKeys(t *testing.T) {
-	s, _ := Script("bash")
+	s, _ := Script("bash", "/opt/ss/safeshell")
 	for _, want := range []string{
 		"for __ss_k in emacs vi-insert vi-command",
 		`bind -m $__ss_k '"\C-m": "\C-x\C-s\e[9001~"'`,
@@ -68,8 +68,8 @@ func TestBashBindsEveryKeymapAndDisablesEditingKeys(t *testing.T) {
 }
 
 func TestHooksSurviveNounsetAndFinishWithTheBuiltinWidget(t *testing.T) {
-	b, _ := Script("bash")
-	z, _ := Script("zsh")
+	b, _ := Script("bash", "/opt/ss/safeshell")
+	z, _ := Script("zsh", "/opt/ss/safeshell")
 	for name, script := range map[string]string{"bash": b, "zsh": z} {
 		if strings.Contains(script, `"$SAFESHELL_OFF"`) {
 			t.Errorf("%s hook reads SAFESHELL_OFF without a default, which breaks under nounset", name)
@@ -85,5 +85,35 @@ func TestHooksSurviveNounsetAndFinishWithTheBuiltinWidget(t *testing.T) {
 	}
 	if strings.Count(z, "emulate -L zsh") < 3 {
 		t.Error("every zsh function must run under emulate -L zsh")
+	}
+}
+
+func TestScriptsCallTheBinaryTheyWereMadeWithAndQuoteItsPath(t *testing.T) {
+	for _, sh := range []string{"bash", "zsh"} {
+		s, _ := Script(sh, "/opt/o'k/safeshell")
+		if !strings.Contains(s, `__ss_bin='/opt/o'\''k/safeshell'`) {
+			t.Errorf("%s hook does not name its binary", sh)
+		}
+		if strings.Contains(s, "command safeshell") || strings.Contains(s, "@BIN@") {
+			t.Errorf("%s hook still depends on PATH or kept its placeholder", sh)
+		}
+		if strings.Count(s, `"$__ss_bin" guard`) != 1 || strings.Count(s, `"$__ss_bin" voice`) != 1 {
+			t.Errorf("%s hook must call guard and voice through __ss_bin", sh)
+		}
+	}
+}
+
+func TestScriptsDoNotCheckContinuationLinesOneByOne(t *testing.T) {
+	b, _ := Script("bash", "/b")
+	z, _ := Script("zsh", "/b")
+	for _, want := range []string{"line=$__ss_pend$READLINE_LINE", "kill -INT $$", `PROMPT_COMMAND="__ss_reset`} {
+		if !strings.Contains(b, want) {
+			t.Errorf("bash hook is missing %q", want)
+		}
+	}
+	for _, want := range []string{"line=$PREBUFFER$BUFFER", "zle send-break"} {
+		if !strings.Contains(z, want) {
+			t.Errorf("zsh hook is missing %q", want)
+		}
 	}
 }

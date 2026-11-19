@@ -8,6 +8,26 @@ import (
 	"time"
 )
 
+func TestIncomplete(t *testing.T) {
+	for src, want := range map[string]bool{
+		"echo hi":            false,
+		"cat <<EOF":          true,
+		"cat <<EOF\nhi":      true,
+		"cat <<EOF\nhi\nEOF": false,
+		"echo a \\":          true,
+		"echo a \\\\":        false,
+		"echo 'a":            true,
+		"echo a |":           true,
+		"if true; then":      true,
+		"echo $(":            true,
+		"fi":                 false,
+	} {
+		if got := Incomplete(src); got != want {
+			t.Errorf("Incomplete(%q) = %v, want %v", src, got, want)
+		}
+	}
+}
+
 // names lists every command found, pipeline by pipeline, as "a|b" strings.
 func names(r *Result) []string {
 	var out []string

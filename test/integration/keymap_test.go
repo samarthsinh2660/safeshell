@@ -29,7 +29,7 @@ func guardedShell(t *testing.T, shell string, argv []string) (*term, string, str
 	if err := os.WriteFile(editor, []byte("#!/bin/sh\ntouch \""+filepath.Join(bin, "edited")+"\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	script, err := shellhook.Script(shell)
+	script, err := shellhook.Script(shell, filepath.Join(bin, "safeshell"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,22 +36,36 @@ func block(sh Shell, bin string) string {
 
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
+// Change says what Add did to the startup file.
+type Change int
+
+const (
+	Unchanged Change = iota // the same block was already there
+	Added
+	Updated // a block for another binary path was replaced
+)
+
 // Add puts the hook block in the startup file. It is idempotent, keeps the rest
 // of the file untouched, and writes a .safeshell-backup copy the first time.
-// changed is false when the hook was already there.
-func Add(sh Shell, bin string) (changed bool, err error) {
+// A block that differs from the one it would write now (a different binary
+// path, for example) is replaced.
+func Add(sh Shell, bin string) (Change, error) {
 	old, err := os.ReadFile(sh.RC)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, err
+		return Unchanged, err
 	}
 	text := string(old)
-	if strings.Contains(text, begin) {
-		return false, nil
+	want := block(sh, bin)
+	if i, j := span(text); i >= 0 {
+		if text[i:j] == want {
+			return Unchanged, nil
+		}
+		return Updated, os.WriteFile(sh.RC, []byte(text[:i]+want+text[j:]), 0o644)
 	}
 	if len(old) > 0 {
 		if _, e := os.Stat(sh.RC + ".safeshell-backup"); e != nil {
 			if err := os.WriteFile(sh.RC+".safeshell-backup", old, 0o600); err != nil {
-				return false, err
+				return Unchanged, err
 			}
 		}
 		if !strings.HasSuffix(text, "\n") {
@@ -59,7 +73,39 @@ func Add(sh Shell, bin string) (changed bool, err error) {
 		}
 		text += "\n"
 	}
-	return true, os.WriteFile(sh.RC, []byte(text+block(sh, bin)), 0o644)
+	return Added, os.WriteFile(sh.RC, []byte(text+want), 0o644)
+}
+
+// span is where the block starts and ends (after its newline) in text, or -1 when there is none.
+func span(text string) (i, j int) {
+	i = strings.Index(text, begin)
+	j = strings.Index(text, end)
+	if i < 0 || j < i {
+		return -1, -1
+	}
+	j += len(end)
+	if j < len(text) && text[j] == '\n' {
+		j++
+	}
+	return i, j
+}
+
+// Binary is the safeshell the block in the startup file runs, or false when there is no block or it is not in our format.
+func Binary(sh Shell) (string, bool) {
+	b, err := os.ReadFile(sh.RC)
+	if err != nil {
+		return "", false
+	}
+	i, j := span(string(b))
+	if i < 0 {
+		return "", false
+	}
+	rest, ok := strings.CutPrefix(string(b)[i:j], begin+"\n[ -x '")
+	if !ok {
+		return "", false
+	}
+	path, _, ok := strings.Cut(rest, "' ]")
+	return strings.ReplaceAll(path, `'\''`, "'"), ok
 }
 
 // Remove deletes the block, leaving everything else as it was.
@@ -72,14 +118,9 @@ func Remove(sh Shell) (changed bool, err error) {
 		return false, err
 	}
 	text := string(old)
-	i := strings.Index(text, begin)
-	j := strings.Index(text, end)
-	if i < 0 || j < i {
+	i, j := span(text)
+	if i < 0 {
 		return false, nil
-	}
-	j += len(end)
-	if j < len(text) && text[j] == '\n' {
-		j++
 	}
 	out := strings.TrimRight(text[:i], "\n")
 	rest := text[j:]

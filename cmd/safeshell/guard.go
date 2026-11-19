@@ -19,6 +19,9 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/ui"
 )
 
+// exitIncomplete is what guard returns for a command the shell is still reading.
+const exitIncomplete = 3
+
 // guardInput is where answers are read from; tests replace it.
 var guardInput = func() io.Reader {
 	if t, err := os.Open("/dev/tty"); err == nil {
@@ -29,7 +32,10 @@ var guardInput = func() io.Reader {
 
 // runGuard is what the shell hook calls for every command line. The command to
 // run goes to stdout (the original, or a safer option the person picked); the
-// analysis and questions go to stderr. Exit 0 runs it, 1 cancels.
+// analysis and questions go to stderr. Exit 0 runs it, 1 cancels, and
+// exitIncomplete means the command is not finished (an open here-document, quote
+// or trailing backslash): nothing was checked, and the hook asks again once the
+// command is complete.
 func runGuard(args []string, stdout, stderr io.Writer, color bool) int {
 	cwd, unknown := "", false
 opts:
@@ -60,7 +66,7 @@ opts:
 		return code
 	}
 	// A line the shell would reject as "command not found", or one starting with ?, may be English.
-	if text, ok := nl.LooksLikeRequest(line, !unknown); ok {
+	if text, ok := nl.LooksLikeRequest(line, !unknown); ok && !strings.Contains(line, "\n") {
 		code, available := askLine(text, cwd, stdout, stderr, color)
 		if available || strings.HasPrefix(strings.TrimSpace(line), "?") {
 			return code
@@ -68,6 +74,9 @@ opts:
 		// Not English after all, or no AI: let the shell handle the line as typed.
 		fmt.Fprintln(stdout, line)
 		return 0
+	}
+	if shellparse.Incomplete(line) {
+		return exitIncomplete
 	}
 	return guardLine(line, cwd, stdout, stderr, color, false)
 }
@@ -131,7 +140,12 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	s, err := shellhook.Script(args[0])
+	bin, err := executablePath()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell hook: cannot find where safeshell is installed:", err)
+		return 1
+	}
+	s, err := shellhook.Script(args[0], bin)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell hook:", err)
 		return 2

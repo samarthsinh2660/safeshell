@@ -81,6 +81,9 @@ func doctorSetup(w io.Writer) {
 	switch {
 	case err != nil:
 		doctorRow(w, "MISSING", "hook installed", err.Error()+". Switch to bash or zsh to use SafeShell")
+	case installed && hookBinaryGone(sh):
+		bin, _ := install.Binary(sh)
+		doctorRow(w, "MISSING", "hook installed", "in "+rc+", but it runs "+bin+", which is gone. Run: safeshell install")
 	case installed:
 		doctorRow(w, "ok", "hook installed", "in "+rc)
 	default:
@@ -111,6 +114,16 @@ func doctorSetup(w io.Writer) {
 		size += m.Bytes
 	}
 	doctorRow(w, "info", "snapshots", fmt.Sprintf("%d saved, %s (list them: safeshell snapshots)", len(ms), report.HumanBytes(size)))
+}
+
+// hookBinaryGone is true when the hook block names a safeshell that no longer exists.
+func hookBinaryGone(sh install.Shell) bool {
+	bin, ok := install.Binary(sh)
+	if !ok {
+		return false
+	}
+	_, err := os.Stat(bin)
+	return err != nil
 }
 
 // doctorPolicy says which team policy is active, or that none is set.
