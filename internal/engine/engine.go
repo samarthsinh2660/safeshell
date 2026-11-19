@@ -58,8 +58,9 @@ func CallerFrom(ctx context.Context) int {
 type Engine struct {
 	Sim        Simulator
 	Inspectors []Inspector
-	Rules      []policy.Rule // the admin's team policy; nil when there is none
-	Home       string        // the user's home folder, so a home outside /home is protected
+	Rules      []policy.Rule     // the admin's team policy; nil when there is none
+	Hosts      map[string]string // the user's host patterns and labels (prod, staging); nil when none
+	Home       string            // the user's home folder, so a home outside /home is protected
 }
 
 // Analysis is everything learned about one command line.
@@ -80,6 +81,8 @@ type Analysis struct {
 	// policy file could not be used (set by the caller that loaded it).
 	Team          policy.Outcome `json:"team"`
 	PolicyWarning string         `json:"policy_warning,omitempty"`
+	// Host is what the user's host labels ask of this line.
+	Host policy.HostOutcome `json:"host"`
 }
 
 // Analyze rates line, inspects the real system, simulates when the rules say the
@@ -98,6 +101,7 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 	}
 
 	a.Team = policy.Evaluate(e.Rules, cmds)
+	a.Host = policy.EvaluateHosts(e.Hosts, a.Verdict, cmds)
 	a.simulate(ctx, e.Sim, cwd)
 	if a.Sim == nil {
 		paths, complete := rules.WritePaths(cmds, cwd)
@@ -178,9 +182,10 @@ func (a *Analysis) AddEffect(e domain.Effect) {
 }
 
 // decide sets the final level and decision: the rules raised by effects, then by
-// the team policy. Each step can only raise.
+// the team policy, then by the host labels. Each step can only raise.
 func (a *Analysis) decide() {
 	a.Level = policy.FinalLevel(a.Verdict.Level, a.Effects)
 	a.Decision = policy.Decide(a.Level, a.Effects)
 	a.Level, a.Decision = a.Team.Apply(a.Level, a.Decision)
+	a.Level, a.Decision = a.Host.Apply(a.Level, a.Decision)
 }

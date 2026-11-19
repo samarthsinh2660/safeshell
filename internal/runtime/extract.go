@@ -13,14 +13,21 @@ import (
 // ExtractTarGz unpacks src into dest, dropping the archive's top-level folder.
 // Entries whose names would land outside dest, and links whose text points
 // outside it, are refused. Every write goes through os.Root, so a write that
-// would pass through a symlink leading outside dest fails too.
-func ExtractTarGz(src, dest string) error {
+// would pass through a symlink leading outside dest fails too. Progress goes
+// to w, which may be nil.
+func ExtractTarGz(src, dest string, w io.Writer) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	gz, err := gzip.NewReader(f)
+	size := fileSize(f)
+	if w != nil {
+		fmt.Fprintln(w, "Unpacking...")
+	}
+	p := newProgress(w, size, 0, false)
+	defer p.Finish()
+	gz, err := gzip.NewReader(io.TeeReader(f, p))
 	if err != nil {
 		return err
 	}
@@ -41,6 +48,7 @@ func ExtractTarGz(src, dest string) error {
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
+			p.Update(size) // trailing padding may be unread
 			return nil
 		}
 		if err != nil {

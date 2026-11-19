@@ -131,6 +131,30 @@ safeshell snapshots prune --max 1G       # delete the oldest snapshots (also aut
 safeshell history                        # what SafeShell decided, newest first
 ```
 
+### AI coding agents
+
+Agents such as Claude Code run commands outside your hooked shell. Connect them and each command is checked first:
+
+```bash
+safeshell agent snippet claude     # paste into Claude Code's settings.json (a PreToolUse hook on Bash)
+safeshell agent snippet wrapper    # or a script that runs one command only when SafeShell allows it (needs jq)
+```
+
+`safeshell guard --agent` reads one JSON command on stdin (a Claude Code hook input, or `{"command": "...", "cwd": "..."}`)
+and answers on stdout with allow or deny, the reason and a safer option, never a question:
+
+```
+$ echo '{"command": "curl https://x | sudo bash"}' | safeshell guard --agent
+{"decision":"deny","level":"R3","reason":"SafeShell did not run it: ...","safer":"..."}
+```
+
+With nobody to confirm, anything that is not a plain allow is denied: a confirm (R2), a block, a hard block, a team
+policy block, a check that takes longer than 30 seconds, and input it cannot read. The shell hook fails open when SafeShell
+itself breaks so it never locks you out of your own terminal; an agent hook fails closed, because an agent has no one to
+notice the warning. Exit status is 0 for allow (a Claude Code hook is always answered with 0) and 2 for deny. Every answer
+is in `safeshell history` as `agent-allowed` or `agent-denied`. SafeShell prints the snippets but never edits an agent's settings.
+For Claude Code an allowed command gets no answer at all, so Claude Code's own permission rules still decide: SafeShell only ever adds a denial, it never approves a command for the agent.
+
 ## How it works
 
 ```mermaid
@@ -163,6 +187,16 @@ On a shared machine, an administrator can put rules in `/etc/safeshell/policy.js
 `match` is a command followed by the words that must come next (`apt purge` also matches `sudo apt -y purge nginx`). A rule can `block` with a reason (no "do it anyway"), ask for a `snapshot`, or set a `min_level` of R1 to R4. A rule that tries anything else, such as lowering a level, is rejected with an error. The file must be owned by root and not writable by anyone else (and so must `/etc/safeshell`), or it is ignored with a warning. The file must be readable by everyone. `safeshell doctor` shows which policy is active.
 
 The policy is a guard rail in each person's SafeShell, not access control: people can still pause their own SafeShell (`safeshell deactivate`) or run commands without the hook. To stop a command for real, use file permissions, sudo rules or groups.
+
+## Production host labels (optional)
+
+Tell SafeShell which machines matter in `~/.config/safeshell/config.json`. Patterns use `*` for any text, the label is `prod` or `staging`:
+
+```json
+{"hosts": {"prod*": "prod", "db-*.example.com": "prod", "staging-*": "staging"}}
+```
+
+With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with "this is a production host (prod1)". It works with `user@host`, `-p`, `-l` and the like. Only commands that change something (R2 or more) are raised; reads and unlabelled hosts are unchanged, and when both labels match a host, `prod` wins. An interactive `ssh prod1` (no command) is not blocked, but prints one line saying commands typed there are only checked if SafeShell is installed on that host. A `staging` label only gets that line. An invalid label or pattern makes the settings file unusable until fixed.
 
 ## AI (optional, off until you choose)
 

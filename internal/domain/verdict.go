@@ -72,6 +72,7 @@ type Finding struct {
 	Level   Level        `json:"level"`
 	Command string       `json:"command"`
 	Reason  string       `json:"reason"`
+	Host    string       `json:"host,omitempty"` // set when the command runs on another machine over ssh
 	Alt     *Alternative `json:"alternative,omitempty"`
 }
 

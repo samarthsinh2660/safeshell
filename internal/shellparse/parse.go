@@ -407,7 +407,7 @@ func (w *walker) nested(c *Command, depth int) {
 	case "eval":
 		_ = w.parseString(strings.Join(c.Args, " "), depth+1)
 	case "ssh":
-		host, remote := sshSplit(c.Args)
+		host, remote := SSHSplit(c.Args)
 		if remote != "" {
 			prev := w.remote
 			w.remote = host
@@ -574,8 +574,9 @@ func (w *walker) inner(c *Command, words []string, viaFind bool, depth int) {
 	}
 }
 
-// sshSplit returns the host and the remote command string of an ssh invocation.
-func sshSplit(args []string) (host, remote string) {
+// SSHSplit returns the host and the remote command string of an ssh invocation.
+// The command is empty for an interactive session.
+func SSHSplit(args []string) (host, remote string) {
 	withValue := map[string]bool{"-p": true, "-i": true, "-l": true, "-o": true, "-F": true, "-J": true, "-L": true, "-R": true, "-D": true, "-b": true, "-c": true, "-m": true, "-E": true, "-e": true, "-S": true, "-W": true}
 	for i := 0; i < len(args); i++ {
 		a := args[i]

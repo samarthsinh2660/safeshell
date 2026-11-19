@@ -13,6 +13,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/ai/providers"
 	"github.com/samarthsinh2660/safeshell/internal/models"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
@@ -27,7 +28,10 @@ type Config struct {
 		KeepDays int `json:"keep_days"` // default 30
 		MaxGiB   int `json:"max_gib"`   // default 5
 	} `json:"snapshots"`
-	AI struct {
+	// Hosts maps a host name pattern (* matches any text) to a label, prod or
+	// staging. A change made on a prod host over ssh is raised one level.
+	Hosts map[string]string `json:"hosts"`
+	AI    struct {
 		// Mode: auto (local if its files are installed), off, local, cloud, or
 		// hybrid (local first, cloud when local fails).
 		Mode  ai.Mode `json:"mode"`
@@ -106,6 +110,9 @@ func Load(path string) (Config, error) {
 	}
 	if c.Snapshots.MaxGiB == 0 {
 		c.Snapshots.MaxGiB = 5
+	}
+	if err := policy.ValidateHosts(c.Hosts); err != nil {
+		return Config{}, err
 	}
 	if p := c.AI.Cloud.Provider; p != "" {
 		if _, ok := providers.Find(p); !ok {

@@ -110,8 +110,10 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	socketPath = func() string { return filepath.Join(d, "no-daemon.sock") } // nor a real daemon
 	realLoadPolicy = loadPolicy
 	loadPolicy = func() ([]policy.Rule, bool, error) { return nil, false, nil } // nor a policy on this machine
-	learning = func() bool { return false }                                     // nor the developer's own settings
-	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") }       // nor the real state folder
+	realLoadHosts = loadHosts
+	loadHosts = func() (map[string]string, error) { return nil, nil }     // nor the developer's own host labels
+	learning = func() bool { return false }                               // nor the developer's own settings
+	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") } // nor the real state folder
 	code := m.Run()
 	os.RemoveAll(d)
 	os.Exit(code)
@@ -209,7 +211,7 @@ func withDaemon(t *testing.T, a engine.Analysis, seenEnv *[]string) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { (&ipc.Server{Handlers: daemonHandlers(cancel)}).Serve(ctx, l); close(done) }()
+	go func() { (&ipc.Server{Handlers: daemonHandlers(cancel, version, func() {})}).Serve(ctx, l); close(done) }()
 	t.Cleanup(func() { cancel(); <-done })
 }
 
