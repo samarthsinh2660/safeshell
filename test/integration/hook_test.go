@@ -240,13 +240,24 @@ func TestCtrlJCannotBypassTheGuard(t *testing.T) {
 
 func TestIfSafeShellItselfFailsTheLineRunsWithAWarningInsteadOfVanishing(t *testing.T) {
 	needSandbox(t)
-	fake := t.TempDir()
-	_ = os.WriteFile(filepath.Join(fake, "safeshell"), []byte("#!/bin/sh\nexit 7\n"), 0o755)
-	// The broken `safeshell` is first in PATH from the start; the hook itself comes from the real
-	// binary. (Typing the PATH change would be checked, and a /tmp folder first in PATH asks.)
-	sh := startBash(t, "PATH="+fake+":"+filepath.Dir(ssBin)+":"+os.Getenv("PATH"))
+	// The hook calls the binary that printed it. Print it from a copy, then delete
+	// the copy: SafeShell is now gone, as after a botched uninstall.
+	cp := filepath.Join(t.TempDir(), "safeshell")
+	b, err := os.ReadFile(ssBin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cp, b, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sh := startBash(t)
 	sh.waitFor(t, "READY>")
-	sh.send(`eval "$(` + ssBin + ` hook bash)"` + "\r")
+	sh.send(`eval "$(` + cp + ` hook bash)"` + "\r")
+	sh.send("echo hooked\r")
+	sh.waitFor(t, "hooked\r\n")
+	if err := os.Remove(cp); err != nil {
+		t.Fatal(err)
+	}
 	sh.send("echo still-ran\r")
 	sh.waitFor(t, "NOT checked")
 	sh.waitFor(t, "still-ran\r\n")
