@@ -132,3 +132,26 @@ func TestSafeMultiLineCommandRuns(t *testing.T) {
 		})
 	}
 }
+
+// After a trailing backslash an empty last line would run the first line alone,
+// so a cancelled command must be dropped whole, never finished with an empty line.
+func TestCancelledBackslashCommandDoesNotRunItsFirstLine(t *testing.T) {
+	needSandbox(t)
+	for _, c := range hookShells {
+		t.Run(c.name, func(t *testing.T) {
+			victim := victimDir(t)
+			sh := hooked(t, c.name, c.argv)
+			sh.send("rm -rf " + victim + " \\\r")
+			time.Sleep(500 * time.Millisecond)
+			sh.send("--verbose\r")
+			sh.waitFor(t, "[c] cancel")
+			sh.send("c\r")
+			sh.waitFor(t, "Nothing was run")
+			sh.send("echo after-cancel\r")
+			sh.waitFor(t, "after-cancel\r\n")
+			if _, err := os.Stat(filepath.Join(victim, "a.txt")); err != nil {
+				t.Fatal("the first line of the cancelled command ran on its own")
+			}
+		})
+	}
+}
