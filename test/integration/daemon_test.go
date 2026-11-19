@@ -82,6 +82,7 @@ func TestDaemonSocketIsPrivate(t *testing.T) {
 }
 
 func TestDaemonOfAnotherVersionRefusesAndExits(t *testing.T) {
+	needSandbox(t) // like the other daemon tests: it needs the built binary, which CI's unit job does not have
 	sock := startDaemon(t)
 	err := ipc.Call(context.Background(), sock, "analyze", map[string]any{"line": "ls", "cwd": "/", "version": "not-this-build"}, nil)
 	var e *ipc.Error
