@@ -153,7 +153,7 @@ policy block, a check that takes longer than 30 seconds, and input it cannot rea
 itself breaks so it never locks you out of your own terminal; an agent hook fails closed, because an agent has no one to
 notice the warning. Exit status is 0 for allow (a Claude Code hook is always answered with 0) and 2 for deny. Every answer
 is in `safeshell history` as `agent-allowed` or `agent-denied`. SafeShell prints the snippets but never edits an agent's settings.
-Note that for Claude Code, an `allow` answer skips its own permission prompt for that command.
+For Claude Code an allowed command gets no answer at all, so Claude Code's own permission rules still decide: SafeShell only ever adds a denial, it never approves a command for the agent.
 
 ## How it works
 

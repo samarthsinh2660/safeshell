@@ -82,6 +82,11 @@ func Format(claude bool, a Answer) []byte {
 	if a.Allow {
 		decision = "allow"
 	}
+	if claude && a.Allow {
+		// No decision: Claude Code's own permission rules still apply. An
+		// "allow" here would skip them, and SafeShell only ever adds checks.
+		return nil
+	}
 	if claude {
 		reason := a.Reason
 		if a.Safer != "" {

@@ -84,9 +84,8 @@ func TestFormatClaude(t *testing.T) {
 	if got.H["hookEventName"] != "PreToolUse" || got.H["permissionDecision"] != "deny" || got.H["permissionDecisionReason"] != "no. Safer option: trash-put x" {
 		t.Errorf("%s", b)
 	}
-	json.Unmarshal(Format(true, Answer{Allow: true, Reason: "ok"}), &got)
-	if got.H["permissionDecision"] != "allow" || got.H["permissionDecisionReason"] != "ok" {
-		t.Errorf("%v", got.H)
+	if b := Format(true, Answer{Allow: true, Reason: "ok"}); len(b) != 0 {
+		t.Errorf("an allowed command must leave Claude Code's own permission rules in charge, got %s", b)
 	}
 }
 

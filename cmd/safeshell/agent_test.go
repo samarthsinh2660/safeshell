@@ -101,9 +101,8 @@ func TestAgentClaudeFormatInAndOut(t *testing.T) {
 	a.Level, a.Decision = domain.R0, domain.Allow
 	fakeAnalyze(t, a)
 	code, out, _ = agentRun(t, strings.Replace(in, "rm -rf ~/projects", "ls", 1))
-	json.Unmarshal([]byte(out), &got)
-	if code != 0 || got.H["permissionDecision"] != "allow" {
-		t.Errorf("code %d %v", code, got.H)
+	if code != 0 || out != "" {
+		t.Errorf("allowed: Claude Code's own rules stay in charge, so no decision is printed: code %d out %q", code, out)
 	}
 }
 
