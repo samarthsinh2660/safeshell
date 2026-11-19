@@ -86,6 +86,17 @@ var shellBuiltins = map[string]bool{
 	"shopt": true, "bind": true, "enable": true, "builtin": true, "hash": true,
 }
 
+// Incomplete is true when src is a command the shell would still be reading:
+// an open quote or bracket, an operator with nothing after it, a here-document
+// without its closing word, or a trailing backslash.
+func Incomplete(src string) bool {
+	_, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(src), "")
+	if err != nil {
+		return syntax.IsIncomplete(err) || strings.Contains(err.Error(), "unclosed here-document")
+	}
+	return (len(src)-len(strings.TrimRight(src, `\`)))%2 == 1
+}
+
 // Parse analyses line. It returns an error only if the line is not valid shell.
 func Parse(line string) (*Result, error) {
 	w := &walker{res: &Result{}}

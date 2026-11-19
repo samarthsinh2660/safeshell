@@ -35,7 +35,8 @@ func TestDetect(t *testing.T) {
 func TestAddKeepsTheExistingFileBacksItUpAndIsIdempotent(t *testing.T) {
 	orig := "export A=1\nalias ll='ls -l'"
 	sh := rc(t, orig)
-	changed, err := Add(sh, "/home/me/.local/bin/safeshell")
+	change, err := Add(sh, "/home/me/.local/bin/safeshell")
+	changed := change == Added
 	if err != nil || !changed {
 		t.Fatal(changed, err)
 	}
@@ -46,7 +47,7 @@ func TestAddKeepsTheExistingFileBacksItUpAndIsIdempotent(t *testing.T) {
 	if b, _ := os.ReadFile(sh.RC + ".safeshell-backup"); string(b) != orig {
 		t.Error("no faithful backup")
 	}
-	if changed, _ := Add(sh, "/x/safeshell"); changed || read(t, sh) != got {
+	if change, _ := Add(sh, "/home/me/.local/bin/safeshell"); change != Unchanged || read(t, sh) != got {
 		t.Error("adding twice must change nothing")
 	}
 	if !Installed(sh) {
@@ -92,5 +93,48 @@ func TestRemoveKeepsLinesAfterTheBlock(t *testing.T) {
 	Remove(sh)
 	if got := read(t, sh); got != "export AFTER=1\n" {
 		t.Errorf("%q", got)
+	}
+}
+
+func TestAddReplacesABlockForAnotherBinaryAndKeepsTheRest(t *testing.T) {
+	sh := rc(t, "export A=1\n")
+	Add(sh, "/home/me/.local/bin/safeshell")
+	os.WriteFile(sh.RC, []byte(read(t, sh)+"export AFTER=1\n"), 0o644)
+	change, err := Add(sh, "/usr/bin/safeshell")
+	if err != nil || change != Updated {
+		t.Fatal(change, err)
+	}
+	got := read(t, sh)
+	if strings.Contains(got, ".local") || !strings.HasPrefix(got, "export A=1\n") || !strings.HasSuffix(got, "export AFTER=1\n") || strings.Count(got, begin) != 1 {
+		t.Errorf("%q", got)
+	}
+	if bin, ok := Binary(sh); !ok || bin != "/usr/bin/safeshell" {
+		t.Errorf("Binary = %q %v", bin, ok)
+	}
+	if change, _ := Add(sh, "/usr/bin/safeshell"); change != Unchanged {
+		t.Error("the same block must change nothing")
+	}
+}
+
+func TestBinaryReadsBackQuotedPathsAndRefusesOtherFormats(t *testing.T) {
+	sh := rc(t, "\x00")
+	if _, ok := Binary(sh); ok {
+		t.Error("no file")
+	}
+	Add(sh, "/home/o'brien/safeshell")
+	if bin, ok := Binary(sh); !ok || bin != "/home/o'brien/safeshell" {
+		t.Errorf("%q %v", bin, ok)
+	}
+	os.WriteFile(sh.RC, []byte("export A=1\n"), 0o644)
+	if _, ok := Binary(sh); ok {
+		t.Error("no block")
+	}
+	os.WriteFile(sh.RC, []byte(begin+"\neval hook\n"+end+"\n"), 0o644)
+	if _, ok := Binary(sh); ok {
+		t.Error("a block in another format")
+	}
+	os.WriteFile(sh.RC, []byte(begin+"\n[ -x 'broken\n"+end+"\n"), 0o644)
+	if _, ok := Binary(sh); ok {
+		t.Error("unterminated path")
 	}
 }

@@ -14,6 +14,15 @@ func shellFor() (install.Shell, error) {
 	return install.Detect(os.Getenv("SHELL"), home)
 }
 
+// executablePath is where this safeshell lives, with symlinks resolved; tests replace it.
+var executablePath = func() (string, error) {
+	bin, err := os.Executable()
+	if err == nil {
+		bin, err = filepath.EvalSymlinks(bin)
+	}
+	return bin, err
+}
+
 // runInstall is `safeshell install [--ai]`: it adds the hook to your shell startup file.
 func runInstall(args []string, stdout, stderr io.Writer) int {
 	withAI := false
@@ -29,22 +38,22 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "safeshell install:", err, "\nYou can still add the hook by hand: safeshell hook bash|zsh")
 		return 1
 	}
-	bin, err := os.Executable()
-	if err == nil {
-		bin, err = filepath.EvalSymlinks(bin)
-	}
+	bin, err := executablePath()
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell install:", err)
 		return 1
 	}
-	changed, err := install.Add(sh, bin)
+	change, err := install.Add(sh, bin)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell install:", err)
 		return 1
 	}
-	if changed {
+	switch change {
+	case install.Added:
 		fmt.Fprintf(stdout, "Added the SafeShell hook to %s (a copy of the old file is %s.safeshell-backup).\n", sh.RC, sh.RC)
-	} else {
+	case install.Updated:
+		fmt.Fprintf(stdout, "Updated the SafeShell hook in %s.\n", sh.RC)
+	default:
 		fmt.Fprintf(stdout, "The SafeShell hook is already in %s.\n", sh.RC)
 	}
 	fmt.Fprintln(stdout, "Open a new terminal (or run:  source "+sh.RC+" ) and every command you press Enter on is checked first.")

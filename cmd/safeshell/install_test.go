@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,5 +85,48 @@ func TestUseColorNeedsATerminalAndNoNOCOLOR(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	if useColor(null) {
 		t.Error("NO_COLOR turns colour off")
+	}
+}
+
+func fakeExecutable(t *testing.T, path string, err error) {
+	t.Helper()
+	old := executablePath
+	t.Cleanup(func() { executablePath = old })
+	executablePath = func() (string, error) { return path, err }
+}
+
+func TestInstallUpdatesABlockThatPointsAtAnotherBinary(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SHELL", "/bin/bash")
+	fakeExecutable(t, "/old/bin/safeshell", nil)
+	runSS("install")
+	fakeExecutable(t, "/usr/bin/safeshell", nil)
+	code, out, _ := runSS("install")
+	b, _ := os.ReadFile(filepath.Join(home, ".bashrc"))
+	if code != 0 || !strings.Contains(out, "Updated the SafeShell hook in "+filepath.Join(home, ".bashrc")) ||
+		!strings.Contains(string(b), "/usr/bin/safeshell") || strings.Contains(string(b), "/old/bin") {
+		t.Errorf("%d %q\n%s", code, out, b)
+	}
+}
+
+func TestInstallAndHookNeedToKnowWhereSafeshellIs(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("SHELL", "/bin/bash")
+	fakeExecutable(t, "", errors.New("gone"))
+	if code, _, e := runSS("install"); code != 1 || !strings.Contains(e, "gone") {
+		t.Errorf("install: %d %q", code, e)
+	}
+	if code, _, e := runSS("hook", "bash"); code != 1 || !strings.Contains(e, "gone") {
+		t.Errorf("hook: %d %q", code, e)
+	}
+}
+
+func TestHookScriptNamesTheBinaryItCalls(t *testing.T) {
+	fakeExecutable(t, "/opt/safe shell/safeshell", nil)
+	for _, sh := range []string{"bash", "zsh"} {
+		if code, out, _ := runSS("hook", sh); code != 0 || !strings.Contains(out, "__ss_bin='/opt/safe shell/safeshell'") {
+			t.Errorf("%s: %d %q", sh, code, out)
+		}
 	}
 }

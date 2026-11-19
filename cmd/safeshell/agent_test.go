@@ -165,7 +165,7 @@ func TestAgentTimeoutIsDenied(t *testing.T) {
 }
 
 func TestAgentTakesNoCommandLine(t *testing.T) {
-	for _, args := range [][]string{{"--", "ls"}, {"--cwd", "/x"}, {"--unknown"}} {
+	for _, args := range [][]string{{"--", "ls"}, {"--cwd", "/x"}, {"--unknown"}, {"--multiline"}} {
 		if code, out, errOut := agentRun(t, `{"command":"ls"}`, args...); code != 2 || out != "" || !strings.Contains(errOut, "safeshell guard --agent") {
 			t.Errorf("%v: code %d out %q err %q", args, code, out, errOut)
 		}

@@ -220,3 +220,13 @@ func TestDoctorBrokenSettingsAreReportedOnce(t *testing.T) {
 		t.Errorf("no AI rows when the settings cannot be read:\n%s", out)
 	}
 }
+
+func TestDoctorReportsAHookThatPointsAtAMissingBinary(t *testing.T) {
+	home := doctorHome(t)
+	rc := filepath.Join(home, ".bashrc")
+	os.WriteFile(rc, []byte("# >>> safeshell >>>\n[ -x '/gone/safeshell' ] && eval \"$('/gone/safeshell' hook bash)\"\n# <<< safeshell <<<\n"), 0o644)
+	wantAll(t, doctorOut(t), "MISSING  hook installed", "runs /gone/safeshell, which is gone", "Run: safeshell install")
+
+	os.WriteFile(rc, []byte("# >>> safeshell >>>\neval \"$(safeshell hook bash)\"\n# <<< safeshell <<<\n"), 0o644)
+	wantAll(t, doctorOut(t), "ok       hook installed") // a block in another format is not judged
+}

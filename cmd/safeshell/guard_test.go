@@ -291,3 +291,35 @@ func TestGuardMasksSecretsAndSkipsSpaceLines(t *testing.T) {
 		t.Error("a line starting with a space must not be logged")
 	}
 }
+
+// An unfinished command (open here-document, quote, trailing backslash) is not analysed:
+// the hook asks again with the whole command once it is complete.
+func TestGuardLeavesAnUnfinishedCommandForTheHookToAskAgain(t *testing.T) {
+	got := fakeAnalyze(t, sampleAnalysis())
+	answer(t, "")
+	for _, line := range []string{"cat <<EOF", "cat <<EOF\nrm -rf / in heredoc", "echo a \\", "echo 'a", "please remove the old logs\nand then 'quote"} {
+		if code, out, _ := runSS("guard", "--multiline", "--", line); code != exitIncomplete || out != "" {
+			t.Errorf("%q: code %d out %q", line, code, out)
+		}
+	}
+	if *got != [2]string{} {
+		t.Errorf("an unfinished command was analysed: %v", *got)
+	}
+	// A hook printed by an older SafeShell does not collect lines, so each one is still checked as it comes.
+	if code, _, _ := runSS("guard", "--", "rm -rf / \\"); code == exitIncomplete || got[0] != "rm -rf / \\" {
+		t.Errorf("without --multiline an unfinished line must be checked: code %d analysed %q", code, got[0])
+	}
+	// ...but a single line of English with an apostrophe still goes to the assistant, as before.
+	if code, out, _ := runSS("guard", "--unknown", "--", "what's my ip"); code != 0 || out != "what's my ip\n" {
+		t.Errorf("english: code %d out %q", code, out)
+	}
+}
+
+func TestGuardChecksACompleteMultiLineCommandOnce(t *testing.T) {
+	got := fakeAnalyze(t, sampleAnalysis())
+	answer(t, "c\n")
+	line := "cat <<EOF\nrm -rf / in heredoc\nEOF"
+	if code, _, _ := runSS("guard", "--", line); code != 1 || got[0] != line {
+		t.Errorf("code %d analysed %q", code, got[0])
+	}
+}

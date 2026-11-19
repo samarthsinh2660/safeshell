@@ -14,7 +14,7 @@ func TestHookMarksOnlyInteractiveShells(t *testing.T) {
 		if err != nil {
 			continue
 		}
-		script, _ := Script(sh)
+		script, _ := Script(sh, "/opt/ss/safeshell")
 		for mode, same := range map[string]bool{"-ic": true, "-c": false} {
 			cmd := exec.Command(bin, flag, mode, `eval "$1"; echo "$SAFESHELL_HOOK $$"`, "_", script)
 			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir()}
