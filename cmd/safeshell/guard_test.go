@@ -296,12 +296,16 @@ func TestGuardLeavesAnUnfinishedCommandForTheHookToAskAgain(t *testing.T) {
 	got := fakeAnalyze(t, sampleAnalysis())
 	answer(t, "")
 	for _, line := range []string{"cat <<EOF", "cat <<EOF\nrm -rf / in heredoc", "echo a \\", "echo 'a", "please remove the old logs\nand then 'quote"} {
-		if code, out, _ := runSS("guard", "--", line); code != exitIncomplete || out != "" {
+		if code, out, _ := runSS("guard", "--multiline", "--", line); code != exitIncomplete || out != "" {
 			t.Errorf("%q: code %d out %q", line, code, out)
 		}
 	}
 	if *got != [2]string{} {
 		t.Errorf("an unfinished command was analysed: %v", *got)
+	}
+	// A hook printed by an older SafeShell does not collect lines, so each one is still checked as it comes.
+	if code, _, _ := runSS("guard", "--", "rm -rf / \\"); code == exitIncomplete || got[0] != "rm -rf / \\" {
+		t.Errorf("without --multiline an unfinished line must be checked: code %d analysed %q", code, got[0])
 	}
 	// ...but a single line of English with an apostrophe still goes to the assistant, as before.
 	if code, out, _ := runSS("guard", "--unknown", "--", "what's my ip"); code != 0 || out != "what's my ip\n" {

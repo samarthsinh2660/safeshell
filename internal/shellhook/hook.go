@@ -37,7 +37,7 @@ __ss_guard() {
     [[ -z "$(type -t -- "$first" 2>/dev/null)" ]] && unknown=(--unknown)
   fi
   tty=$(stty -g </dev/tty) && stty sane </dev/tty # readline leaves the terminal raw, so Enter would not end an answer
-  out=$("$__ss_bin" guard --cwd "$PWD" ${unknown[@]+"${unknown[@]}"} -- "$line" </dev/tty 2>/dev/tty)
+  out=$("$__ss_bin" guard --multiline --cwd "$PWD" ${unknown[@]+"${unknown[@]}"} -- "$line" </dev/tty 2>/dev/tty)
   rc=$?
   [[ -n $tty ]] && stty "$tty" </dev/tty
   case $rc in
@@ -110,7 +110,7 @@ __ss_check() {   # returns 1 when the line was cancelled
     whence -- "$first" >/dev/null 2>&1 || unknown=(--unknown)
   fi
   tty=$(stty -g </dev/tty) && stty sane </dev/tty
-  out=$("$__ss_bin" guard --cwd "$PWD" "${unknown[@]}" -- "$line" </dev/tty 2>/dev/tty)
+  out=$("$__ss_bin" guard --multiline --cwd "$PWD" "${unknown[@]}" -- "$line" </dev/tty 2>/dev/tty)
   rc=$?
   [[ -n $tty ]] && stty "$tty" </dev/tty
   case $rc in

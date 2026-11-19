@@ -32,12 +32,14 @@ var guardInput = func() io.Reader {
 
 // runGuard is what the shell hook calls for every command line. The command to
 // run goes to stdout (the original, or a safer option the person picked); the
-// analysis and questions go to stderr. Exit 0 runs it, 1 cancels, and
+// analysis and questions go to stderr. Exit 0 runs it, 1 cancels. With
+// --multiline (sent by hooks that collect the lines of an unfinished command),
 // exitIncomplete means the command is not finished (an open here-document, quote
 // or trailing backslash): nothing was checked, and the hook asks again once the
-// command is complete.
+// command is complete. Without it, as from a hook printed by an older SafeShell,
+// every line is checked as it comes, so an open shell is never less protected.
 func runGuard(args []string, stdout, stderr io.Writer, color bool) int {
-	cwd, unknown := "", false
+	cwd, unknown, multiline := "", false, false
 opts:
 	for len(args) > 0 {
 		switch {
@@ -46,6 +48,8 @@ opts:
 			break opts
 		case args[0] == "--unknown":
 			unknown, args = true, args[1:]
+		case args[0] == "--multiline":
+			multiline, args = true, args[1:]
 		case args[0] == "--cwd" && len(args) >= 2:
 			cwd, args = args[1], args[2:]
 		case strings.HasPrefix(args[0], "-"):
@@ -75,7 +79,7 @@ opts:
 		fmt.Fprintln(stdout, line)
 		return 0
 	}
-	if shellparse.Incomplete(line) {
+	if multiline && shellparse.Incomplete(line) {
 		return exitIncomplete
 	}
 	return guardLine(line, cwd, stdout, stderr, color, false)
