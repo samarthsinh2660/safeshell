@@ -603,3 +603,9 @@ func TestFileSizeOfClosedFile(t *testing.T) {
 		t.Error("an unreadable file has size 0")
 	}
 }
+
+func TestChecksumOfSomethingUnreadableIsAnError(t *testing.T) {
+	if ok, err := fileMatches(t.TempDir(), "x", nil); ok || err == nil { // a folder opens but cannot be read
+		t.Errorf("ok %v err %v", ok, err)
+	}
+}
