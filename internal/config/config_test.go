@@ -52,6 +52,7 @@ func TestRejectsBadValues(t *testing.T) {
 		"model":    `{"ai":{"local":{"model":"gpt-9000"}}}`,
 		"provider": `{"ai":{"cloud":{"provider":"acme"}}}`,
 		"gpu":      `{"ai":{"local":{"gpu":"metal"}}}`,
+		"hosts":    `{"hosts":{"prod*":"production"}}`,
 	} {
 		if _, err := Load(write(t, s)); err == nil {
 			t.Errorf("%s accepted", name)
@@ -303,5 +304,12 @@ func TestSavesAreSecretEvenWithALooseLeftoverTmpFile(t *testing.T) {
 	}
 	if m, _ := filepath.Glob(filepath.Join(filepath.Dir(KeysPath()), "*.json.*.tmp")); len(m) != 0 {
 		t.Errorf("temporary files left: %v", m)
+	}
+}
+
+func TestHostsAreLoaded(t *testing.T) {
+	c, err := Load(write(t, `{"hosts":{"prod*":"prod","staging-*":"staging"}}`))
+	if err != nil || c.Hosts["prod*"] != "prod" || c.Hosts["staging-*"] != "staging" {
+		t.Errorf("%+v %v", c.Hosts, err)
 	}
 }

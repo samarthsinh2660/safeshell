@@ -96,6 +96,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	}
 	aiReview(&a, stderr)
 	printPolicyWarning(stderr, a)
+	printHostNote(stderr, a)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)
 	} else {
