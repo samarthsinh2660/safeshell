@@ -115,7 +115,9 @@ must belong to root and not be writable by anyone else, or the policy is ignored
 safeshell doctor  shows which policy is active.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
    safeshell check <cmd>             rate a command without running it
+   safeshell check --script FILE     rate every command in a script, with its line number
    safeshell analyze <cmd>           the full picture: rating, sandbox result, what it would hit
+   safeshell analyze --script FILE   the same for a whole script, run in the sandbox
    safeshell simulate <cmd>          run in the sandbox and list the changes (nothing real is touched)
    safeshell explain <cmd>           the analysis plus a plain-English explanation (needs AI)
    safeshell explain --why <cmd>     which rule and evidence set the level (works without AI)

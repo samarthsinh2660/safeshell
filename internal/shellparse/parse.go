@@ -6,6 +6,7 @@
 package shellparse
 
 import (
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -68,12 +69,20 @@ func (c Command) String() string {
 
 // Pipeline is a group of commands connected by `|`. A lone command is a
 // pipeline of length one.
-type Pipeline struct{ Cmds []Command }
+type Pipeline struct {
+	Cmds []Command
+	// Line is the line of the input where the statement holding it starts
+	// (1 for a one-line command). Code found inside `sh -c`, eval and the like
+	// takes the line of the statement that runs it.
+	Line int
+}
 
 // Result is everything found in one command line.
 type Result struct {
 	Pipelines []Pipeline
 	ForkBomb  bool
+	// ForkBombLine is the line where the fork bomb was found; 0 if there is none.
+	ForkBombLine int
 	// ChangesShell is true when the line sets up the running shell itself:
 	// it defines a function, sets a variable, or runs a builtin like export, alias or source.
 	ChangesShell bool
@@ -95,8 +104,20 @@ func Parse(line string) (*Result, error) {
 	return w.res, nil
 }
 
+// ParseScript is Parse for a whole script. A script that is not valid shell
+// gives an error that names the line and says what is wrong.
+func ParseScript(src string) (*Result, error) {
+	res, err := Parse(src)
+	var pe syntax.ParseError
+	if errors.As(err, &pe) {
+		return nil, fmt.Errorf("line %d: %s", int(pe.Pos.Line()), pe.Text)
+	}
+	return res, err
+}
+
 type walker struct {
 	res    *Result
+	line   int // the line of the statement being read, at the top level
 	remote string
 	cwd    string
 	// aliasWord is set while reading an alias whose value is one bare word.
@@ -115,10 +136,15 @@ func (w *walker) parseString(src string, depth int) error {
 }
 
 func (w *walker) single(c Command) {
-	w.res.Pipelines = append(w.res.Pipelines, Pipeline{Cmds: []Command{c}})
+	w.res.Pipelines = append(w.res.Pipelines, Pipeline{Cmds: []Command{c}, Line: w.line})
 }
 
 func (w *walker) stmt(s *syntax.Stmt, depth int) {
+	if depth == 0 { // code nested in strings has no line of its own in the input
+		saved := w.line
+		w.line = int(s.Pos().Line())
+		defer func() { w.line = saved }()
+	}
 	if _, ok := s.Cmd.(*syntax.DeclClause); ok { // export, declare, typeset, readonly, local
 		w.res.ChangesShell = true
 	}
@@ -154,7 +180,7 @@ func (w *walker) stmt(s *syntax.Stmt, depth int) {
 	case *syntax.FuncDecl:
 		w.res.ChangesShell = true
 		if isForkBomb(c) {
-			w.res.ForkBomb = true
+			w.res.ForkBomb, w.res.ForkBombLine = true, w.line
 		}
 		if c.Body != nil {
 			w.stmt(c.Body, depth)
@@ -230,6 +256,7 @@ func (w *walker) pipeline(s *syntax.Stmt, depth int) {
 		w.stmt(st, depth)
 	}
 	if len(p.Cmds) > 0 {
+		p.Line = w.line
 		w.res.Pipelines = append(w.res.Pipelines, p)
 	}
 }
