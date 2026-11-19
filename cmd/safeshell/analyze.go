@@ -378,7 +378,7 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 	if a.Host.Reason != "" {
 		fmt.Fprintf(w, "%sRaised because %s.%s\n", c.dim, report.Printable(a.Host.Reason), c.reset)
 	}
-	if a.Level > a.Verdict.Level {
+	if a.Level > a.Verdict.Level && a.Level > a.Host.MinLevel { // a raise by the host label alone is explained above
 		fmt.Fprintf(w, "%sThe command text alone looked like %s; what it would really do raised it to %s.%s\n", c.dim, a.Verdict.Level, a.Level, c.reset)
 	}
 

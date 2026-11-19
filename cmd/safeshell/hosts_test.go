@@ -26,6 +26,9 @@ func TestProdHostRaisesARemoteWriteInAnalyze(t *testing.T) {
 		t.Errorf("code %d", code)
 	}
 	wantAll(t, out, "R4", "Raised because this is a production host (prod1).")
+	if strings.Contains(out, "what it would really do") {
+		t.Errorf("a raise by the host label alone is not something the command was seen to do:\n%s", out)
+	}
 	code, out, _ = runSS("analyze", "ssh", "dev1", "'rm -rf /var/tmp/x'")
 	if code != 3 || strings.Contains(out, "production host") {
 		t.Errorf("an unlabelled host is unchanged: code %d\n%s", code, out)
