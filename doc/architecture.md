@@ -92,7 +92,7 @@ safeshell/                        repository root = Go module root
 │   │   └── netwatch/         seccomp user-notification supervisor that records network attempts   (linux only)
 │   ├── snapshot/             snapshot store + restore (btrfs/zfs or path-copy)
 │   ├── undo/                 undo plans + verification in the sandbox   (planned, #119; today `safeshell undo` lives in cmd/safeshell/undo.go on top of snapshot)
-│   ├── report/               Verdict + Effects -> impact report (content, not rendering)
+│   ├── report/               Verdict + Effects -> impact report (content, not rendering); script findings -> JSON, SARIF, GitHub annotations
 │   ├── nl/                   natural language -> candidate command
 │   ├── ai/                   Backend interface, retry and HTTP helpers, guards, redaction, impact review prompts
 │   │   ├── local/            managed llama-server (downloaded by `safeshell ai setup`), no cgo, no Ollama
@@ -133,7 +133,7 @@ voice   ──►  runtime (downloads, checksums, unpacking) and the standard li
 classify ──► domain, shellparse
 shellparse ─► mvdan.cc/sh only
 domain  ──►  standard library only
-report  ──►  domain, shellparse, and the data types of sandbox (FileDiff, Change, NetAttempt, Warning); sandbox itself is pure, only sandbox/overlayfs and sandbox/effects touch the machine
+report  ──►  domain, classify (script findings only), shellparse, and the data types of sandbox (FileDiff, Change, NetAttempt, Warning); sandbox itself is pure, only sandbox/overlayfs and sandbox/effects touch the machine
 ai      ──►  domain, report; it never imports engine (cmd/safeshell builds ai.Facts from an engine.Analysis)
 ```
 
@@ -145,6 +145,8 @@ Hard rules:
 5. Linux-specific code lives behind `//go:build linux` with a stub for other OSes so `go build` and unit tests work anywhere.
 
 `internal/archtest` enforces rules 1 to 3 in CI. It reads the import lists of every non-test `.go` file under `internal/`, `cmd/` and `eval/` with `go/parser`. The pure packages (`domain`, `classify`, `classify/rules`, `policy`, `report`, `shellparse`, `sandbox`) may import only each other, the standard library without `os`, `os/exec`, `os/signal`, `os/user`, `net`, `net/http`, `syscall`, `io/ioutil` and `plugin`, and `mvdan.cc/sh`; they may not call `time.Now`. `engine` follows the same import rules, and only `cmd/safeshell` may import it. Violations that still exist are listed in the test's `known` map and the test fails when one is fixed, so the list only shrinks.
+
+`safeshell check --script FILE... [--format text|json|sarif|github]` is the CI entry point: `classify.Script` rates each file, `report.ScriptJSON`, `ScriptSARIF` and `ScriptGitHub` serialise the findings (pure), and `cmd/safeshell` reads the files, prints and picks the exit code. It never builds the engine, so no sandbox, AI or daemon starts. `.github/actions/safeshell-check` (build from source inside this repository, otherwise a pinned release verified against `SHA256SUMS`) and `.pre-commit-hooks.yaml` call it; CI runs the action on `test/fixtures/check-action`. Makefile recipes and Dockerfile `RUN` steps are a follow-up.
 
 ---
 

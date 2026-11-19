@@ -57,7 +57,6 @@ func TestCheckScriptErrors(t *testing.T) {
 		want string
 	}{
 		{[]string{"check", "--script"}, "Usage"},
-		{[]string{"check", "--script", "a", "b"}, "Usage"},
 		{[]string{"check", "--script", filepath.Join(t.TempDir(), "none.sh")}, "cannot read"},
 		{[]string{"check", "--script", bad}, "is not valid shell, line "},
 		{[]string{"check", "--json", "--script", bad}, "--script"},

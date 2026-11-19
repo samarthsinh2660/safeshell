@@ -26,8 +26,8 @@ which prints its help and does nothing else.
 .BI "check [--json] " command
 Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 means R4.
 .TP
-.BI "check --script " FILE
-Rate every command in a shell script without running it. Each command that is not R0 is listed with the line it starts on, the level and the reason; the result is the highest level. A script that is not valid shell is refused with the line to fix (exit status 2).
+.BI "check --script " FILE... " [--format text|json|sarif|github] [--fail-on R2|R3|R4]"
+Rate every command in one or more shell scripts without running them; only the built-in rules are used, never the sandbox, the AI or the daemon. Each command that is not R0 is listed with the line it starts on, the level and the reason; the result is the highest level over all files. A script that is not valid shell or cannot be read is reported and the other files are still checked (exit status 2 if nothing worse). \fB\-\-format\fR chooses text (default), json (one object per file with path, level and lines), sarif (SARIF 2.1.0) or github (workflow annotations, ::error for R3 and R4 and ::warning for R2). The exit status is that of the highest level when it is at least \fB\-\-fail-on\fR (default R3: 3 for R3, 4 for R4; 1 for R2), otherwise 0.
 .TP
 .BI "analyze [--json] [--verbose] [--cwd " DIR "] " command
 Rate a command, run it in the sandbox, and report the real files, processes and disks it would touch.

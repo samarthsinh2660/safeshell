@@ -34,7 +34,8 @@ const usage = `SafeShell: a safety layer for your terminal.
 
 Usage:
   safeshell check [--json] <command...>     rate a command without running it
-  safeshell check --script FILE             rate every command in a script, line by line
+  safeshell check --script FILE...          rate every command in scripts, line by line (rules only)
+    [--format text|json|sarif|github] [--fail-on R2|R3|R4]
   safeshell analyze [--json] [--verbose] [--cwd DIR] <command...>
                                             the full picture: risk level, a sandbox run, the real
                                             processes and disks it would hit, and safer options
