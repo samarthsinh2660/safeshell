@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	goruntime "runtime"
 	"strconv"
 	"strings"
@@ -44,7 +45,7 @@ type Setup struct {
 	LookPath func(string) (string, error)
 	Client   *http.Client
 	Out      io.Writer
-	Run      Runner // runs cmake and returns stdout and stderr together; exec when nil
+	Run      BuildRunner // runs cmake, writing stdout and stderr together to w as it goes; exec when nil
 	// RunTTY runs a program attached to the terminal (sudo apt-get); use RunTTY.
 	RunTTY func(ctx context.Context, name string, args ...string) error
 }
@@ -80,15 +81,21 @@ func (s Setup) Status() Status {
 	return st
 }
 
-func (s Setup) run() Runner {
+// BuildRunner runs a program and streams what it prints (stdout and stderr
+// together) to w while it runs.
+type BuildRunner func(ctx context.Context, w io.Writer, name string, args ...string) error
+
+func (s Setup) run() BuildRunner {
 	if s.Run != nil {
 		return s.Run
 	}
-	return combinedRunner
+	return streamRunner
 }
 
-func combinedRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+func streamRunner(ctx context.Context, w io.Writer, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout, cmd.Stderr = w, w
+	return cmd.Run()
 }
 
 // EnsureEngine returns a usable whisper-cli, building it if needed.
@@ -113,7 +120,7 @@ func (s Setup) unpackAndBuild(ctx context.Context, archive string) (string, erro
 	_ = os.RemoveAll(work)
 	defer os.RemoveAll(work)
 	src := filepath.Join(work, "src")
-	if err := runtime.ExtractTarGz(archive, src); err != nil {
+	if err := runtime.ExtractTarGz(archive, src, s.Out); err != nil {
 		return "", fmt.Errorf("could not unpack the speech engine source: %w. Delete %s and run  safeshell voice setup  again", err, archive)
 	}
 	fmt.Fprintln(s.Out, "Building the speech engine. This takes a few minutes...")
@@ -139,9 +146,17 @@ func (s Setup) build(ctx context.Context, src, build, dest string) error {
 		{"-S", src, "-B", build, "-DBUILD_SHARED_LIBS=OFF", "-DWHISPER_BUILD_TESTS=OFF", "-DWHISPER_BUILD_SERVER=OFF", "-DGGML_NATIVE=OFF", "-DCMAKE_BUILD_TYPE=Release"},
 		{"--build", build, "--target", "whisper-cli", "-j", strconv.Itoa(goruntime.NumCPU())},
 	}
-	for _, args := range steps {
-		if out, err := s.run()(ctx, "cmake", args...); err != nil {
-			return fmt.Errorf("building the speech engine failed: %w\n%s", err, tail(out))
+	for i, args := range steps {
+		lw := &cmakeOutput{p: runtime.NewPercent(nil)}
+		if i == 0 {
+			fmt.Fprintln(s.Out, "Configuring the build...")
+		} else {
+			lw.p = runtime.NewPercent(s.Out) // only the build step prints percentages
+		}
+		err := s.run()(ctx, lw, "cmake", args...)
+		lw.p.Finish()
+		if err != nil {
+			return fmt.Errorf("building the speech engine failed: %w\n%s", err, tail(lw.all))
 		}
 	}
 	data, err := os.ReadFile(filepath.Join(build, "bin", "whisper-cli"))
@@ -155,6 +170,32 @@ func (s Setup) build(ctx context.Context, src, build, dest string) error {
 		return fmt.Errorf("cannot save the speech engine to %s: %w. Check disk space and permissions", dest, err)
 	}
 	return nil
+}
+
+// cmakeOutput keeps everything cmake prints (for an error message) and turns
+// its "[ 42%]" lines into progress.
+type cmakeOutput struct {
+	all  []byte
+	line []byte
+	p    *runtime.Progress
+}
+
+var cmakePercent = regexp.MustCompile(`^\[\s*(\d+)%\]`)
+
+func (c *cmakeOutput) Write(b []byte) (int, error) {
+	c.all = append(c.all, b...)
+	for _, ch := range b {
+		if ch != '\n' {
+			c.line = append(c.line, ch)
+			continue
+		}
+		if m := cmakePercent.FindSubmatch(c.line); m != nil {
+			n, _ := strconv.Atoi(string(m[1]))
+			c.p.Update(int64(n))
+		}
+		c.line = c.line[:0]
+	}
+	return len(b), nil
 }
 
 func tail(b []byte) string {

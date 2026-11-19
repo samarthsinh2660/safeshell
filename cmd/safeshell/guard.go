@@ -31,7 +31,7 @@ var guardInput = func() io.Reader {
 // run goes to stdout (the original, or a safer option the person picked); the
 // analysis and questions go to stderr. Exit 0 runs it, 1 cancels.
 func runGuard(args []string, stdout, stderr io.Writer, color bool) int {
-	cwd, unknown := "", false
+	cwd, unknown, agent := "", false, false
 opts:
 	for len(args) > 0 {
 		switch {
@@ -40,6 +40,8 @@ opts:
 			break opts
 		case args[0] == "--unknown":
 			unknown, args = true, args[1:]
+		case args[0] == "--agent":
+			agent, args = true, args[1:]
 		case args[0] == "--cwd" && len(args) >= 2:
 			cwd, args = args[1], args[2:]
 		case strings.HasPrefix(args[0], "-"):
@@ -49,7 +51,10 @@ opts:
 			break opts
 		}
 	}
-	if len(args) == 0 {
+	if agent && len(args) == 0 && cwd == "" && !unknown {
+		return runGuardAgent(stdout, stderr)
+	}
+	if agent || len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}

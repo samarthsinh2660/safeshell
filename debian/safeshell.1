@@ -117,8 +117,18 @@ The hook mentions the tour once per user, in a terminal.
 What the shell hook runs for each command line: analyse it, ask if needed, and print the command to run.
 Exit status 0 means run the printed command, 1 means it was cancelled, 2 means wrong usage.
 .TP
+.B "guard \-\-agent"
+For AI coding agents: read one JSON command on stdin and answer allow or deny on stdout, with the reason and a safer option, never asking a question.
+It accepts a Claude Code PreToolUse hook input or {"command": "...", "cwd": "..."}.
+Nobody is there to confirm, so anything that is not a plain allow is denied, and so is input it cannot read or a check that takes too long.
+Each answer is logged as agent-allowed or agent-denied.
+Exit status 0 means allowed (a Claude Code hook is always answered with 0), 2 means denied.
+.TP
+.BR "agent snippet " "claude" | wrapper
+Print the hook to add to Claude Code's settings.json, or a script that runs one command only when SafeShell allows it. Nothing is edited.
+.TP
 .RB "help [" topic ]
-Short guides: start, safety, english, models, voice, learn, pause, undo, policy, commands, privacy and trouble.
+Short guides: start, safety, english, models, voice, learn, pause, agents, undo, policy, commands, privacy and trouble.
 .TP
 .B version
 Print the version.
@@ -165,6 +175,9 @@ Cloud model keys, used instead of the key file.
 .TP
 .B guard
 0 run the printed command, 1 cancelled (also after Ctrl-C), 2 wrong usage.
+.TP
+.B guard \-\-agent
+0 allowed, 2 denied.
 .TP
 .BR analyze ", " simulate " after Ctrl-C"
 130; nothing is run and the sandbox's scratch folder is removed.
