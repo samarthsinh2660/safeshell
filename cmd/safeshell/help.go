@@ -10,7 +10,7 @@ type topic struct{ name, title, body string }
 
 var helpTopics = []topic{
 	{"start", "Get started in two minutes", `1. Add SafeShell to your shell (once):
-     safeshell install            (adds the hook to ~/.bashrc or ~/.zshrc; undo with safeshell uninstall)
+     safeshell install            (adds the hook to ~/.bashrc, ~/.zshrc or fish's conf.d; undo with safeshell uninstall)
    Open a new terminal. From now on every command you press Enter on is checked first.
 2. Get the built-in AI (optional, free, private, one download):
      safeshell ai setup
@@ -152,7 +152,7 @@ checked if SafeShell is installed on that host.`},
    safeshell agent snippet claude|wrapper   print the Claude Code hook, or a script that checks each command
    safeshell voice [setup|status]    speak a request (Ctrl-X Ctrl-V in your terminal)
    safeshell install / safeshell uninstall  add or remove the hook in your shell startup file
-   safeshell hook bash|zsh           print the shell hook
+   safeshell hook bash|zsh|fish      print the shell hook
    safeshell version                 which release this is
    safeshell doctor                  check every part (sandbox, hook, daemon, snapshots, AI) and say what to fix
    safeshell tour                    a one-minute walk-through: a read, a blocked rm -rf, a snapshot, an undo

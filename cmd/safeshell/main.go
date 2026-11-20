@@ -67,7 +67,7 @@ Usage:
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
   safeshell install [--ai]                  add the hook to your shell startup file (and set up the AI)
   safeshell uninstall                       remove the hook
-  safeshell hook bash|zsh                   print the shell hook; add  eval "$(safeshell hook bash)"  to your rc file
+  safeshell hook bash|zsh|fish              print the shell hook; add  eval "$(safeshell hook bash)"  to your rc file
   safeshell version                         which release this is
   safeshell help [topic]                    short guides: start, safety, models, undo, commands and more
   safeshell doctor                          check every part: sandbox, hook, daemon, snapshots, AI; says what to fix

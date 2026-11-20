@@ -143,6 +143,95 @@ unset __ss_w
 if [[ -o interactive ]]; then export SAFESHELL_HOOK=$$; fi   # this shell's pid; lets safeshell doctor tell that the hook is active in this shell
 `
 
+const fish = `# SafeShell hook for fish. Add to ~/.config/fish/conf.d/safeshell.fish:  safeshell hook fish | source
+# Type plain English (or start a line with ?) and SafeShell AI turns it into a checked command.
+# Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
+# The safeshell that printed this hook is the one it calls, so PATH does not matter.
+function __ss_bin
+  @BIN@ $argv
+end
+if test -n "$XDG_STATE_HOME"
+  set -g __ss_off $XDG_STATE_HOME/safeshell/off   # exists while checking is paused (safeshell deactivate)
+else
+  set -g __ss_off $HOME/.local/state/safeshell/off
+end
+function __ss_voice
+  test -n "$SAFESHELL_OFF"; and return 0
+  test -e "$__ss_off"; and return 0
+  set -l tty (command stty -g </dev/tty 2>/dev/null)
+  command stty sane </dev/tty 2>/dev/null   # Enter must end the recording
+  set -l out (__ss_bin voice --text </dev/tty 2>/dev/tty)
+  set -l rc $status
+  test -n "$tty"; and command stty $tty </dev/tty 2>/dev/null
+  test $rc -eq 0; or return 0
+  set -l text (string join \n -- $out)
+  commandline -r -- "$text"
+  commandline -f end-of-buffer repaint
+end
+function __ss_guard
+  set -l line (commandline | string collect)
+  if test -n "$SAFESHELL_OFF"; or test -e "$__ss_off"; or string match -qr '^\s*$' -- "$line"
+    commandline -f execute
+    return 0
+  end
+  # fish would expand an abbreviation at the cursor only as it runs the line, after this check. Expand it now and wait
+  # for Enter again, so what is checked is what runs. If the line did not change last time, the abbreviation does not apply here.
+  set -l tok (commandline -t)
+  if test -n "$tok"; and abbr -q -- "$tok"; and test "$line" != "$__ss_expanded"
+    set -g __ss_expanded $line
+    commandline -f expand-abbr repaint
+    return 0
+  end
+  set -e __ss_expanded
+  # fish keeps a whole multi-line command in one buffer, so the guard sees all of it at once. Only when fish itself
+  # thinks the buffer is unfinished (or wrong) can the guard say "not finished" (exit 3): then fish adds a new line
+  # or reports the error, and runs nothing.
+  set -l multiline
+  commandline --is-valid; or set multiline --multiline
+  set -l unknown
+  if not string match -q -- "*"\n"*" "$line"   # only a first line can be plain English
+    # A first word fish does not know may be plain English: let SafeShell AI try it.
+    type -q -- (commandline -o)[1]; or set unknown --unknown
+  end
+  set -l tty (command stty -g </dev/tty 2>/dev/null)
+  command stty sane </dev/tty 2>/dev/null
+  set -l out (__ss_bin guard $multiline --cwd "$PWD" $unknown -- "$line" </dev/tty 2>/dev/tty)
+  set -l rc $status
+  test -n "$tty"; and command stty $tty </dev/tty 2>/dev/null
+  # Running a line from vi normal mode goes back to insert mode, as fish's own Enter does there.
+  test "$fish_key_bindings" = fish_vi_key_bindings; and test "$fish_bind_mode" = default; and set fish_bind_mode insert
+  switch $rc
+    case 0
+      set out (string join \n -- $out)
+      test "$out" = "$line"; or commandline -r -- "$out"
+      commandline -f execute
+    case 1   # cancelled
+      commandline -r ''
+      commandline -f execute
+    case 3   # not finished
+      commandline -f execute
+    case '*'   # SafeShell itself failed (missing, crashed): say so and let the line through rather than lock the user out
+      printf '\nSafeShell failed (exit %s), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' $rc >/dev/tty
+      commandline -f execute
+  end
+end
+if status is-interactive
+  # Bind every keymap, so the guard also works in vi mode. (fish cannot bind expand-abbr and a function to one key.)
+  for __ss_m in default insert visual replace replace_one
+    bind -M $__ss_m \r __ss_guard
+    bind -M $__ss_m \n __ss_guard   # Ctrl-J also executes a line
+    bind -M $__ss_m \cx\cv __ss_voice
+  end
+  set -e __ss_m
+  set -gx SAFESHELL_HOOK $fish_pid   # this shell's pid; lets safeshell doctor tell that the hook is active in this shell
+end
+`
+
+// FishQuote quotes s as one word for fish, where only \ and ' are special inside single quotes.
+func FishQuote(s string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
+}
+
 // Script returns the hook for the named shell. bin is the safeshell the hook
 // calls, so the hook does not depend on PATH.
 func Script(shell, bin string) (string, error) {
@@ -152,6 +241,8 @@ func Script(shell, bin string) (string, error) {
 		return strings.Replace(bash, "@BIN@", q, 1), nil
 	case "zsh":
 		return strings.Replace(zsh, "@BIN@", q, 1), nil
+	case "fish":
+		return strings.Replace(fish, "@BIN@", FishQuote(bin), 1), nil
 	}
-	return "", fmt.Errorf("unsupported shell %q (use bash or zsh)", shell)
+	return "", fmt.Errorf("unsupported shell %q (use bash, zsh or fish)", shell)
 }

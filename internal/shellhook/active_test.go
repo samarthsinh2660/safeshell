@@ -9,14 +9,19 @@ import (
 
 // The hook marks interactive shells so safeshell doctor can tell it is active; scripts get nothing.
 func TestHookMarksOnlyInteractiveShells(t *testing.T) {
-	for sh, flag := range map[string]string{"bash": "--norc", "zsh": "-f"} {
+	posix := `eval "$1"; echo "$SAFESHELL_HOOK $$"`
+	for sh, c := range map[string]struct{ flag, prog string }{
+		"bash": {"--norc", posix},
+		"zsh":  {"-f", posix},
+		"fish": {"--no-config", `printf %s $argv[2] | source; echo "$SAFESHELL_HOOK $fish_pid"`},
+	} {
 		bin, err := exec.LookPath(sh)
 		if err != nil {
 			continue
 		}
 		script, _ := Script(sh, "/opt/ss/safeshell")
 		for mode, same := range map[string]bool{"-ic": true, "-c": false} {
-			cmd := exec.Command(bin, flag, mode, `eval "$1"; echo "$SAFESHELL_HOOK $$"`, "_", script)
+			cmd := exec.Command(bin, c.flag, mode, c.prog, "_", script)
 			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + t.TempDir()}
 			out, _ := cmd.Output()
 			f := strings.Fields(string(out))

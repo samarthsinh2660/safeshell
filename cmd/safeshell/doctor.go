@@ -80,7 +80,7 @@ func doctorSetup(w io.Writer) {
 	}
 	switch {
 	case err != nil:
-		doctorRow(w, "MISSING", "hook installed", err.Error()+". Switch to bash or zsh to use SafeShell")
+		doctorRow(w, "MISSING", "hook installed", err.Error()+". Switch to bash, zsh or fish to use SafeShell")
 	case installed && hookBinaryGone(sh):
 		bin, _ := install.Binary(sh)
 		doctorRow(w, "MISSING", "hook installed", "in "+rc+", but it runs "+bin+", which is gone. Run: safeshell install")
@@ -99,7 +99,7 @@ func doctorSetup(w io.Writer) {
 	case installed:
 		doctorRow(w, "MISSING", "hook active here", "not active in this terminal. Open a new terminal, or run: source "+rc)
 	case err != nil:
-		doctorRow(w, "MISSING", "hook active here", "not active in this terminal. Switch to bash or zsh to use SafeShell")
+		doctorRow(w, "MISSING", "hook active here", "not active in this terminal. Switch to bash, zsh or fish to use SafeShell")
 	default:
 		doctorRow(w, "MISSING", "hook active here", "not active in this terminal. Run  safeshell install  and open a new terminal")
 	}

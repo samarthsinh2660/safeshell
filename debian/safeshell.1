@@ -15,7 +15,7 @@ keeps a snapshot so the last approved command can be undone.
 Run
 .B safeshell install
 once to add the hook to your shell startup file. After that every command you
-press Enter on in bash or zsh is checked first.
+press Enter on in bash, zsh or fish is checked first.
 .SH COMMANDS
 Every command accepts
 .B \-h
@@ -103,7 +103,7 @@ Learning mode, off by default. When on, each command that passes without a warni
 .B install [--ai], uninstall
 Add or remove the shell hook. Running install again after moving or reinstalling safeshell updates the hook to the new path.
 .TP
-.B hook bash|zsh
+.B hook bash|zsh|fish
 Print the shell hook.
 .TP
 .B doctor
