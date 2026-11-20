@@ -2,6 +2,28 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.6.0 - 2026-11-20
+
+More shells, AI coding agents, remote machines and CI.
+
+### Added
+- fish: `safeshell hook fish` and `safeshell install` (a file in `~/.config/fish/conf.d`) check every line in fish too, in emacs and vi key bindings, Enter and Ctrl-J alike. An abbreviation at the end of the line is expanded on screen first, so what is checked is what runs. (#31)
+- AI coding agents: `safeshell guard --agent` reads a command as JSON (a Claude Code PreToolUse hook, or `{"command": ...}` from any wrapper) and denies anything that is not plainly safe, with the reason and a safer option for the agent. It fails closed and every answer is in `safeshell history`. `safeshell agent snippet claude|wrapper` prints the setup. (#99)
+- Production host labels: label ssh hosts `prod` or `staging` in config.json (`"hosts": {"prod-*": "prod"}`). A remote command that changes something (R2 or more) on a prod host is raised one level, with the reason, and an interactive `ssh` session to a labelled host gets a one-line note. (#100)
+- `safeshell check --script FILE...` rates every command in a shell script and shows the line it is on, with the highest level as the result. `safeshell analyze --script FILE` adds the sandbox run of the whole script. (#102)
+- CI and pre-commit: `check --script` prints `--format json`, `sarif` or `github` (annotations on the pull request) and fails at `--fail-on R2|R3|R4`. A GitHub Action (`.github/actions/safeshell-check`) and a pre-commit hook (`safeshell-check`) come with it. (#101)
+- Every slow setup step shows progress: the download (with time left), checking it, unpacking and building the voice engine. Output that is not a terminal gets a few plain lines instead. (#184)
+
+### Changed
+- The shell hook calls the `safeshell` that printed it, by its full path, so PATH no longer matters and an older copy on PATH is never used. If that binary is gone, the line still runs with a visible warning. (#61)
+- A command typed over several lines (a here-document, an open quote, a trailing `&&` or backslash) is checked once, whole, when it is complete. Cancelling drops all of it. (#60)
+- `safeshell install` replaces an old hook block that points to a binary that moved, and `safeshell doctor` reports one that points to a missing binary. (#62)
+
+### Fixed
+- Answering "n" on a here-document body line no longer silently deleted that line, and the assistant no longer rewrote plain text inside a here-document. (#60)
+- After an upgrade, a daemon still running the old version stops and hands over instead of answering with the old rules; systemd starts the new one. (#103)
+- `safeshell daemon stop` waits until the daemon is really gone, even when a client still has a connection open. (#104)
+
 ## 1.5.0 - 2026-11-19
 
 Undo you can trust, and an assistant that understands what you are doing.
