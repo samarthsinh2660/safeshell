@@ -89,7 +89,21 @@ func TestFishEveryWayOfRunningALineIsGuarded(t *testing.T) {
 func TestFishAbbreviationIsExpandedBeforeTheGuardLooksAtTheLine(t *testing.T) {
 	sh, marker, hook := guardedShell(t, "fish", fishArgv)
 	press(sh, ". "+hook+"\r", "abbr -a nuke 'touch "+marker+"'\r")
-	press(sh, "nuke\r")
+	press(sh, "nuke\r") // expanded on the line, not run: the person sees what Enter will run
+	if sh.shows("GUARD-STOPPED") {
+		t.Fatal("the guard was asked about the abbreviation, not what it stands for")
+	}
+	press(sh, "\r")
+	sh.waitFor(t, "GUARD-STOPPED")
+	stopped(t, sh, marker, "abbr")
+}
+
+// An abbreviation that does not apply where it is typed is left alone: the
+// second Enter checks the line as it is, rather than trying to expand forever.
+func TestFishAbbreviationThatDoesNotApplyDoesNotLoop(t *testing.T) {
+	sh, marker, hook := guardedShell(t, "fish", fishArgv)
+	press(sh, ". "+hook+"\r", "abbr -a --position command zz 'echo nope'\r")
+	press(sh, "touch "+marker+" zz\r", "\r")
 	sh.waitFor(t, "GUARD-STOPPED")
 	stopped(t, sh, marker, "abbr")
 }

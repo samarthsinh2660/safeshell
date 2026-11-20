@@ -174,6 +174,15 @@ function __ss_guard
     commandline -f execute
     return 0
   end
+  # fish would expand an abbreviation at the cursor only as it runs the line, after this check. Expand it now and wait
+  # for Enter again, so what is checked is what runs. If the line did not change last time, the abbreviation does not apply here.
+  set -l tok (commandline -t)
+  if test -n "$tok"; and abbr -q -- "$tok"; and test "$line" != "$__ss_expanded"
+    set -g __ss_expanded $line
+    commandline -f expand-abbr repaint
+    return 0
+  end
+  set -e __ss_expanded
   # fish keeps a whole multi-line command in one buffer, so the guard sees all of it at once. Only when fish itself
   # thinks the buffer is unfinished (or wrong) can the guard say "not finished" (exit 3): then fish adds a new line
   # or reports the error, and runs nothing.
@@ -205,10 +214,10 @@ function __ss_guard
   end
 end
 if status is-interactive
-  # Bind every keymap, so the guard also works in vi mode. Abbreviations are expanded first, so the guard sees what would really run.
+  # Bind every keymap, so the guard also works in vi mode. (fish cannot bind expand-abbr and a function to one key.)
   for __ss_m in default insert visual replace replace_one
-    bind -M $__ss_m \r expand-abbr __ss_guard
-    bind -M $__ss_m \n expand-abbr __ss_guard   # Ctrl-J also executes a line
+    bind -M $__ss_m \r __ss_guard
+    bind -M $__ss_m \n __ss_guard   # Ctrl-J also executes a line
     bind -M $__ss_m \cx\cv __ss_voice
   end
   set -e __ss_m

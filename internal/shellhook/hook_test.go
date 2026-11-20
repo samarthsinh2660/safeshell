@@ -135,8 +135,8 @@ func TestFishBindsEveryWayToRunALineAndVoice(t *testing.T) {
 	s, _ := Script("fish", "/opt/ss/safeshell")
 	for _, want := range []string{
 		"for __ss_m in default insert visual replace replace_one",
-		`bind -M $__ss_m \r expand-abbr __ss_guard`,
-		`bind -M $__ss_m \n expand-abbr __ss_guard`,
+		`bind -M $__ss_m \r __ss_guard`,
+		`bind -M $__ss_m \n __ss_guard`,
 		`bind -M $__ss_m \cx\cv __ss_voice`,
 		"if status is-interactive",
 		"set -gx SAFESHELL_HOOK $fish_pid",
