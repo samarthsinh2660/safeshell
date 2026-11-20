@@ -9,9 +9,9 @@ import (
 )
 
 func TestScriptsExistAndParse(t *testing.T) {
-	for _, sh := range []string{"bash", "zsh"} {
+	for _, sh := range []string{"bash", "zsh", "fish"} {
 		s, err := Script(sh, "/opt/ss/safeshell")
-		if err != nil || !strings.Contains(s, `"$__ss_bin" guard`) {
+		if err != nil || !strings.Contains(s, " guard ") || !strings.Contains(s, "--cwd") {
 			t.Fatalf("%s: %v", sh, err)
 		}
 		bin, err := exec.LookPath(sh)
@@ -24,8 +24,8 @@ func TestScriptsExistAndParse(t *testing.T) {
 			t.Errorf("%s syntax: %v %s", sh, err, out)
 		}
 	}
-	if _, err := Script("fish", "/opt/ss/safeshell"); err == nil {
-		t.Error("fish is not supported yet and must say so")
+	if _, err := Script("nu", "/opt/ss/safeshell"); err == nil {
+		t.Error("an unknown shell must say so")
 	}
 }
 
@@ -114,6 +114,43 @@ func TestScriptsDoNotCheckContinuationLinesOneByOne(t *testing.T) {
 	for _, want := range []string{"line=$PREBUFFER$BUFFER", "zle send-break"} {
 		if !strings.Contains(z, want) {
 			t.Errorf("zsh hook is missing %q", want)
+		}
+	}
+}
+
+func TestFishQuotesTheBinaryPath(t *testing.T) {
+	for bin, want := range map[string]string{
+		"/opt/ss/safeshell":   `'/opt/ss/safeshell'`,
+		"/home/o'brien/ss":    `'/home/o\'brien/ss'`,
+		`/home/back\slash/ss`: `'/home/back\\slash/ss'`,
+	} {
+		s, _ := Script("fish", bin)
+		if !strings.Contains(s, "function __ss_bin\n  "+want+" $argv\n") {
+			t.Errorf("%s: the hook must call %s", bin, want)
+		}
+	}
+}
+
+func TestFishBindsEveryWayToRunALineAndVoice(t *testing.T) {
+	s, _ := Script("fish", "/opt/ss/safeshell")
+	for _, want := range []string{
+		"for __ss_m in default insert visual replace replace_one",
+		`bind -M $__ss_m \r expand-abbr __ss_guard`,
+		`bind -M $__ss_m \n expand-abbr __ss_guard`,
+		`bind -M $__ss_m \cx\cv __ss_voice`,
+		"if status is-interactive",
+		"set -gx SAFESHELL_HOOK $fish_pid",
+		`test -n "$SAFESHELL_OFF"; and return 0`,
+		`test -e "$__ss_off"; and return 0`,
+		`test -n "$SAFESHELL_OFF"; or test -e "$__ss_off"`,
+		"__ss_bin voice --text </dev/tty 2>/dev/tty",
+		"__ss_bin guard $multiline --cwd \"$PWD\" $unknown -- \"$line\" </dev/tty 2>/dev/tty",
+		"commandline --is-valid; or set multiline --multiline",
+		"type -q -- (commandline -o)[1]; or set unknown --unknown",
+		"this line was NOT checked",
+	} {
+		if !strings.Contains(s, want) {
+			t.Errorf("fish hook is missing %q", want)
 		}
 	}
 }

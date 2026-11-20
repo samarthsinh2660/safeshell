@@ -27,7 +27,7 @@ func TestDetect(t *testing.T) {
 	if s, _ := Detect("/bin/bash", "/h"); s.RC != "/h/.bashrc" {
 		t.Error(s)
 	}
-	if _, err := Detect("/usr/bin/fish", "/h"); err == nil || !strings.Contains(err.Error(), "fish") {
+	if _, err := Detect("/usr/bin/nu", "/h"); err == nil || !strings.Contains(err.Error(), "nu") {
 		t.Errorf("%v", err)
 	}
 }
@@ -136,5 +136,85 @@ func TestBinaryReadsBackQuotedPathsAndRefusesOtherFormats(t *testing.T) {
 	os.WriteFile(sh.RC, []byte(begin+"\n[ -x 'broken\n"+end+"\n"), 0o644)
 	if _, ok := Binary(sh); ok {
 		t.Error("unterminated path")
+	}
+}
+
+func fishShell(t *testing.T) Shell {
+	t.Helper()
+	sh, err := Detect("/usr/bin/fish", t.TempDir())
+	if err != nil || sh.Name != "fish" || !strings.HasSuffix(sh.RC, "/.config/fish/conf.d/safeshell.fish") {
+		t.Fatalf("%+v %v", sh, err)
+	}
+	return sh
+}
+
+func TestFishGetsItsOwnFileInConfDAndUninstallDeletesIt(t *testing.T) {
+	sh := fishShell(t) // the conf.d folder does not exist yet
+	if change, err := Add(sh, "/home/me/.local/bin/safeshell"); err != nil || change != Added {
+		t.Fatal(change, err)
+	}
+	want := begin + "\ntest -x '/home/me/.local/bin/safeshell'; and '/home/me/.local/bin/safeshell' hook fish | source\n" + end + "\n"
+	if got := read(t, sh); got != want {
+		t.Errorf("%q", got)
+	}
+	if change, _ := Add(sh, "/home/me/.local/bin/safeshell"); change != Unchanged {
+		t.Error("adding twice must change nothing")
+	}
+	if change, _ := Add(sh, "/usr/bin/safeshell"); change != Updated || !strings.Contains(read(t, sh), "'/usr/bin/safeshell' hook fish") {
+		t.Error("another binary path must update the block")
+	}
+	if !Installed(sh) {
+		t.Error("Installed")
+	}
+	if changed, err := Remove(sh); err != nil || !changed {
+		t.Fatal(changed, err)
+	}
+	if _, err := os.Stat(sh.RC); !os.IsNotExist(err) {
+		t.Error("the file held only our block, so it must be deleted")
+	}
+}
+
+func TestFishRemoveKeepsOtherLinesInTheFile(t *testing.T) {
+	sh := fishShell(t)
+	Add(sh, "/safeshell")
+	os.WriteFile(sh.RC, []byte("set -x A 1\n"+read(t, sh)), 0o644)
+	if changed, err := Remove(sh); err != nil || !changed {
+		t.Fatal(changed, err)
+	}
+	if got := read(t, sh); got != "set -x A 1\n" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestFishBinaryReadsBackQuotedPathsAndRefusesOtherFormats(t *testing.T) {
+	sh := fishShell(t)
+	for _, bin := range []string{"/home/o'brien/safeshell", `/home/back\slash/safeshell`, `/a\'b/safeshell`} {
+		Add(sh, bin)
+		if got, ok := Binary(sh); !ok || got != bin {
+			t.Errorf("%q: got %q %v", bin, got, ok)
+		}
+	}
+	os.WriteFile(sh.RC, []byte(begin+"\nsafeshell hook fish | source\n"+end+"\n"), 0o644)
+	if _, ok := Binary(sh); ok {
+		t.Error("a block in another format")
+	}
+	os.WriteFile(sh.RC, []byte(begin+"\ntest -x 'broken\n"+end+"\n"), 0o644)
+	if _, ok := Binary(sh); ok {
+		t.Error("unterminated path")
+	}
+}
+
+func TestFishAddFailsWhenConfDCannotBeCreated(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permissions do not apply to root")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(dir, 0o755)
+	sh := Shell{"fish", filepath.Join(dir, "conf.d", "safeshell.fish")}
+	if _, err := Add(sh, "/safeshell"); err == nil {
+		t.Error("Add must say when the folder cannot be created")
 	}
 }

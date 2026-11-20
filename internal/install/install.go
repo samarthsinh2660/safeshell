@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/samarthsinh2660/safeshell/internal/shellhook"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 
 // Shell is a supported shell and where its startup file is.
 type Shell struct {
-	Name string // bash or zsh
+	Name string // bash, zsh or fish
 	RC   string
 }
 
@@ -26,11 +28,16 @@ func Detect(shellEnv, home string) (Shell, error) {
 		return Shell{"bash", filepath.Join(home, ".bashrc")}, nil
 	case "zsh":
 		return Shell{"zsh", filepath.Join(home, ".zshrc")}, nil
+	case "fish": // a file of our own in conf.d, which fish reads at start-up
+		return Shell{"fish", filepath.Join(home, ".config", "fish", "conf.d", "safeshell.fish")}, nil
 	}
-	return Shell{}, errors.New("only bash and zsh are supported (your shell is " + filepath.Base(shellEnv) + ")")
+	return Shell{}, errors.New("only bash, zsh and fish are supported (your shell is " + filepath.Base(shellEnv) + ")")
 }
 
 func block(sh Shell, bin string) string {
+	if sh.Name == "fish" {
+		return begin + "\ntest -x " + shellhook.FishQuote(bin) + "; and " + shellhook.FishQuote(bin) + " hook fish | source\n" + end + "\n"
+	}
 	return begin + "\n[ -x " + quote(bin) + " ] && eval \"$(" + quote(bin) + " hook " + sh.Name + ")\"\n" + end + "\n"
 }
 
@@ -53,6 +60,11 @@ func Add(sh Shell, bin string) (Change, error) {
 	old, err := os.ReadFile(sh.RC)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Unchanged, err
+	}
+	if sh.Name == "fish" {
+		if err := os.MkdirAll(filepath.Dir(sh.RC), 0o755); err != nil {
+			return Unchanged, err
+		}
 	}
 	text := string(old)
 	want := block(sh, bin)
@@ -100,6 +112,14 @@ func Binary(sh Shell) (string, bool) {
 	if i < 0 {
 		return "", false
 	}
+	if sh.Name == "fish" {
+		rest, ok := strings.CutPrefix(string(b)[i:j], begin+"\ntest -x '")
+		if !ok {
+			return "", false
+		}
+		path, _, ok := strings.Cut(rest, "'; and ")
+		return strings.NewReplacer(`\\`, `\`, `\'`, `'`).Replace(path), ok
+	}
 	rest, ok := strings.CutPrefix(string(b)[i:j], begin+"\n[ -x '")
 	if !ok {
 		return "", false
@@ -131,6 +151,9 @@ func Remove(sh Shell) (changed bool, err error) {
 		out += "\n" + rest
 	default:
 		out += "\n"
+	}
+	if sh.Name == "fish" && out == "" { // the file was ours alone
+		return true, os.Remove(sh.RC)
 	}
 	return true, os.WriteFile(sh.RC, []byte(out), 0o644)
 }

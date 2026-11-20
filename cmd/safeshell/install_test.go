@@ -13,10 +13,10 @@ import (
 func TestInstallAndUninstallNeedAKnownShell(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("SHELL", "")
-	if code, _, e := runSS("install"); code != 1 || !strings.Contains(e, "only bash and zsh") || !strings.Contains(e, "safeshell hook") {
+	if code, _, e := runSS("install"); code != 1 || !strings.Contains(e, "only bash, zsh and fish") || !strings.Contains(e, "safeshell hook") {
 		t.Errorf("install: %d %q", code, e)
 	}
-	if code, _, e := runSS("uninstall"); code != 1 || !strings.Contains(e, "only bash and zsh") {
+	if code, _, e := runSS("uninstall"); code != 1 || !strings.Contains(e, "only bash, zsh and fish") {
 		t.Errorf("uninstall: %d %q", code, e)
 	}
 }
@@ -128,5 +128,33 @@ func TestHookScriptNamesTheBinaryItCalls(t *testing.T) {
 		if code, out, _ := runSS("hook", sh); code != 0 || !strings.Contains(out, "__ss_bin='/opt/safe shell/safeshell'") {
 			t.Errorf("%s: %d %q", sh, code, out)
 		}
+	}
+}
+
+func TestInstallAndUninstallForFish(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SHELL", "/usr/bin/fish")
+	fakeExecutable(t, "/opt/ss/safeshell", nil)
+	file := filepath.Join(home, ".config", "fish", "conf.d", "safeshell.fish")
+	if code, out, _ := runSS("install"); code != 0 || !strings.Contains(out, "Added the SafeShell hook to "+file) {
+		t.Fatalf("%d %q", code, out)
+	}
+	b, _ := os.ReadFile(file)
+	if !strings.Contains(string(b), "test -x '/opt/ss/safeshell'; and '/opt/ss/safeshell' hook fish | source") {
+		t.Errorf("%s", b)
+	}
+	if code, out, _ := runSS("uninstall"); code != 0 || !strings.Contains(out, "Removed the SafeShell hook from "+file) {
+		t.Fatalf("%d %q", code, out)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Error("uninstall must delete the file")
+	}
+}
+
+func TestFishHookNamesTheBinaryItCalls(t *testing.T) {
+	fakeExecutable(t, "/opt/it's/safeshell", nil)
+	if code, out, _ := runSS("hook", "fish"); code != 0 || !strings.Contains(out, `'/opt/it\'s/safeshell' $argv`) {
+		t.Errorf("%d %q", code, out)
 	}
 }

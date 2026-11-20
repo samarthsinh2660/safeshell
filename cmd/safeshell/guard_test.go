@@ -76,7 +76,7 @@ func TestGuardDoItAnywayNeedsConfirmation(t *testing.T) {
 }
 
 func TestGuardUsageErrors(t *testing.T) {
-	for _, args := range [][]string{{"guard"}, {"guard", "--"}, {"guard", "--bogus", "x"}, {"hook"}, {"hook", "fish"}} {
+	for _, args := range [][]string{{"guard"}, {"guard", "--"}, {"guard", "--bogus", "x"}, {"hook"}, {"hook", "nu"}} {
 		if code, _, _ := runSS(args...); code != 2 {
 			t.Errorf("%v: code %d, want 2", args, code)
 		}
@@ -184,8 +184,8 @@ func TestInstallAndUninstallEditOnlyTheHookBlock(t *testing.T) {
 
 func TestInstallRefusesUnsupportedShellsAndBadOptions(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("SHELL", "/usr/bin/fish")
-	if code, _, e := runSS("install"); code != 1 || !strings.Contains(e, "fish") {
+	t.Setenv("SHELL", "/usr/bin/nu")
+	if code, _, e := runSS("install"); code != 1 || !strings.Contains(e, "nu") {
 		t.Errorf("%d %q", code, e)
 	}
 	if code, _, _ := runSS("install", "--bogus"); code != 2 {

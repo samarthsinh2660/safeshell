@@ -43,7 +43,7 @@ func TestActivateSaysWhenTheHookIsNotInstalled(t *testing.T) {
 	if _, out, _ := runSS("activate"); strings.Contains(out, "not installed") {
 		t.Errorf("the hook is installed: %q", out)
 	}
-	t.Setenv("SHELL", "/usr/bin/fish")
+	t.Setenv("SHELL", "/usr/bin/nu")
 	if _, out, _ := runSS("activate"); !strings.Contains(out, "not installed") {
 		t.Errorf("an unsupported shell has no hook: %q", out)
 	}

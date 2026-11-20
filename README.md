@@ -53,7 +53,7 @@ sits between you and the shell and answers one question first: **can this be und
 
 ## Install
 
-Linux, amd64 or arm64, bash or zsh.
+Linux, amd64 or arm64, bash, zsh or fish.
 
 **Debian / Ubuntu (amd64 or arm64):**
 

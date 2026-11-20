@@ -91,9 +91,9 @@ func TestDoctorHookInheritedByAChildShellIsNotActive(t *testing.T) {
 
 func TestDoctorUnsupportedShell(t *testing.T) {
 	doctorHome(t)
-	t.Setenv("SHELL", "/usr/bin/fish")
+	t.Setenv("SHELL", "/usr/bin/nu")
 	out := doctorOut(t)
-	wantAll(t, out, "MISSING  hook installed", "only bash and zsh are supported", "Switch to bash or zsh",
+	wantAll(t, out, "MISSING  hook installed", "only bash, zsh and fish are supported", "Switch to bash, zsh or fish",
 		"MISSING  hook active here")
 	if strings.Contains(out, "safeshell hook bash") || strings.Contains(out, "Run: safeshell install") || strings.Contains(out, "Run  safeshell install") {
 		t.Errorf("an unsupported shell must not be told to install:\n%s", out)
@@ -229,4 +229,18 @@ func TestDoctorReportsAHookThatPointsAtAMissingBinary(t *testing.T) {
 
 	os.WriteFile(rc, []byte("# >>> safeshell >>>\neval \"$(safeshell hook bash)\"\n# <<< safeshell <<<\n"), 0o644)
 	wantAll(t, doctorOut(t), "ok       hook installed") // a block in another format is not judged
+}
+
+func TestDoctorFindsTheFishHook(t *testing.T) {
+	home := doctorHome(t)
+	t.Setenv("SHELL", "/usr/bin/fish")
+	bin := filepath.Join(home, "safeshell")
+	if err := os.WriteFile(bin, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeExecutable(t, bin, nil)
+	runSS("install")
+	wantAll(t, doctorOut(t), "ok       hook installed", "safeshell.fish")
+	os.Remove(bin)
+	wantAll(t, doctorOut(t), "MISSING  hook installed", "which is gone")
 }

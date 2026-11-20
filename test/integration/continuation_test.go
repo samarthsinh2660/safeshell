@@ -14,6 +14,13 @@ var hookShells = []struct {
 	argv []string
 }{{"bash", bashArgv}, {"zsh", zshArgv}}
 
+// allHookShells adds fish, which has no here-documents and keeps a multi-line command in one buffer, so the
+// tests about collecting continuation lines do not apply to it.
+var allHookShells = append(hookShells[:len(hookShells):len(hookShells)], struct {
+	name string
+	argv []string
+}{"fish", fishArgv})
+
 // hooked starts a shell with the real hook loaded from the real binary's absolute path.
 func hooked(t *testing.T, shell string, argv []string, extraEnv ...string) *term {
 	t.Helper()
@@ -22,7 +29,11 @@ func hooked(t *testing.T, shell string, argv []string, extraEnv ...string) *term
 	}
 	sh := startShell(t, argv, extraEnv...)
 	sh.waitFor(t, "READY>")
-	sh.send(`eval "$(` + ssBin + ` hook ` + shell + `)"` + "\r")
+	load := `eval "$(` + ssBin + ` hook ` + shell + `)"`
+	if shell == "fish" {
+		load = ssBin + " hook fish | source"
+	}
+	sh.send(load + "\r")
 	return sh
 }
 
@@ -43,7 +54,7 @@ func victimDir(t *testing.T) string {
 
 func TestHookDoesNotNeedSafeshellOnThePath(t *testing.T) {
 	needSandbox(t)
-	for _, c := range hookShells {
+	for _, c := range allHookShells {
 		t.Run(c.name, func(t *testing.T) {
 			victim := victimDir(t)
 			sh := hooked(t, c.name, c.argv, "PATH=/usr/bin:/bin")
@@ -60,7 +71,7 @@ func TestHookDoesNotNeedSafeshellOnThePath(t *testing.T) {
 
 func TestHookUsesItsOwnBinaryNotAnOlderOneOnThePath(t *testing.T) {
 	needSandbox(t)
-	for _, c := range hookShells {
+	for _, c := range allHookShells {
 		t.Run(c.name, func(t *testing.T) {
 			old := t.TempDir()
 			_ = os.WriteFile(filepath.Join(old, "safeshell"), []byte("#!/bin/sh\nexit 7\n"), 0o755)

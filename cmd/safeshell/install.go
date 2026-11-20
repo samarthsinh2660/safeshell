@@ -35,7 +35,7 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	}
 	sh, err := shellFor()
 	if err != nil {
-		fmt.Fprintln(stderr, "safeshell install:", err, "\nYou can still add the hook by hand: safeshell hook bash|zsh")
+		fmt.Fprintln(stderr, "safeshell install:", err, "\nYou can still add the hook by hand: safeshell hook bash|zsh|fish")
 		return 1
 	}
 	bin, err := executablePath()

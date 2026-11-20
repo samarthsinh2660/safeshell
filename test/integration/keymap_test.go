@@ -63,6 +63,7 @@ func press(sh *term, keys ...string) {
 var (
 	bashArgv = []string{"bash", "--norc", "--noprofile", "-i"}
 	zshArgv  = []string{"zsh", "-f", "-i"}
+	fishArgv = []string{"fish", "--no-config", "-i", "-C", "set -g fish_greeting; function fish_prompt; echo -n 'READY> '; end"}
 )
 
 func TestBashViModeCannotBypassTheGuard(t *testing.T) {
