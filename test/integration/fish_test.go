@@ -88,7 +88,7 @@ func TestFishEveryWayOfRunningALineIsGuarded(t *testing.T) {
 
 func TestFishAbbreviationIsExpandedBeforeTheGuardLooksAtTheLine(t *testing.T) {
 	sh, marker, hook := guardedShell(t, "fish", fishArgv)
-	press(sh, ". "+hook+"\r", "abbr -a nuke 'touch "+marker+"'\r")
+	press(sh, ". "+hook+"\r", "abbr -a nuke \"tou\"ch "+marker+"\r") // spelled so the fake guard lets the definition through
 	press(sh, "nuke\r") // expanded on the line, not run: the person sees what Enter will run
 	if sh.shows("GUARD-STOPPED") {
 		t.Fatal("the guard was asked about the abbreviation, not what it stands for")

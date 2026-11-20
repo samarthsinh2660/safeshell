@@ -198,6 +198,8 @@ function __ss_guard
   set -l out (__ss_bin guard $multiline --cwd "$PWD" $unknown -- "$line" </dev/tty 2>/dev/tty)
   set -l rc $status
   test -n "$tty"; and command stty $tty </dev/tty 2>/dev/null
+  # Running a line from vi normal mode goes back to insert mode, as fish's own Enter does there.
+  test "$fish_key_bindings" = fish_vi_key_bindings; and test "$fish_bind_mode" = default; and set fish_bind_mode insert
   switch $rc
     case 0
       set out (string join \n -- $out)
