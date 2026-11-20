@@ -1,3 +1,14 @@
+safeshell (1.6.0-1) unstable; urgency=medium
+
+  * New upstream release: fish shell hook; guarding commands from AI
+    coding agents; production host labels for ssh; per-line script
+    report with JSON, SARIF and GitHub output, a GitHub Action and a
+    pre-commit hook; the hook calls its own binary and checks
+    multi-line commands once; the daemon hands over after an upgrade;
+    progress for every slow setup step.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Fri, 20 Nov 2026 12:00:00 +0530
+
 safeshell (1.5.0-1) unstable; urgency=medium
 
   * New upstream release: undo names the snapshot and asks first, never
