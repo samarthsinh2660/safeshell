@@ -1,0 +1,6 @@
+- id: safeshell-check
+  name: SafeShell check
+  description: Rate every command in a shell script and fail on risky ones (R3 or worse).
+  entry: safeshell check --script
+  language: golang
+  types: [shell]

@@ -81,6 +81,28 @@ jobs:
       - name: Sweep every labelled command through the real binary
         run: SS_NEED_SANDBOX=1 SS_SWEEP=1 go test -count=1 -timeout 20m ./test/integration -run Sweep
 
+  script-check-action:
+    name: SafeShell check action (passes a good script, fails a bad one)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Good script
+        id: good
+        uses: ./.github/actions/safeshell-check
+        with:
+          paths: test/fixtures/check-action/good.sh
+      - name: Bad script (must fail)
+        id: bad
+        continue-on-error: true
+        uses: ./.github/actions/safeshell-check
+        with:
+          paths: test/fixtures/check-action/bad.sh
+      - name: The good script passed and the bad one failed
+        env:
+          GOOD: ${{ steps.good.outcome }}
+          BAD: ${{ steps.bad.outcome }}
+        run: test "$GOOD" = success && test "$BAD" = failure
+
   packages:
     name: Build tarballs and .debs
     runs-on: ubuntu-24.04
@@ -119,7 +141,7 @@ jobs:
   check:
     name: check
     if: always()
-    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, packages, debian]
+    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, script-check-action, packages, debian]
     runs-on: ubuntu-24.04
     steps:
       - name: A job failed or was skipped
