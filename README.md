@@ -124,7 +124,7 @@ Without the hook you can use the pieces directly:
 ```bash
 safeshell check 'rm -rf ~/projects'      # rate a command without running it
 safeshell analyze 'make clean'           # sandbox run + processes, disks and safer options
-safeshell check --script deploy.sh       # rate every command in a script, with its line number
+safeshell check --script deploy.sh       # rate every command in a script, with its line number (rules only; several files, --format json|sarif|github)
 safeshell analyze --script deploy.sh     # the same, plus a sandbox run of the whole script
 safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
 safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
@@ -156,6 +156,21 @@ itself breaks so it never locks you out of your own terminal; an agent hook fail
 notice the warning. Exit status is 0 for allow (a Claude Code hook is always answered with 0) and 2 for deny. Every answer
 is in `safeshell history` as `agent-allowed` or `agent-denied`. SafeShell prints the snippets but never edits an agent's settings.
 For Claude Code an allowed command gets no answer at all, so Claude Code's own permission rules still decide: SafeShell only ever adds a denial, it never approves a command for the agent.
+
+## Use in CI and pre-commit
+
+`safeshell check --script FILE...` rates scripts with the built-in rules only (no sandbox, AI or daemon), so it is fast and safe in CI. It exits 3 or 4 when any file has an R3 or R4 command (`--fail-on R2|R3|R4` moves that line) and can print `--format json`, `sarif` or `github` (workflow annotations on the lines of the pull request, which need no extra permissions).
+
+```yaml
+- uses: actions/checkout@v4
+- uses: samarthsinh2660/safeshell/.github/actions/safeshell-check@main
+  with:
+    version: v1.6.0        # a release that has "check --script --format github"; its SHA256SUMS is verified
+    paths: "scripts/*.sh"  # default **/*.sh
+    fail-on: R3            # default
+```
+
+For [pre-commit](https://pre-commit.com), add the `safeshell-check` hook from this repository (`repo: https://github.com/samarthsinh2660/safeshell`). Only shell scripts are read; Makefile recipes and Dockerfile `RUN` steps are not checked yet.
 
 ## How it works
 

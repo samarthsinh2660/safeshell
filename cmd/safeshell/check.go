@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/classify"
@@ -13,8 +14,8 @@ import (
 
 // runCheck is `safeshell check`: rate a command without running it.
 func runCheck(args []string, stdout, stderr io.Writer, color bool) int {
-	if len(args) > 0 && args[0] == "--script" {
-		return runCheckScript(args[1:], stdout, stderr, color)
+	if hasScriptOption(args) {
+		return runCheckScript(args, stdout, stderr, color)
 	}
 	asJSON := false
 	if len(args) > 0 && args[0] == "--json" {
@@ -86,18 +87,115 @@ func readScript(cmd string, args []string, stderr io.Writer) (src string, lines 
 	return string(b), lines, true
 }
 
-// runCheckScript is `safeshell check --script FILE`: rate every command in a
-// script, say on which line it is, and give the highest level as the result.
+// hasScriptOption is true when --script is among the leading options.
+func hasScriptOption(args []string) bool {
+	for i := 0; i < len(args) && strings.HasPrefix(args[i], "-"); i++ {
+		switch args[i] {
+		case "--script":
+			return true
+		case "--format", "--fail-on":
+			i++ // skip the value
+		}
+	}
+	return false
+}
+
+// scriptOptions are what `check --script` was asked for.
+type scriptOptions struct {
+	files  []string
+	format string
+	failOn domain.Level
+}
+
+// parseScriptOptions reads the files and options of `check --script`. ok is
+// false once it has printed what was wrong.
+func parseScriptOptions(args []string, stderr io.Writer) (o scriptOptions, ok bool) {
+	o = scriptOptions{format: "text", failOn: domain.R3}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--script":
+		case a == "--format" || a == "--fail-on":
+			if i++; i == len(args) {
+				fmt.Fprint(stderr, usage)
+				return o, false
+			}
+			if a == "--format" {
+				o.format = args[i]
+				if !slices.Contains([]string{"text", "json", "sarif", "github"}, o.format) {
+					fmt.Fprintf(stderr, "safeshell check: unknown format %s; use text, json, sarif or github\n", report.Printable(o.format))
+					return o, false
+				}
+			} else if o.failOn, ok = domain.ParseLevel(args[i]); !ok || o.failOn < domain.R2 {
+				fmt.Fprintf(stderr, "safeshell check: --fail-on takes R2, R3 or R4, not %s\n", report.Printable(args[i]))
+				return o, false
+			}
+		case strings.HasPrefix(a, "-"):
+			fmt.Fprintf(stderr, "safeshell check: unknown option %s; with --script only --format and --fail-on are accepted\n", report.Printable(a))
+			return o, false
+		default:
+			o.files = append(o.files, a)
+		}
+	}
+	if len(o.files) == 0 {
+		fmt.Fprint(stderr, usage)
+		return o, false
+	}
+	return o, true
+}
+
+// runCheckScript is `safeshell check --script FILE...`: rate every command in
+// each script, say on which line it is, and give the highest level as the
+// result. It uses the rules only: no sandbox, no AI and no daemon.
 func runCheckScript(args []string, stdout, stderr io.Writer, color bool) int {
-	_, lines, ok := readScript("check", args, stderr)
+	o, ok := parseScriptOptions(args, stderr)
 	if !ok {
 		return 2
 	}
-	level := classify.ScriptLevel(lines)
-	c := newPalette(color)
-	printScriptLines(stdout, lines, c)
-	fmt.Fprintf(stdout, "\n%s%s %s%s  %s\n", c.bold+c.level(level), level, level.Label(), c.reset, levelAction[level])
+	var files []report.ScriptFile
+	level, failed := domain.R0, false
+	for _, path := range o.files {
+		_, lines, ok := readScript("check", []string{path}, stderr)
+		if !ok {
+			failed = true
+			continue
+		}
+		files = append(files, report.ScriptFile{Path: path, Lines: lines})
+		level = max(level, classify.ScriptLevel(lines))
+	}
+	switch o.format {
+	case "json":
+		fmt.Fprintf(stdout, "%s\n", report.ScriptJSON(files))
+	case "sarif":
+		fmt.Fprintf(stdout, "%s\n", report.ScriptSARIF(files, version))
+	case "github":
+		fmt.Fprint(stdout, report.ScriptGitHub(files))
+	default:
+		printScripts(stdout, files, level, newPalette(color))
+	}
+	switch {
+	case level < o.failOn && failed:
+		return 2
+	case level < o.failOn:
+		return 0
+	case level.ExitCode() == 0: // R2 with --fail-on R2
+		return 1
+	}
 	return level.ExitCode()
+}
+
+// printScripts prints the rated lines of each script, headed by its path when
+// there are several, then the highest level.
+func printScripts(w io.Writer, files []report.ScriptFile, level domain.Level, c palette) {
+	for _, f := range files {
+		if len(files) > 1 {
+			fmt.Fprintf(w, "%s%s%s\n", c.bold, report.Printable(f.Path), c.reset)
+		}
+		printScriptLines(w, f.Lines, c)
+	}
+	if len(files) > 0 {
+		fmt.Fprintf(w, "\n%s%s %s%s  %s\n", c.bold+c.level(level), level, level.Label(), c.reset, levelAction[level])
+	}
 }
 
 // printScriptLines prints one row for each line rated above R0, in line order.

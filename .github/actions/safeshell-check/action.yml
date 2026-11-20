@@ -1,0 +1,65 @@
+name: SafeShell check
+description: Rate every command in your shell scripts and show the risky ones as annotations on the pull request. Static rules only; nothing is run.
+inputs:
+  paths:
+    description: Files or globs to check, separated by spaces or new lines (** works).
+    default: "**/*.sh"
+  fail-on:
+    description: Fail the step when a script has a command at this level or worse (R2, R3 or R4).
+    default: R3
+  version:
+    description: Release to install, for example v1.6.0 (it must include "check --script --format github"). Needed outside the SafeShell repository, where the action builds the checked-out source instead.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Set up Go (building from this repository)
+      if: github.repository == 'samarthsinh2660/safeshell'
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+    - name: Get safeshell
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+        IN_REPO: ${{ github.repository == 'samarthsinh2660/safeshell' }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/safeshell-bin"
+        if [ "$IN_REPO" = true ]; then
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/safeshell-bin/safeshell" ./cmd/safeshell
+        else
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Set the version input to a release such as v1.6.0."; exit 1; }
+          case "$(uname -m)" in
+            x86_64) arch=amd64 ;;
+            aarch64) arch=arm64 ;;
+            *) echo "::error::SafeShell has no build for $(uname -m)."; exit 1 ;;
+          esac
+          name="safeshell-$VERSION-linux-$arch"
+          base="https://github.com/samarthsinh2660/safeshell/releases/download/$VERSION"
+          cd "$(mktemp -d)"
+          curl -fsSLO "$base/$name.tar.gz"
+          curl -fsSLO "$base/SHA256SUMS"
+          grep -F "  $name.tar.gz" SHA256SUMS | sha256sum -c -
+          tar -xzf "$name.tar.gz" "$name/safeshell"
+          install -m 0755 "$name/safeshell" "$RUNNER_TEMP/safeshell-bin/safeshell"
+        fi
+    - name: Check the scripts
+      shell: bash
+      env:
+        PATHS: ${{ inputs.paths }}
+        FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        set -uo pipefail
+        shopt -s globstar nullglob
+        files=()
+        for pattern in $PATHS; do
+          for f in $pattern; do
+            [ -f "$f" ] && files+=("$f")
+          done
+        done
+        if [ ${#files[@]} -eq 0 ]; then
+          echo "No files matched: $PATHS"
+          exit 0
+        fi
+        "$RUNNER_TEMP/safeshell-bin/safeshell" check --script "${files[@]}" --format github --fail-on "$FAIL_ON"
