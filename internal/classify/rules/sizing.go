@@ -32,7 +32,9 @@ func SizingPaths(cmds []shellparse.Command, cwd string, unknown []string) []stri
 			base = under(cwd, c.Cwd)
 		}
 		ops, ok := operandPaths(c)
-		if copies[c.Name] {
+		if srcs, hasT := targetDirSources(c); hasT {
+			ops, ok = srcs, true
+		} else if copies[c.Name] {
 			ops = ops[:max(len(ops)-1, 0)] // the last one is where it goes: new data, not a source
 		}
 		for _, r := range c.Redirs {
@@ -56,4 +58,14 @@ func SizingPaths(cmds []shellparse.Command, cwd string, unknown []string) []stri
 	}
 	slices.Sort(out)
 	return slices.Compact(out)
+}
+
+// targetDirSources returns, for cp and mv given -t DIR, the operands that are
+// sources: with -t every operand is one and DIR is where they go. The second
+// result is false when the command has no -t.
+func targetDirSources(c shellparse.Command) ([]string, bool) {
+	if !copies[c.Name] || c.ViaXargs || c.ViaFind || c.Name == "rsync" || !slices.ContainsFunc(c.Args, isTargetDir) {
+		return nil, false
+	}
+	return parseFlags(dropValues(c.Args, "-t", "--target-directory")).pos, true
 }
