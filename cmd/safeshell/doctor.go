@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
-	"github.com/samarthsinh2660/safeshell/internal/ai/local"
 	"github.com/samarthsinh2660/safeshell/internal/ai/providers"
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/install"
@@ -196,8 +195,7 @@ func doctorCloud(w io.Writer) {
 		k, _ := config.Key(p)
 		cloudKey = k != ""
 	}
-	m, _ := models.Find(c.AI.Local.Model)
-	localReady := local.Llama{Dirs: runtime.DefaultDirs(), Model: m, GPU: c.AI.Local.GPU}.Ready()
+	localReady := localLlama(c, runtime.DefaultDirs()).Ready()
 	switch {
 	case err != nil:
 		doctorRow(w, "MISSING", "AI now", err.Error())

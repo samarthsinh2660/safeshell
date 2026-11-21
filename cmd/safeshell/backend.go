@@ -21,9 +21,16 @@ var backend = func() (ai.Backend, error) {
 	return buildBackend(c, runtime.DefaultDirs())
 }
 
-func buildBackend(c config.Config, dirs runtime.Dirs) (ai.Backend, error) {
+// localLlama is the local engine as the config describes it; every place that
+// asks whether local AI is ready uses it, so they agree with the backend.
+func localLlama(c config.Config, dirs runtime.Dirs) local.Llama {
 	m, _ := models.Find(c.AI.Local.Model)
-	loc := local.Llama{Dirs: dirs, Model: m, GPU: c.AI.Local.GPU, System: c.AI.Local.Engine == "system", Log: os.Stderr}
+	return local.Llama{Dirs: dirs, Model: m, GPU: c.AI.Local.GPU, System: c.AI.Local.Engine == "system"}
+}
+
+func buildBackend(c config.Config, dirs runtime.Dirs) (ai.Backend, error) {
+	loc := localLlama(c, dirs)
+	loc.Log = os.Stderr
 	cloud := func() (ai.Backend, error) {
 		p, ok := providers.Find(c.AI.Cloud.Provider)
 		if !ok {
