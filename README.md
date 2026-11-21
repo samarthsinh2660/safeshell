@@ -100,7 +100,7 @@ make build && bash scripts/install.sh
 ```
 
 Open a new terminal and every command you press Enter on is checked first. A command typed over several lines (a here-document, an open quote, a trailing backslash) is checked once, when it is complete. The hook runs the `safeshell` that installed it, wherever that is on `PATH`, and running `safeshell install` again after you move or reinstall SafeShell updates the hook. Run `safeshell doctor` to check
-every part (sandbox, hook, daemon, snapshots, AI) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
+every part (sandbox, hook, daemon, snapshots, AI, and settings in `config.json` that SafeShell does not know, such as a misspelled key) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
 otherwise run `scripts/install-apparmor.sh [path/to/safeshell]` (uses sudo). It writes one profile per binary, so it never touches the `.deb`'s rule and can sit next to it; `scripts/install-apparmor.sh --uninstall [path]` removes only that binary's profile.
 
 ### Servers and shared machines
@@ -305,6 +305,11 @@ Anything that would loosen (a level below R1, an `allow`, a folder outside the p
   Nothing is downloaded for the engine, and a missing `llama-server` is reported with what to install. Copy
   the model file into `~/.local/share/safeshell/models/` by hand: it is used once its SHA-256 matches the pinned one.
   `safeshell doctor` and `safeshell ai status` show which engine is used.
+  `"ai": {"local": {"gpu": ...}}` forces the graphics engine: `auto` (default), `cuda`, `vulkan` or `cpu`
+  (`on` means `vulkan` and `off` means `cpu`, kept from older settings).
+  `safeshell doctor` and `safeshell ai status` also list settings in `config.json` that SafeShell does not
+  know (a typo such as `ai.local.modle`, with the closest known name); the shell hook never prints this.
+  `ai status` also says why AI is off (mode off, no cloud key, local model or engine not installed).
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
 - **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
