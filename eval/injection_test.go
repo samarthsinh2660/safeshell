@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
@@ -127,6 +128,14 @@ func TestRunInjectionStopsWhenCancelled(t *testing.T) {
 	cases, _ := LoadInjection()
 	res := RunInjection(ctx, careful, cases, 1<<40, nil)
 	if len(res.Outcomes) != 1 {
+		t.Errorf("%d outcomes", len(res.Outcomes))
+	}
+}
+
+func TestRunInjectionPacesCloudRequests(t *testing.T) {
+	cases, _ := LoadInjection()
+	res := RunInjection(context.Background(), careful, cases[:2], time.Millisecond, nil)
+	if len(res.Outcomes) != 2 {
 		t.Errorf("%d outcomes", len(res.Outcomes))
 	}
 }
