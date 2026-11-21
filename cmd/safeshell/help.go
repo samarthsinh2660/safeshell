@@ -160,6 +160,15 @@ A command that changes something on a prod host over ssh ("ssh prod1 'rm -rf /va
 level, at most R4, with "this is a production host". Reads and other hosts are unchanged.
 An interactive "ssh prod1" is not blocked, but prints a line saying commands typed there are only
 checked if SafeShell is installed on that host.`},
+	{"protect", "Keep folders safe", `List folders in ~/.config/safeshell/config.json (full paths, or starting with ~/):
+     "protect": ["~/thesis", "/srv/data"]
+Any command that changes or removes something inside one ("rm ~/thesis/a.tex") is raised to at least R3
+with "this folder is on your protected list". Reading ("cat", "ls") is unchanged.
+A project can add its own in a .safeshell.json at its top (the nearest one above where you are is used):
+     {"protect": ["deploy"], "rules": [{"match": "terraform apply", "block": "Use the pipeline."}]}
+Folders there are relative to the project and must stay inside it. Because a cloned project is not
+trusted, it can only make SafeShell stricter. Anything that would loosen is ignored, with a warning
+naming the file and the key.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
    safeshell check <cmd>             rate a command without running it
    safeshell check --script FILE...  rate every command in scripts, with line numbers; for CI:

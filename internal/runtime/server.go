@@ -69,16 +69,41 @@ func (s state) running() bool {
 	return s.Bin != "" && exe == s.Bin
 }
 
-func healthy(ctx context.Context, port int) bool {
+// errPortTaken means something other than our engine is listening on the engine's port.
+var errPortTaken = errors.New("another program is using the port the local engine needs, so it was not started; run the command again")
+
+// ready reports whether the engine (process pid) is serving on port. The access key is sent only after the socket
+// on port is confirmed to belong to pid, so another local user who grabbed the port first never receives it. An
+// engine that is not listening yet, or still loading its model (503), is simply not ready.
+func ready(ctx context.Context, pid, port int, key string) (bool, error) {
+	listening, owned := portOwner("/proc", pid, port)
+	if !listening {
+		return false, nil
+	}
+	if !owned {
+		return false, errPortTaken
+	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/health", port), nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1/models", port), nil)
+	req.Header.Set("Authorization", "Bearer "+key)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return false
+		return false, nil
 	}
-	resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false, nil
+	}
+	var list struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&list) != nil || len(list.Data) == 0 || list.Data[0].ID == "" {
+		return false, nil
+	}
+	return true, nil
 }
 
 // Ensure returns the endpoint of a running server for spec, starting one if needed. Starts are serialised with a lock
@@ -99,8 +124,13 @@ func (d Dirs) Ensure(ctx context.Context, spec Spec, log io.Writer) (Endpoint, e
 
 	if s, ok := d.readState(); ok && s.running() {
 		if s.Model == spec.Model {
-			if healthy(ctx, s.Port) {
+			ok, err := ready(ctx, s.PID, s.Port, s.Key)
+			if ok {
 				return Endpoint{s.Port, s.Key}, nil
+			}
+			if err != nil { // someone else holds the port: this engine is useless and must not be trusted
+				d.discard(s.PID)
+				return Endpoint{}, err
 			}
 			if err := ctx.Err(); err != nil { // out of time: that says nothing about the engine
 				return Endpoint{}, err
@@ -108,7 +138,7 @@ func (d Dirs) Ensure(ctx context.Context, spec Spec, log io.Writer) (Endpoint, e
 			// Alive with the right model but not answering yet: it is still loading. Only an engine that
 			// has taken longer than the start limit is treated as wedged.
 			if began := d.startedAt(); time.Since(began) < startLimit {
-				return d.waitReady(ctx, s.Port, s.Key, began.Add(startLimit), func() bool { return !s.running() })
+				return d.waitReady(ctx, s.PID, s.Port, s.Key, began.Add(startLimit), func() bool { return !s.running() })
 			}
 		}
 		_ = syscall.Kill(s.PID, syscall.SIGTERM) // a different model was asked for, or it is wedged
@@ -148,7 +178,7 @@ func (d Dirs) Ensure(ctx context.Context, spec Spec, log io.Writer) (Endpoint, e
 	b, _ := json.Marshal(state{PID: cmd.Process.Pid, Port: port, Model: spec.Model, Key: key, Bin: spec.Bin})
 	_ = os.WriteFile(d.statePath(), b, 0o600)
 
-	return d.waitReady(ctx, port, key, time.Now().Add(startLimit), func() bool {
+	return d.waitReady(ctx, cmd.Process.Pid, port, key, time.Now().Add(startLimit), func() bool {
 		select {
 		case <-exited:
 			return true
@@ -170,8 +200,8 @@ func (d Dirs) startedAt() time.Time {
 	return fi.ModTime()
 }
 
-// waitReady waits until the engine on port answers, it stops (gone), end passes or ctx ends.
-func (d Dirs) waitReady(ctx context.Context, port int, key string, end time.Time, gone func() bool) (Endpoint, error) {
+// waitReady waits until the engine (process pid) on port answers, it stops (gone), end passes or ctx ends.
+func (d Dirs) waitReady(ctx context.Context, pid, port int, key string, end time.Time, gone func() bool) (Endpoint, error) {
 	for time.Now().Before(end) {
 		select {
 		case <-ctx.Done():
@@ -181,11 +211,22 @@ func (d Dirs) waitReady(ctx context.Context, port int, key string, end time.Time
 		if gone() {
 			return Endpoint{}, fmt.Errorf("the local engine stopped while starting (see %s)", filepath.Join(d.State, "llama.log"))
 		}
-		if healthy(ctx, port) {
+		ok, err := ready(ctx, pid, port, key)
+		if err != nil {
+			d.discard(pid)
+			return Endpoint{}, err
+		}
+		if ok {
 			return Endpoint{port, key}, nil
 		}
 	}
 	return Endpoint{}, errors.New("the local engine did not become ready within 3 minutes")
+}
+
+// discard stops an engine that cannot be trusted and forgets it, so the next start picks a new port.
+func (d Dirs) discard(pid int) {
+	_ = syscall.Kill(pid, syscall.SIGKILL)
+	_ = os.Remove(d.statePath())
 }
 
 // lockWithContext takes the exclusive lock on f without blocking past ctx.

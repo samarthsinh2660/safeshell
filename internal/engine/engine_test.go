@@ -352,3 +352,55 @@ func TestProdHostRaisesARemoteWriteAndLeavesOthersAlone(t *testing.T) {
 		t.Errorf("the interactive note must not block: %s %s %+v", b.Level, b.Decision, b.Host)
 	}
 }
+
+func TestProtectedFolderRaisesAWriteAndLeavesReadsAlone(t *testing.T) {
+	e := &Engine{Protect: []string{"/home/u/thesis", "/srv/data"}, Home: "/home/u"}
+	for line, blocked := range map[string]bool{
+		"rm /home/u/thesis/a.tex":       true,
+		"rm ~/thesis/a.tex":             true,
+		"rm ~/thesis/*.tex":             true,
+		"rm ~/thesis/$f":                true,
+		"rm -rf ~":                      true,
+		"rm -r ~/thesis":                true,
+		"echo x > ~/thesis/a.tex":       true,
+		"mv a.tex /srv/data/":           true,
+		"cp a.tex /srv/data/b.tex":      true,
+		"rm *.tex":                      false,
+		"rm ~/thesis2/a.tex":            false,
+		"rm /home/u/other/thesis/a.tex": false,
+		"cat ~/thesis/a.tex":            false,
+		"ls ~/thesis":                   false,
+		"cp ~/thesis/a.tex /tmp/a.tex":  false,
+		"echo hi":                       false,
+	} {
+		a := e.Analyze(context.Background(), line, "/w")
+		if blocked {
+			if a.Level < domain.R3 || a.Decision < domain.Block || !strings.Contains(a.Protected.Reason, "this folder is on your protected list: /") {
+				t.Errorf("%s: %s %s %+v", line, a.Level, a.Decision, a.Protected)
+			}
+		} else if a.Level != a.Verdict.Level || a.Protected.Reason != "" {
+			t.Errorf("%s: %s %+v", line, a.Level, a.Protected)
+		}
+	}
+	a := e.Analyze(context.Background(), "rm /home/u/thesis/a.tex", "/w")
+	a.AddEffect(domain.Effect{Kind: domain.EffectReview, Evidence: domain.Observed, MinLevel: domain.R0})
+	if a.Level < domain.R3 {
+		t.Error("a later effect must not lower the protection")
+	}
+}
+
+func TestWithoutProtectedFoldersNothingChanges(t *testing.T) {
+	a := (&Engine{Home: "/home/u"}).Analyze(context.Background(), "rm /home/u/thesis/a.tex", "/w")
+	if a.Level != a.Verdict.Level || a.Protected.Reason != "" {
+		t.Errorf("%s %+v", a.Level, a.Protected)
+	}
+}
+
+func TestRelativeWritesInAProtectedFolderAreProtected(t *testing.T) {
+	for _, line := range []string{"rm a.tex", "rm *.tex"} {
+		a := (&Engine{Protect: []string{"/home/u/thesis"}}).Analyze(context.Background(), line, "/home/u/thesis")
+		if a.Level < domain.R3 {
+			t.Errorf("%s: %s %+v", line, a.Level, a.Protected)
+		}
+	}
+}

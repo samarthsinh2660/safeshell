@@ -1,4 +1,4 @@
-// Command fakellama stands in for llama-server in tests: /health and an
+// Command fakellama stands in for llama-server in tests: /health, /v1/models and an
 // OpenAI-style /v1/chat/completions that always answers with $FAKE_REPLY.
 package main
 
@@ -24,6 +24,9 @@ func main() {
 	key, _ := os.ReadFile(*keyFile)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"status":"ok"}`)) })
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"object":"list","data":[{"id":"fake"}]}`))
+	})
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		if len(key) == 0 || r.Header.Get("Authorization") != "Bearer "+string(key) { // like the real server, refuse callers without the key
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

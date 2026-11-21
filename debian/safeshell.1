@@ -139,7 +139,7 @@ Exit status 0 means allowed (a Claude Code hook is always answered with 0), 2 me
 Print the hook to add to Claude Code's settings.json, or a script that runs one command only when SafeShell allows it. Nothing is edited.
 .TP
 .RB "help [" topic ]
-Short guides: start, safety, english, models, voice, learn, accessibility, pause, agents, undo, policy, hosts, commands, privacy and trouble.
+Short guides: start, safety, english, models, voice, learn, accessibility, pause, agents, undo, policy, hosts, protect, commands, privacy and trouble.
 .TP
 .B version
 Print the version.
@@ -150,6 +150,10 @@ Optional team policy written by an administrator: rules that block a command wit
 .TP
 .I ~/.config/safeshell/config.json
 Settings. The "strict" key, when true, makes the shell hook fail closed: when safeshell itself is missing or fails, only plain read-only lines such as ls and cat run and every other line is cancelled, and SAFESHELL_OFF, safeshell deactivate and the pause file are refused. The team policy can turn it on too ("strict": true). Start a new terminal after changing it. The "hosts" key maps host patterns (* matches any text) to the label prod or staging; a command that changes something on a prod host over ssh is raised one level, and an interactive ssh to a labelled host prints a note that commands there are only checked if SafeShell is installed on it.
+The "protect" key lists folders (full paths, or starting with ~/); any command that changes or removes something inside one is raised to at least R3 with the reason that the folder is on your protected list, while reading is unchanged.
+.TP
+.I .safeshell.json
+A project's own settings, read from the working directory or the nearest folder above it (the home folder and / are not read). Because a cloned project is not trusted, it can only make SafeShell stricter: a "protect" list of folders inside the project and "rules" in the team policy format that raise a level, block or snapshot. Anything else is ignored with a warning naming the file and the key.
 .TP
 .I ~/.config/safeshell/keys.json
 API keys for cloud models, readable only by you.

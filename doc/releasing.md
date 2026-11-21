@@ -73,6 +73,8 @@ git switch -c release/vX.Y.Z
 ### After the merge
 - [ ] The Actions tab shows `release` green.
 - [ ] The Release page has both tarballs, both `.deb` files and `SHA256SUMS`.
+- [ ] Verify the attestation: `gh attestation verify safeshell_X.Y.Z_amd64.deb --repo samarthsinh2660/safeshell`
+      (also the tarballs and `SHA256SUMS`), and `sha256sum -c SHA256SUMS`.
 - [ ] Spot-check on a clean machine:
       `wget …/safeshell_X.Y.Z_amd64.deb && sudo apt install ./safeshell_X.Y.Z_amd64.deb && safeshell doctor`.
 - [ ] PPA: from the release tag, follow Route A in [debian-ubuntu.md](debian-ubuntu.md). Use the
