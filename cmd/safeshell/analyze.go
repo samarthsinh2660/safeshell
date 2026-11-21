@@ -42,6 +42,25 @@ const inspectBudget = 15 * time.Second
 // environment variable, so a user cannot point SafeShell at a different policy.
 var loadPolicy = func() ([]policy.Rule, bool, error) { return config.LoadPolicy(config.PolicyPath, 0) }
 
+// teamFile reads the admin's whole team policy file, for the setting that makes
+// strict mode compulsory. It is a test seam: tests replace it.
+var teamFile = func() (policy.File, bool, error) { return config.LoadTeam(config.PolicyPath, 0) }
+
+// strictOn says whether strict mode is on: the user's setting, or the admin's
+// policy turning it on. A settings file or policy that cannot be used is
+// reported and does not turn it on.
+func strictOn(stderr io.Writer) bool {
+	c, err := config.Load(config.Path())
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell hook: strict mode could not be read from the settings file:", err)
+	}
+	t, _, err := teamFile()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell hook: strict mode could not be read from the team policy:", err)
+	}
+	return c.Strict || t.Strict
+}
+
 // teamPolicy loads the admin's policy. A policy that is present but cannot be
 // used is ignored with a warning, never silently: the rules still apply at
 // their normal levels, and the warning is printed with every check.

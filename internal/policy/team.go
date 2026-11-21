@@ -37,47 +37,61 @@ type wire struct {
 	MinLevel string  `json:"min_level"`
 }
 
-// Parse reads a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
+// File is a whole policy file: its rules, and whether the admin turns strict
+// mode on for everyone. A policy can turn strict on, never off.
+type File struct {
+	Rules  []Rule
+	Strict bool
+}
+
+// Parse reads the rules of a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
+func Parse(data []byte) ([]Rule, error) {
+	f, err := ParseFile(data)
+	return f.Rules, err
+}
+
+// ParseFile reads a policy file: {"strict":true,"rules":[...]}.
 // It refuses anything it does not understand, so a rule that tries to loosen
 // something (an unknown field such as "allow") is an error, never ignored.
-func Parse(data []byte) ([]Rule, error) {
+func ParseFile(data []byte) (File, error) {
 	var f struct {
-		Rules []wire `json:"rules"`
+		Rules  []wire `json:"rules"`
+		Strict bool   `json:"strict"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
-		return nil, fmt.Errorf("%w (a policy can only make things stricter; the fields are rules, match, block, snapshot and min_level)", err)
+		return File{}, fmt.Errorf("%w (a policy can only make things stricter; the fields are strict, rules, match, block, snapshot and min_level)", err)
 	}
 	if dec.More() {
-		return nil, errors.New("there is text after the end of the policy")
+		return File{}, errors.New("there is text after the end of the policy")
 	}
 	var rules []Rule
 	for i, w := range f.Rules {
 		n := i + 1
 		r := Rule{Match: strings.Fields(w.Match), Snapshot: w.Snapshot}
 		if len(r.Match) == 0 {
-			return nil, fmt.Errorf("rule %d: match is empty. Say which command it covers, such as \"docker system prune\"", n)
+			return File{}, fmt.Errorf("rule %d: match is empty. Say which command it covers, such as \"docker system prune\"", n)
 		}
 		if w.Block != nil {
 			if strings.TrimSpace(*w.Block) == "" {
-				return nil, fmt.Errorf("rule %d: block needs a reason to show people", n)
+				return File{}, fmt.Errorf("rule %d: block needs a reason to show people", n)
 			}
 			r.Block = *w.Block
 		}
 		if w.MinLevel != "" {
 			l, ok := domain.ParseLevel(w.MinLevel)
 			if !ok || l == domain.R0 {
-				return nil, fmt.Errorf("rule %d: min_level must be R1, R2, R3 or R4, not %q. A policy can raise a level, never lower one", n, w.MinLevel)
+				return File{}, fmt.Errorf("rule %d: min_level must be R1, R2, R3 or R4, not %q. A policy can raise a level, never lower one", n, w.MinLevel)
 			}
 			r.MinLevel = l
 		}
 		if r.Block == "" && !r.Snapshot && r.MinLevel == domain.R0 {
-			return nil, fmt.Errorf("rule %d does nothing: add block, snapshot or min_level", n)
+			return File{}, fmt.Errorf("rule %d does nothing: add block, snapshot or min_level", n)
 		}
 		rules = append(rules, r)
 	}
-	return rules, nil
+	return File{Rules: rules, Strict: f.Strict}, nil
 }
 
 // Evaluate combines every rule that matches any command of the line.

@@ -154,3 +154,75 @@ func TestFishBindsEveryWayToRunALineAndVoice(t *testing.T) {
 		}
 	}
 }
+
+func TestStrictScriptChangesEveryShellAndTheDefaultStaysAsItWas(t *testing.T) {
+	for _, sh := range []string{"bash", "zsh", "fish"} {
+		plain, _ := Script(sh, "/opt/ss/safeshell")
+		strict, err := StrictScript(sh, "/opt/ss/safeshell")
+		if err != nil || strict == plain {
+			t.Fatalf("%s: %v", sh, err)
+		}
+		if strings.Contains(plain, "strict mode") || !strings.Contains(plain, "Set SAFESHELL_OFF=1 to silence this.") {
+			t.Errorf("%s: the default hook changed", sh)
+		}
+		for _, w := range strictSwaps[sh] {
+			if strings.Count(plain, w.old) != 1 {
+				t.Errorf("%s: the text to replace is not in the hook exactly once: %q", sh, w.old)
+			}
+		}
+		for _, want := range []string{"SAFESHELL_OFF is ignored", "strict mode is on, so this line was cancelled"} {
+			if !strings.Contains(strict, want) {
+				t.Errorf("%s: strict hook is missing %q", sh, want)
+			}
+		}
+		if strings.Contains(strict, `-n "${SAFESHELL_OFF-}" ||`) || strings.Contains(strict, `test -n "$SAFESHELL_OFF"; or`) {
+			t.Errorf("%s: SAFESHELL_OFF still pauses checking", sh)
+		}
+		if bin, err := exec.LookPath(sh); err == nil {
+			f := filepath.Join(t.TempDir(), "hook")
+			_ = os.WriteFile(f, []byte(strict), 0o600)
+			if out, err := exec.Command(bin, "-n", f).CombinedOutput(); err != nil {
+				t.Errorf("%s syntax: %v %s", sh, err, out)
+			}
+		}
+	}
+	if _, err := StrictScript("nu", "/x"); err == nil {
+		t.Error("an unknown shell must say so")
+	}
+}
+
+// TestStrictReadPatternLetsThroughOnlyPlainReadOnlyLines runs the pattern the
+// hook uses in each shell that can run it here.
+func TestStrictReadPatternLetsThroughOnlyPlainReadOnlyLines(t *testing.T) {
+	allowed := []string{"ls", "ls -la /tmp", "  cd ~/src", "echo hello world", "cat a.txt b.txt", "pwd "}
+	denied := []string{"rm -rf x", "ls; rm -rf x", "ls && rm x", "ls | sh", "echo hi > f", "cat $(rm x)", "ls `rm x`", "echo 'x'", "ls *",
+		"ls\\nrm -rf x", "lsx", "ls\\\\", "", "git status", "xargs rm", "ls &"}
+	for sh, snippet := range map[string]string{
+		"bash": `re='` + strictRead + `'; l=$(printf %b "$1"); [[ $l =~ $re ]] && echo yes || echo no`,
+		"zsh":  `re='` + strictRead + `'; l=$(printf %b "$1"); [[ $l =~ $re ]] && echo yes || echo no`,
+		"fish": `set l (printf %b "$argv[1]" | string collect); string match -qr -- '` + strictRead + `' "$l"; and echo yes; or echo no`,
+	} {
+		bin, err := exec.LookPath(sh)
+		if err != nil {
+			continue
+		}
+		run := func(line string) string {
+			args := []string{"-c", snippet, "x", line}
+			if sh == "fish" {
+				args = []string{"-c", snippet, line}
+			}
+			out, _ := exec.Command(bin, args...).Output()
+			return strings.TrimSpace(string(out))
+		}
+		for _, l := range allowed {
+			if got := run(l); got != "yes" {
+				t.Errorf("%s: %q must run in strict mode, got %q", sh, l, got)
+			}
+		}
+		for _, l := range denied {
+			if got := run(l); got != "no" {
+				t.Errorf("%s: %q must be cancelled in strict mode, got %q", sh, l, got)
+			}
+		}
+	}
+}
