@@ -23,6 +23,7 @@ func settle(f, want string, n int) int {
 }
 
 func TestHooksLogChecksTurnedOffOncePerTerminalUntilTheyAreTurnedOnAgain(t *testing.T) {
+	needSandbox(t)
 	for _, tc := range []struct {
 		shell   string
 		argv    []string
@@ -62,6 +63,7 @@ func TestHooksLogChecksTurnedOffOncePerTerminalUntilTheyAreTurnedOnAgain(t *test
 }
 
 func TestHooksLogWhenSafeShellFailsAndALineRunsUnchecked(t *testing.T) {
+	needSandbox(t)
 	for _, tc := range []struct {
 		shell string
 		argv  []string

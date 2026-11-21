@@ -10,6 +10,7 @@ import (
 // In strict mode only a line that really ran unchecked is logged as not-checked,
 // a cancelled line is not, and SAFESHELL_OFF (refused there) logs no "checks off".
 func TestStrictHooksLogOnlyLinesThatRanUnchecked(t *testing.T) {
+	needSandbox(t)
 	for _, c := range allHookShells {
 		t.Run(c.name, func(t *testing.T) {
 			d := t.TempDir()
