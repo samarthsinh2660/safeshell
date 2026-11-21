@@ -53,6 +53,7 @@ type Entry struct {
 	Size  int64  `json:"size,omitempty"`
 	SHA   string `json:"sha256,omitempty"`
 	Link  string `json:"link,omitempty"`
+	Src   string `json:"src,omitempty"`   // native snapshots: where restore reads this file's content instead of a blob
 	MTime int64  `json:"mtime,omitempty"` // unix nanoseconds
 	Inode uint64 `json:"inode,omitempty"` // regular files only; with Links, tells undo about other hard links
 	Links uint64 `json:"links,omitempty"` // hard link count, regular files only
@@ -75,6 +76,7 @@ type Manifest struct {
 	Sealed  bool       `json:"sealed,omitempty"`  // every entry's After is recorded
 	Undone  *time.Time `json:"undone,omitempty"`  // when this snapshot was last restored
 	Bytes   int64      `json:"bytes"`
+	Native  *NativeRef `json:"native,omitempty"` // set when a btrfs or zfs snapshot holds the files instead of copies
 	Entries []Entry    `json:"entries"`
 	LeftOut []LeftOut  `json:"left_out,omitempty"` // paths that could not be read, so they are not saved
 }
@@ -94,22 +96,49 @@ func Create(store, line string, targets []Target, limit int64) (Manifest, error)
 }
 
 // CreateAt is Create that also records where the command ran.
-func CreateAt(store string, o Origin, line string, targets []Target, limit int64) (m Manifest, err error) {
-	if err = preflight(store, targets, limit, diskSpace); err != nil {
-		return m, err
-	}
+func CreateAt(store string, o Origin, line string, targets []Target, limit int64) (Manifest, error) {
+	return createAt(nil, store, o, line, targets, limit)
+}
+
+// CreateWith is CreateAt that uses a btrfs or zfs snapshot when one covers every
+// target and the user may take it, and copies the files otherwise.
+func CreateWith(h Host, store string, o Origin, line string, targets []Target, limit int64) (Manifest, error) {
+	return createAt(&h, store, o, line, targets, limit)
+}
+
+func createAt(h *Host, store string, o Origin, line string, targets []Target, limit int64) (m Manifest, err error) {
 	id := time.Now().UTC().Format("20060102T150405.000000000Z")
 	d := dir(store, id)
+	var ref *NativeRef
+	if h != nil {
+		if n := h.Choose(store, targets); n != nil && os.MkdirAll(d, 0o700) == nil {
+			if r, nerr := n.create(id, filepath.Join(d, "snap")); nerr == nil {
+				ref = &r
+			} else {
+				_ = os.RemoveAll(d) // fall back to copying
+			}
+		}
+	}
+	if ref == nil {
+		if err = preflight(store, targets, limit, diskSpace); err != nil {
+			return m, err
+		}
+	} else {
+		limit = 0 // nothing is copied
+	}
+	defer func() {
+		if err != nil {
+			if ref != nil {
+				_ = h.Delete(*ref)
+			}
+			_ = os.RemoveAll(d)
+		}
+	}()
 	if err = os.MkdirAll(filepath.Join(d, "blobs"), 0o700); err != nil {
 		return m, err
 	}
 	_ = os.Chmod(store, 0o700) // MkdirAll leaves an existing folder as it was; a folder that is not ours stays
-	defer func() {
-		if err != nil {
-			_ = os.RemoveAll(d)
-		}
-	}()
-	m = Manifest{ID: id, Created: time.Now().UTC(), Line: line, Dir: o.Dir, Session: o.Session}
+	m = Manifest{ID: id, Created: time.Now().UTC(), Line: line, Dir: o.Dir, Session: o.Session, Native: ref}
 	seen := map[string]bool{}
 	add := func(e Entry) {
 		if !seen[e.Path] {
@@ -126,11 +155,16 @@ func CreateAt(store string, o Origin, line string, targets []Target, limit int64
 			add(Entry{Path: path, Kind: Absent})
 			continue
 		}
-		werr := filepath.WalkDir(path, func(p string, de fs.DirEntry, werr error) error {
+		walkRoot, livePath := path, func(p string) string { return p }
+		if ref != nil { // read from the snapshot: it cannot change under us
+			walkRoot, livePath = ref.src(path), ref.live
+		}
+		werr := filepath.WalkDir(walkRoot, func(sp string, de fs.DirEntry, werr error) error {
+			p := livePath(sp)
 			if werr == nil {
 				var e Entry
 				var copied int64
-				if e, copied, werr = capture(d, p, limit-m.Bytes, limit > 0); werr == nil {
+				if e, copied, werr = capture(d, p, sp, limit-m.Bytes, limit > 0, ref != nil); werr == nil {
 					m.Bytes += copied
 					add(e)
 					return nil
@@ -175,9 +209,11 @@ func resolveParents(p string) string {
 	}
 }
 
-// capture records p, copying file data into the snapshot's blob store.
-func capture(snap, p string, room int64, limited bool) (Entry, int64, error) {
-	fi, err := os.Lstat(p)
+// capture records p, copying file data into the snapshot's blob store. src is
+// where p is read from: p itself, or its copy inside a native snapshot, where
+// the data is hashed and left in place.
+func capture(snap, p, src string, room int64, limited, native bool) (Entry, int64, error) {
+	fi, err := os.Lstat(src)
 	if err != nil {
 		return Entry{}, 0, err
 	}
@@ -188,7 +224,7 @@ func capture(snap, p string, room int64, limited bool) (Entry, int64, error) {
 	switch {
 	case fi.Mode()&os.ModeSymlink != 0:
 		e.Kind = Symlink
-		e.Link, err = os.Readlink(p)
+		e.Link, err = os.Readlink(src)
 		return e, 0, err
 	case fi.IsDir():
 		e.Kind = Dir
@@ -201,7 +237,12 @@ func capture(snap, p string, room int64, limited bool) (Entry, int64, error) {
 		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
 			e.Inode, e.Links = st.Ino, uint64(st.Nlink)
 		}
-		e.SHA, err = copyBlob(snap, p)
+		if native {
+			e.Src = src
+			e.SHA, err = hashFile(src)
+			return e, 0, err
+		}
+		e.SHA, err = copyBlob(snap, src)
 		return e, fi.Size(), err
 	}
 	if fi.Mode()&os.ModeNamedPipe != 0 {
