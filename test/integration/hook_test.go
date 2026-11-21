@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/samarthsinh2660/safeshell/internal/models"
+	"github.com/samarthsinh2660/safeshell/internal/runtime"
 )
 
 // term is a bash session on a pseudo-terminal, as a person would use it.
@@ -151,7 +154,11 @@ func fakeModel(t *testing.T, reply string) []string {
 	if err := os.WriteFile(model, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Truncate(model, 1117320768); err != nil { // the catalog size; sparse, so it costs no disk
+	md, _ := models.Find("qwen2.5-coder-1.5b")
+	if err := os.Truncate(model, md.Size); err != nil { // the catalog size; sparse, so it costs no disk
+		t.Fatal(err)
+	}
+	if err := runtime.MarkVerified(model, md.SHA); err != nil { // as a verified download leaves it
 		t.Fatal(err)
 	}
 	_ = os.MkdirAll(filepath.Join(cfg, "safeshell"), 0o755)
