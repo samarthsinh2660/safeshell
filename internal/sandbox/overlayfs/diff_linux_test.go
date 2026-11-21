@@ -264,14 +264,25 @@ func TestUnreadableFolders(t *testing.T) {
 		t.Cleanup(func() { _ = os.Chmod(p, 0o755) })
 	}
 
-	t.Run("in the upper directory the diff fails", func(t *testing.T) {
-		upper := t.TempDir()
-		write(t, upper, "locked/a", "a")
-		lock(t, filepath.Join(upper, "locked"))
-		if _, err := Diff(upper, t.TempDir(), fake); err == nil {
-			t.Error("an upper folder that cannot be read must be an error, not an empty diff")
-		}
-	})
+	// A command can take the permissions off a folder (chmod -R 600 .); the
+	// scratch copy is ours, so it is opened up again and its files are still seen.
+	for name, mode := range map[string]os.FileMode{"no permissions": 0, "no search permission": 0o600} {
+		t.Run("a folder with "+name+" in the upper directory is read", func(t *testing.T) {
+			upper := t.TempDir()
+			write(t, upper, "locked/a", "a")
+			lock(t, filepath.Join(upper, "locked"))
+			if err := os.Chmod(filepath.Join(upper, "locked"), mode); err != nil {
+				t.Fatal(err)
+			}
+			d, err := Diff(upper, t.TempDir(), fake)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c := byPath(d)["locked/a"]; c.Kind != sandbox.Created {
+				t.Errorf("changes %+v, want locked/a created", d.Changes)
+			}
+		})
+	}
 
 	t.Run("inside a deleted folder it is skipped", func(t *testing.T) {
 		lower, upper := t.TempDir(), t.TempDir()

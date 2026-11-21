@@ -50,9 +50,16 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		return sandbox.Result{}, err
 	}
 	defer cleanup(scratch)
+	store := scratch
+	if spec.UpperOnDisk {
+		if store, err = diskStore(os.Getuid(), time.Now()); err != nil {
+			return sandbox.Result{}, err
+		}
+		defer cleanup(store)
+	}
 
 	mi, _ := os.ReadFile("/proc/self/mountinfo")
-	layers := plan(layerMounts(topDirs(), string(mi)), scratch)
+	layers := plan(layerMounts(topDirs(), string(mi)), store)
 	for _, l := range layers {
 		for _, d := range []string{l.Upper, l.Work} {
 			if err := os.MkdirAll(d, 0o755); err != nil {
@@ -65,7 +72,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 			return sandbox.Result{}, err
 		}
 	}
-	req, _ := json.Marshal(request{Spec: spec, Shell: shell, Cwd: cwd, Env: env, Root: scratch, Layers: layers})
+	req, _ := json.Marshal(request{Spec: spec, Shell: shell, Cwd: cwd, Env: env, Root: scratch, Store: store, Layers: layers})
 
 	rr, rw, err := os.Pipe()
 	if err != nil {
@@ -122,7 +129,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	res.Warnings = markWritable(out.Warnings)
 	res.RootAsks = parseRootAsks(readCapped(filepath.Join(scratch, "asks", "root")))
 
-	for _, l := range toDiff(layers, out.Layers, res.TimedOut, scratch) {
+	for _, l := range toDiff(layers, out.Layers, res.TimedOut, store) {
 		d, err := Diff(l.Upper, l.Mount, Options{})
 		if err != nil {
 			return res, fmt.Errorf("read changes of %s: %w", l.Mount, err)
@@ -268,6 +275,22 @@ func scratchBase() string {
 		}
 	}
 	return os.TempDir()
+}
+
+// diskStore makes a fresh scratch folder under DiskBase, which is created
+// private (0700) and must be a real folder of this user's. Folders left by
+// earlier runs that died are removed first. The caller removes the new one.
+func diskStore(uid int, now time.Time) (string, error) {
+	base := DiskBase()
+	if err := os.MkdirAll(base, 0o700); err != nil {
+		return "", fmt.Errorf("make %s for a large run: %w", base, err)
+	}
+	fi, err := os.Lstat(base)
+	if err != nil || !fi.IsDir() || int(fi.Sys().(*syscall.Stat_t).Uid) != uid || os.Chmod(base, 0o700) != nil {
+		return "", fmt.Errorf("%s is not your own folder, so a large run cannot be kept there: remove it and try again", base)
+	}
+	sweepStale(base, uid, now)
+	return os.MkdirTemp(base, fmt.Sprintf("ss-sim-%d-", os.Getpid()))
 }
 
 // detail appends whatever the child printed, which helps explain a setup failure.
