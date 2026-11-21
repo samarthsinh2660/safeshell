@@ -135,12 +135,19 @@ func TestReadyRequiresAModelListFromTheOwnerOfThePort(t *testing.T) {
 }
 
 func TestReadyIsFalseNotAnErrorWhileNothingIsListening(t *testing.T) {
-	l, _ := net.Listen("tcp", "127.0.0.1:0")
-	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-	if ok, err := ready(context.Background(), os.Getpid(), port, "k"); ok || err != nil {
-		t.Errorf("%v %v", ok, err)
+	// A port freed here can be taken by a test running in parallel, which ready
+	// rightly reports as another program; try a few free ports before failing.
+	var ok bool
+	var err error
+	for range 5 {
+		l, _ := net.Listen("tcp", "127.0.0.1:0")
+		port := l.Addr().(*net.TCPAddr).Port
+		l.Close()
+		if ok, err = ready(context.Background(), os.Getpid(), port, "k"); !ok && err == nil {
+			return
+		}
 	}
+	t.Errorf("%v %v", ok, err)
 }
 
 func TestReadyIsFalseWhenTheOwnerDoesNotAnswer(t *testing.T) {
