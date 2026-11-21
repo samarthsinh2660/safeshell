@@ -15,6 +15,8 @@ const bash = `# SafeShell hook for bash. Add to ~/.bashrc:  eval "$(safeshell ho
 __ss_bin=@BIN@   # the safeshell that printed this hook, so PATH does not matter
 __ss_off="${XDG_STATE_HOME:-${HOME-}/.local/state}/safeshell/off"   # exists while checking is paused (safeshell deactivate)
 __ss_pend=   # the lines already typed of a command that is not finished (here-document, open quote, trailing backslash)
+__ss_noted=   # set once "checks turned off" is written to the audit log, so a terminal with SAFESHELL_OFF logs it once
+__ss_note() { ("$__ss_bin" note "$@" >/dev/null 2>&1 &); }   # write an event to the audit log in the background; the prompt never waits
 __ss_voice() {
   [[ -n "${SAFESHELL_OFF-}" ]] && return 0
   [[ -e "${__ss_off-}" ]] && return 0
@@ -28,7 +30,9 @@ __ss_voice() {
   READLINE_POINT=${#READLINE_LINE}
 }
 __ss_guard() {
-  [[ -n "${SAFESHELL_OFF-}" || -z "${READLINE_LINE//[[:space:]]/}" && -z $__ss_pend ]] && return 0
+  [[ -z "${READLINE_LINE//[[:space:]]/}" && -z $__ss_pend ]] && return 0
+  if [[ -n "${SAFESHELL_OFF-}" ]]; then [[ -n $__ss_noted ]] || { __ss_noted=1; __ss_note checks-off; }; return 0; fi
+  __ss_noted=
   [[ -e "${__ss_off-}" ]] && return 0
   local out rc tty t first line=$__ss_pend$READLINE_LINE unknown=()
   if [[ -z $__ss_pend ]]; then   # only a first line can be plain English
@@ -49,7 +53,8 @@ __ss_guard() {
        fi ;;
     1) READLINE_LINE= ;;   # cancelled
     *) # SafeShell itself failed (missing, crashed): say so and let the line through rather than lock the user out
-       printf '\nSafeShell failed (exit %s), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' "$rc" >/dev/tty ;;
+       printf '\nSafeShell failed (exit %s), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' "$rc" >/dev/tty
+       __ss_note not-checked "$rc" ;;
   esac
   [[ $rc -eq 1 && -n $__ss_pend ]] && { __ss_pend=; kill -INT $$; }   # drop the lines already typed
   __ss_pend=
@@ -84,6 +89,8 @@ const zsh = `# SafeShell hook for zsh. Add to ~/.zshrc:  eval "$(safeshell hook 
 # Press Ctrl-X Ctrl-V and speak: the words are put on the line to read and edit (set up with: safeshell voice setup).
 __ss_bin=@BIN@   # the safeshell that printed this hook, so PATH does not matter
 __ss_off="${XDG_STATE_HOME:-${HOME-}/.local/state}/safeshell/off"   # exists while checking is paused (safeshell deactivate)
+__ss_noted=   # set once "checks turned off" is written to the audit log, so a terminal with SAFESHELL_OFF logs it once
+__ss_note() { ("$__ss_bin" note "$@" >/dev/null 2>&1 &) }   # write an event to the audit log in the background; the prompt never waits
 __ss_voice() {
   emulate -L zsh
   [[ -n "${SAFESHELL_OFF-}" ]] && return 0
@@ -102,7 +109,9 @@ zle -N __ss_voice
 bindkey '^X^V' __ss_voice
 __ss_check() {   # returns 1 when the line was cancelled
   emulate -L zsh
-  [[ -n "${SAFESHELL_OFF-}" || -z "${BUFFER//[[:space:]]/}" && -z $PREBUFFER ]] && return 0
+  [[ -z "${BUFFER//[[:space:]]/}" && -z $PREBUFFER ]] && return 0
+  if [[ -n "${SAFESHELL_OFF-}" ]]; then [[ -n $__ss_noted ]] || { __ss_noted=1; __ss_note checks-off; }; return 0; fi
+  __ss_noted=
   [[ -e "${__ss_off-}" ]] && return 0
   local out rc tty first line=$PREBUFFER$BUFFER unknown=()   # PREBUFFER holds the lines already typed of a command that is not finished
   if [[ -z $PREBUFFER ]]; then   # only a first line can be plain English
@@ -121,7 +130,8 @@ __ss_check() {   # returns 1 when the line was cancelled
          return 1
        fi ;;
     1) BUFFER=; return 1 ;;
-    *) zle -I; print -u2 "\nSafeShell failed (exit $rc), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this." ;;
+    *) zle -I; print -u2 "\nSafeShell failed (exit $rc), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this."
+       __ss_note not-checked "$rc" ;;
   esac
   return 0
 }
@@ -168,8 +178,21 @@ function __ss_voice
   commandline -r -- "$text"
   commandline -f end-of-buffer repaint
 end
+function __ss_note   # write an event to the audit log in the background; the prompt never waits
+  __ss_bin note $argv >/dev/null 2>&1 &
+  disown
+end
 function __ss_guard
   set -l line (commandline | string collect)
+  if test -n "$SAFESHELL_OFF"
+    # log "checks turned off" once per terminal, not for every line
+    if not set -q __ss_noted; and not string match -qr '^\s*$' -- "$line"
+      set -g __ss_noted 1
+      __ss_note checks-off
+    end
+  else
+    set -e __ss_noted
+  end
   if test -n "$SAFESHELL_OFF"; or test -e "$__ss_off"; or string match -qr '^\s*$' -- "$line"
     commandline -f execute
     return 0
@@ -212,6 +235,7 @@ function __ss_guard
       commandline -f execute
     case '*'   # SafeShell itself failed (missing, crashed): say so and let the line through rather than lock the user out
       printf '\nSafeShell failed (exit %s), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' $rc >/dev/tty
+      __ss_note not-checked $rc
       commandline -f execute
   end
 end

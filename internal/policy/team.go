@@ -37,20 +37,39 @@ type wire struct {
 	MinLevel string  `json:"min_level"`
 }
 
+// file is the policy as written: the rules, and whether every audit entry also
+// goes to the systemd journal for everyone on the machine.
+type file struct {
+	Rules   []wire `json:"rules"`
+	Journal bool   `json:"journal"`
+}
+
+func decode(data []byte) (file, error) {
+	var f file
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&f); err != nil {
+		return f, fmt.Errorf("%w (a policy can only make things stricter; the fields are rules, journal, match, block, snapshot and min_level)", err)
+	}
+	if dec.More() {
+		return f, errors.New("there is text after the end of the policy")
+	}
+	return f, nil
+}
+
+// Journal reports whether the policy asks for audit entries in the journal.
+func Journal(data []byte) (bool, error) {
+	f, err := decode(data)
+	return f.Journal, err
+}
+
 // Parse reads a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
 // It refuses anything it does not understand, so a rule that tries to loosen
 // something (an unknown field such as "allow") is an error, never ignored.
 func Parse(data []byte) ([]Rule, error) {
-	var f struct {
-		Rules []wire `json:"rules"`
-	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&f); err != nil {
-		return nil, fmt.Errorf("%w (a policy can only make things stricter; the fields are rules, match, block, snapshot and min_level)", err)
-	}
-	if dec.More() {
-		return nil, errors.New("there is text after the end of the policy")
+	f, err := decode(data)
+	if err != nil {
+		return nil, err
 	}
 	var rules []Rule
 	for i, w := range f.Rules {

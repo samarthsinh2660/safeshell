@@ -145,6 +145,22 @@ A rule can block with a reason (there is no "do it anyway"), ask for a snapshot,
 Rules can only make SafeShell stricter; user settings cannot override them. The file and /etc/safeshell
 must belong to root and not be writable by anyone else, or the policy is ignored with a warning.
 safeshell doctor  shows which policy is active.`},
+	{"audit", "Logs, the journal and statistics for administrators", `Every decision is written to ~/.local/state/safeshell/audit.jsonl (read it with  safeshell history).
+The hook also logs two events: "checks-off" (SAFESHELL_OFF was set in a terminal; logged once per terminal
+until it is unset) and "not-checked" (SafeShell itself failed and a line ran unchecked). If safeshell has
+been deleted, nothing can record the failure, but the hook still prints its warning.
+     safeshell stats                        commands by risk level, blocks, blocks run anyway, AI raises, failures
+     safeshell stats --prometheus FILE      the same as Prometheus text, written atomically; point node_exporter's
+                                            textfile collector at it (name it something.prom) and run it from cron
+The counts cover the current log only; when it passes 5 MB it moves to audit.jsonl.old, and a Prometheus
+counter then restarts from a lower number, which Prometheus handles. Sandbox timeouts are not logged, so they
+are not counted.
+To send every entry to the systemd journal as well (the file is still written), set in ~/.config/safeshell/config.json
+     "audit": {"journal": true}
+or, for everyone on the machine, add  "journal": true  to the team policy file. Then:
+     journalctl -t safeshell
+Fields: SAFESHELL_LEVEL, _DECISION, _OUTCOME, _LINE (secrets masked as in the file) and SAFESHELL_AI_*.
+Values over 4096 bytes are cut in the journal copy only. With no journal on the machine nothing changes.`},
 	{"hosts", "Mark production hosts for ssh", `Say which machines matter in ~/.config/safeshell/config.json (* matches any text; labels are prod or staging):
      "hosts": {"prod*": "prod", "db-*.example.com": "prod", "staging-*": "staging"}
 A command that changes something on a prod host over ssh ("ssh prod1 'rm -rf /var/tmp/x'") is raised one
@@ -167,6 +183,8 @@ checked if SafeShell is installed on that host.`},
    safeshell history [-n 20] [--json]       the decisions SafeShell recorded, newest first
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
    safeshell ai setup|status|stop|bench [--injection]   manage the built-in AI / measure it
+   safeshell stats [--prometheus FILE]      counts from the log; --prometheus writes them for node_exporter
+   safeshell note checks-off|not-checked N  what the shell hook calls to log events (not for typing)
    safeshell daemon [stop]           keep SafeShell warm in the background for faster checks
    safeshell guard -- <cmd>          what the shell hook runs for each command you type
    safeshell guard --agent           check a command an AI agent wants to run (JSON in, allow or deny out)

@@ -114,6 +114,8 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	loadHosts = func() (map[string]string, error) { return nil, nil }     // nor the developer's own host labels
 	learning = func() bool { return false }                               // nor the developer's own settings
 	plainSetting = func() bool { return false }                           // nor whether they asked for plain output
+	journalSocket = filepath.Join(d, "no-journal.sock")                   // nor the real journal
+	teamJournal = func() bool { return false }                            // nor an administrator's choice on this machine
 	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") } // nor the real state folder
 	os.Setenv("XDG_CONFIG_HOME", d)                                       // nor the developer's own config
 	code := m.Run()

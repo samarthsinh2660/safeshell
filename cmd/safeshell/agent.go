@@ -54,7 +54,7 @@ func recordAgent(line string, d domain.Decision, ans agenthook.Answer) {
 		outcome = "agent-allowed"
 	}
 	e := audit.Entry{Time: time.Now().UTC(), Line: report.MaskSecrets(line), Level: ans.Level, Decision: d.String(), Outcome: outcome}
-	_ = audit.Append(auditPath(), e) // a full disk must not stop a command
+	logEntry(e)
 }
 
 // agentAnswer analyses the command like the hook does and turns the result into

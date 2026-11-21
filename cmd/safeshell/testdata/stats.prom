@@ -1,0 +1,22 @@
+# HELP safeshell_commands_total Commands SafeShell checked, by risk level.
+# TYPE safeshell_commands_total counter
+safeshell_commands_total{level="R0"} 3
+safeshell_commands_total{level="R1"} 1
+safeshell_commands_total{level="R2"} 2
+safeshell_commands_total{level="R3"} 3
+safeshell_commands_total{level="R4"} 3
+# HELP safeshell_blocks_total Commands that were blocked, by kind of block.
+# TYPE safeshell_blocks_total counter
+safeshell_blocks_total{decision="block"} 4
+safeshell_blocks_total{decision="hard-block"} 2
+# HELP safeshell_overrides_total Blocked commands that were run anyway, by kind of block.
+# TYPE safeshell_overrides_total counter
+safeshell_overrides_total{decision="block"} 1
+safeshell_overrides_total{decision="hard-block"} 1
+# HELP safeshell_ai_raises_total Commands whose risk level the AI review raised.
+# TYPE safeshell_ai_raises_total counter
+safeshell_ai_raises_total 2
+# HELP safeshell_events_total Times SafeShell did not check a line: it failed (fail_open) or checks were turned off (checks_off).
+# TYPE safeshell_events_total counter
+safeshell_events_total{event="fail_open"} 2
+safeshell_events_total{event="checks_off"} 1

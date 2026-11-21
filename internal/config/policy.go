@@ -24,6 +24,31 @@ const maxPolicyBytes = 1 << 20
 // real use) and be writable by nobody else; a policy anyone could edit is
 // refused, with what to run to fix it.
 func LoadPolicy(path string, owner uint32) (rules []policy.Rule, found bool, err error) {
+	b, found, err := readPolicy(path, owner)
+	if err != nil || !found {
+		return nil, found, err
+	}
+	rules, err = policy.Parse(b)
+	if err != nil {
+		return nil, true, fmt.Errorf("the team policy %s was ignored: %w", path, err)
+	}
+	return rules, true, nil
+}
+
+// LoadPolicyJournal reports whether the team policy at path asks for audit
+// entries in the systemd journal. It trusts the file under the same rules as
+// LoadPolicy; a policy that is missing or refused asks for nothing.
+func LoadPolicyJournal(path string, owner uint32) bool {
+	b, found, err := readPolicy(path, owner)
+	if err != nil || !found {
+		return false
+	}
+	on, err := policy.Journal(b)
+	return err == nil && on
+}
+
+// readPolicy returns the bytes of the policy file once it is known to be trusted.
+func readPolicy(path string, owner uint32) (b []byte, found bool, err error) {
 	fi, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil
@@ -43,18 +68,14 @@ func LoadPolicy(path string, owner uint32) (rules []policy.Rule, found bool, err
 		return nil, true, fmt.Errorf("cannot read the team policy %s (%w). Everyone must be able to read it: sudo chmod 644 %s", path, err, path)
 	}
 	defer f.Close()
-	b, err := io.ReadAll(io.LimitReader(f, maxPolicyBytes+1))
+	b, err = io.ReadAll(io.LimitReader(f, maxPolicyBytes+1))
 	if err != nil {
 		return nil, true, fmt.Errorf("cannot read the team policy %s: %w", path, err)
 	}
 	if len(b) > maxPolicyBytes {
 		return nil, true, fmt.Errorf("the team policy %s is too big to be a policy file", path)
 	}
-	rules, err = policy.Parse(b)
-	if err != nil {
-		return nil, true, fmt.Errorf("the team policy %s was ignored: %w", path, err)
-	}
-	return rules, true, nil
+	return b, true, nil
 }
 
 // trusted: owned by owner and not writable by group or others.

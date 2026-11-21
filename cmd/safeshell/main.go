@@ -66,6 +66,9 @@ Usage:
   safeshell undo [ID]                       put back what the last approved command changed, and verify it
   safeshell snapshots [prune]               list saved snapshots / delete old ones (--older 30d, --max 5G)
   safeshell history [-n 20] [--json]        the decisions SafeShell recorded, newest first
+  safeshell stats [--prometheus FILE]       counts from the log: commands by level, blocks, overrides, AI raises,
+                                            failures; --prometheus writes them for node_exporter's textfile collector
+  safeshell note checks-off|not-checked N   what the shell hook calls to log "checks turned off" and "SafeShell failed"
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
   safeshell install [--ai]                  add the hook to your shell startup file (and set up the AI)
   safeshell uninstall                       remove the hook
@@ -160,6 +163,10 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runSnapshots(stdout, stderr)
 	case "history":
 		return runHistory(args[1:], stdout, stderr)
+	case "stats":
+		return runStats(args[1:], stdout, stderr)
+	case "note":
+		return runNote(args[1:], stderr)
 	case "guard":
 		return runGuard(args[1:], stdout, stderr, color)
 	case "agent":

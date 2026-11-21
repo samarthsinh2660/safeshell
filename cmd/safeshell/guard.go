@@ -186,7 +186,7 @@ func record(a engine.Analysis, cmd string, ran bool) {
 	if a.AI != nil {
 		e.AIProvider, e.AIRaised, e.AILevel, e.AIReason = a.AI.Provider, a.AI.Raised, a.AI.Level.String(), report.MaskSecrets(a.AI.Reason)
 	}
-	_ = audit.Append(auditPath(), e) // a full disk must not stop a command
+	logEntry(e)
 }
 
 // slashCommand handles lines like /models typed at the prompt. They open a

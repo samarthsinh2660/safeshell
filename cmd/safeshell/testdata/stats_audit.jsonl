@@ -1,0 +1,16 @@
+{"time":"2026-01-01T10:00:00Z","line":"ls","level":"R0","decision":"allow","outcome":"allowed"}
+{"time":"2026-01-01T10:00:01Z","line":"pwd","level":"R0","decision":"allow","outcome":"allowed"}
+{"time":"2026-01-01T10:00:02Z","line":"cp a b","level":"R1","decision":"allow","outcome":"allowed"}
+{"time":"2026-01-01T10:00:03Z","line":"git clean -fd","level":"R2","decision":"confirm","outcome":"ran"}
+{"time":"2026-01-01T10:00:04Z","line":"rm -rf build","level":"R3","decision":"block","outcome":"cancelled"}
+{"time":"2026-01-01T10:00:05Z","line":"rm -rf data","level":"R3","decision":"block","outcome":"ran","ai_provider":"local","ai_raised":true,"ai_level":"R3"}
+{"time":"2026-01-01T10:00:06Z","line":"rm -rf data2","level":"R3","decision":"block","outcome":"replaced","run":"rm -ri data2"}
+{"time":"2026-01-01T10:00:07Z","line":"dd if=/dev/zero of=/dev/sda","level":"R4","decision":"hard-block","outcome":"cancelled"}
+{"time":"2026-01-01T10:00:08Z","line":"mkfs.ext4 /dev/sdb","level":"R4","decision":"hard-block","outcome":"ran"}
+{"time":"2026-01-01T10:00:09Z","line":"chmod 777 x","level":"R2","decision":"confirm","outcome":"cancelled","ai_provider":"local","ai_raised":true,"ai_level":"R2"}
+{"time":"2026-01-01T10:00:10Z","line":"ls","level":"R0","decision":"allow","outcome":"agent-allowed"}
+{"time":"2026-01-01T10:00:11Z","line":"rm -rf /","level":"R4","decision":"block","outcome":"agent-denied"}
+{"time":"2026-01-01T10:00:12Z","line":"SAFESHELL_OFF is set in a terminal, so its commands are not checked","level":"","decision":"","outcome":"checks-off"}
+{"time":"2026-01-01T10:00:13Z","line":"SafeShell failed (exit 7), so a line was run without being checked","level":"","decision":"","outcome":"not-checked"}
+{"time":"2026-01-01T10:00:14Z","line":"SafeShell failed (exit 7), so a line was run without being checked","level":"","decision":"","outcome":"not-checked"}
+this line is damaged

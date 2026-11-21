@@ -31,6 +31,18 @@ type Entry struct {
 	AIReason   string `json:"ai_reason,omitempty"`
 }
 
+// Outcomes of an event that is not a decision about a command. These entries have
+// no level or decision; Line says what happened.
+const (
+	OutcomeChecksOff  = "checks-off"  // SAFESHELL_OFF was used: the line was not checked
+	OutcomeNotChecked = "not-checked" // SafeShell itself failed and the hook let the line through
+)
+
+// IsEvent is true for an entry that records one of those events, not a command.
+func (e Entry) IsEvent() bool {
+	return e.Outcome == OutcomeChecksOff || e.Outcome == OutcomeNotChecked
+}
+
 // Outcome names what happened to a command: the Outcome of its Entry, and the
 // replacement command that ran instead (empty unless the outcome is "replaced").
 // d is the decision, line the command as typed, cmd the command that was run
