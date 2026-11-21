@@ -33,10 +33,11 @@ const (
 const usage = `SafeShell: a safety layer for your terminal.
 
 Usage:
-  safeshell check [--json] <command...>     rate a command without running it
+  safeshell check [--json] [--plain] <command...>
+                                            rate a command without running it
   safeshell check --script FILE...          rate every command in scripts, line by line (rules only)
     [--format text|json|sarif|github] [--fail-on R2|R3|R4]
-  safeshell analyze [--json] [--verbose] [--cwd DIR] <command...>
+  safeshell analyze [--json] [--verbose] [--plain] [--cwd DIR] <command...>
                                             the full picture: risk level, a sandbox run, the real
                                             processes and disks it would hit, and safer options
   safeshell analyze [--verbose] [--cwd DIR] --script FILE
@@ -44,7 +45,7 @@ Usage:
   safeshell simulate [--json] [--verbose] [--cwd DIR] [--timeout 30s] <command...>
                                             run a command in a sandbox and show what it changed;
                                             the real files are never touched
-  safeshell guard [--cwd DIR] -- <command...>
+  safeshell guard [--plain] [--cwd DIR] -- <command...>
                                             what the shell hook runs: analyse, ask, print the command to run
   safeshell guard --agent                   for AI coding agents: one JSON command on stdin, an allow or deny answer
                                             on stdout, never a question; anything that is not allowed is denied
@@ -72,6 +73,8 @@ Usage:
   safeshell help [topic]                    short guides: start, safety, models, undo, commands and more
   safeshell doctor                          check every part: sandbox, hook, daemon, snapshots, AI; says what to fix
   safeshell tour                            a one-minute walk-through in a throwaway folder (nothing is left behind)
+
+--plain (or SAFESHELL_PLAIN=1) prints for screen readers: no colour or columns, one sentence per line.
 
 Quote the command so your shell passes it through untouched:
   safeshell check 'rm -rf ~/projects'
@@ -105,6 +108,9 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 			return 2
 		}
 		return runSubHelp(args[0], stdout)
+	}
+	if args[0] == "check" || args[0] == "analyze" || args[0] == "guard" {
+		args = append([]string{args[0]}, takePlain(args[1:])...)
 	}
 	switch args[0] {
 	case "check":

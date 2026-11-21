@@ -1,0 +1,3 @@
+Risk level 2 of 4: it changes things, and a snapshot can bring them back. SafeShell will ask you before running the command.
+The command is: rm notes.txt
+Reason, risk level 2 of 4: Deletes a file.

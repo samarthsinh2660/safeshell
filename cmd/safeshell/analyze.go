@@ -385,6 +385,10 @@ func printHostNote(w io.Writer, a engine.Analysis) {
 }
 
 func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bool) {
+	if plainOn() {
+		printPlainAnalysis(w, a, cwd, verbose)
+		return
+	}
 	c := newPalette(color)
 	col := c.level(a.Level)
 	decision := decisionText[a.Decision]
@@ -445,6 +449,10 @@ func printScriptAnalysis(w io.Writer, lines []classify.LineFinding, a engine.Ana
 	c := newPalette(color)
 	level := max(classify.ScriptLevel(lines), a.Level)
 	printScriptLines(w, lines, c)
+	if plainOn() {
+		printPlainScriptTail(w, lines, a, cwd, verbose, level)
+		return
+	}
 	if a.Level > classify.ScriptLevel(lines) {
 		fmt.Fprintf(w, "\n%sThe lines alone looked like %s; what the script would really do raised it to %s.%s\n", c.dim, classify.ScriptLevel(lines), a.Level, c.reset)
 	}

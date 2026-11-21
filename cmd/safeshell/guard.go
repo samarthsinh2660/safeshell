@@ -123,9 +123,17 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true
 	if proposed && a.Decision == domain.Allow {
-		ok = ui.Proceed(in, stderr, !changesShell(line)) // the assistant wrote it, so the person always sees it first
+		proceed := ui.Proceed
+		if plainOn() {
+			proceed = ui.ProceedPlain
+		}
+		ok = proceed(in, stderr, !changesShell(line)) // the assistant wrote it, so the person always sees it first
 	} else {
-		cmd, ok = ui.Choose(in, stderr, line, a.Decision, a.Verdict.Alternatives)
+		choose := ui.Choose
+		if plainOn() {
+			choose = ui.ChoosePlain
+		}
+		cmd, ok = choose(in, stderr, line, a.Decision, a.Verdict.Alternatives)
 	}
 	record(a, cmd, ok)
 	if ok && cmd == line { // a replacement command has different effects, so the saved files do not apply

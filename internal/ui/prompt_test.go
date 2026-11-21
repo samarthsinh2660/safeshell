@@ -67,3 +67,60 @@ func TestProceedCanDefaultToNo(t *testing.T) {
 		}
 	}
 }
+
+func TestChoosePlainAcceptsTheSameAnswersAsChoose(t *testing.T) {
+	for _, d := range []domain.Decision{domain.Confirm, domain.Block, domain.HardBlock} {
+		for _, in := range []string{"", "\n", "y\n", "yes\n", "c\n", "1\n", "2\n", "9\nc\n", "d\nyes\n", "d\nno\n", "zzz\n", HardPhrase + "\n"} {
+			var a, b strings.Builder
+			wantCmd, wantOk := Choose(bufio.NewReader(strings.NewReader(in)), &a, "rm -rf proj", d, alts)
+			gotCmd, gotOk := ChoosePlain(bufio.NewReader(strings.NewReader(in)), &b, "rm -rf proj", d, alts)
+			if gotCmd != wantCmd || gotOk != wantOk {
+				t.Errorf("%v %q: plain (%q,%v), default (%q,%v)", d, in, gotCmd, gotOk, wantCmd, wantOk)
+			}
+		}
+	}
+	if cmd, ok := ChoosePlain(bufio.NewReader(strings.NewReader("")), &strings.Builder{}, "ls", domain.Allow, nil); cmd != "ls" || !ok {
+		t.Error("an allowed command runs")
+	}
+}
+
+func TestChoosePlainSpellsOutTheChoicesAndAsksLast(t *testing.T) {
+	var out strings.Builder
+	ChoosePlain(bufio.NewReader(strings.NewReader("c\n")), &out, "rm -rf proj", domain.Block, alts)
+	for _, want := range []string{
+		"Type c to cancel.", "Type 1 to run the safer command: trash proj\n", "Type 2 to run the safer command: mv proj /tmp/x\n",
+		"Type d to run it anyway.", "\nWhat do you want to do? ",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("missing %q in %q", want, out.String())
+		}
+	}
+	if !strings.HasSuffix(out.String(), "What do you want to do? ") || strings.ContainsAny(out.String(), "[]") {
+		t.Errorf("the question is last and there are no brackets: %q", out.String())
+	}
+	out.Reset()
+	ChoosePlain(bufio.NewReader(strings.NewReader("d\nyes\n")), &out, "rm -rf proj", domain.Block, nil)
+	if strings.Contains(out.String(), "safer command") || !strings.HasSuffix(out.String(), "Do you want to run it? ") {
+		t.Errorf("%q", out.String())
+	}
+	out.Reset()
+	ChoosePlain(bufio.NewReader(strings.NewReader("\n")), &out, "rm -rf /", domain.HardBlock, alts)
+	if !strings.Contains(out.String(), "type exactly: "+HardPhrase+"\n") || !strings.HasSuffix(out.String(), "Do you want to run it anyway? ") {
+		t.Errorf("%q", out.String())
+	}
+}
+
+func TestProceedPlainTakesTheSameAnswers(t *testing.T) {
+	for _, enterRuns := range []bool{true, false} {
+		for _, in := range []string{"\n", "", "y\n", "yes\n", "n\n", "no\n", "x\n"} {
+			var out strings.Builder
+			want := Proceed(bufio.NewReader(strings.NewReader(in)), &strings.Builder{}, enterRuns)
+			if got := ProceedPlain(bufio.NewReader(strings.NewReader(in)), &out, enterRuns); got != want {
+				t.Errorf("%v %q: plain %v, default %v", enterRuns, in, got, want)
+			}
+			if !strings.HasSuffix(out.String(), "Do you want to run it? ") || strings.ContainsAny(out.String(), "[]") {
+				t.Errorf("%q", out.String())
+			}
+		}
+	}
+}

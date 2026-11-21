@@ -78,6 +78,19 @@ Commands that only read (R0) get no line. Commands SafeShell stops or asks about
 explained in full, so they get nothing extra.
 It only adds output: it never changes what is allowed or blocked, and it needs no AI.
 The setting is "learn": true in ~/.config/safeshell/config.json.`},
+	{"accessibility", "Plain output for screen readers", `Turn it on for one command:
+     safeshell check --plain 'rm -rf build'      (also analyze and guard)
+for one terminal:  export SAFESHELL_PLAIN=1
+or for good: "plain": true in ~/.config/safeshell/config.json.
+Plain output has no colour, no aligned columns and no symbols. Every line is one full sentence, for example:
+     Risk level 3 of 4: this cannot be undone. The command is blocked, but you can choose to override that.
+The choices are spelled out in words and the question comes last:
+     Type c to cancel. Pressing Enter also cancels.
+     Type 1 to run the safer command: trash-put build
+     Type d to run it anyway. You will be asked to type yes to confirm.
+     What do you want to do?
+The answers are the same as without it (c, d, a number, yes, the typed phrase), so nothing you have learned changes.
+A command is shown exactly as it is, with no full stop added. NO_COLOR=1 already turns colour off.`},
 	{"pause", "Turn SafeShell off and on", `Once installed, SafeShell checks every terminal with nothing to start. To pause it:
      safeshell deactivate       every terminal, open ones and new ones, stops checking
      safeshell activate         every terminal checks again
