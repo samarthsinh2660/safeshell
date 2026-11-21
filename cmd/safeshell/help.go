@@ -58,6 +58,9 @@ Needs an AI model: see  safeshell help models. What it is told: see  safeshell h
 Graphics: the engine uses CUDA on a recent NVIDIA driver, otherwise Vulkan, otherwise the CPU, and
    falls back automatically if the graphics card fails. See what is used with  safeshell doctor.
    Force one with "gpu": "cuda" | "vulkan" | "cpu" under ai.local in ~/.config/safeshell/config.json.
+Offline lab or distro package: set "engine": "system" under ai.local (default "bundled") to use the
+   llama-server found on your PATH. No engine is downloaded. Copy the model file into
+   ~/.local/share/safeshell/models/ by hand; it is used once its checksum matches. doctor and ai status say which engine is used.
 The AI can only make SafeShell MORE careful. It can never let a blocked command through.
 Commands:  safeshell ai setup | safeshell ai status | safeshell ai stop
 Test a model: safeshell ai bench scores it on English requests. safeshell ai bench --injection shows it commands

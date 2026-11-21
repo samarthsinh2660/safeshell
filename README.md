@@ -296,6 +296,11 @@ Anything that would loosen (a level below R1, an `allow`, a folder outside the p
   server (CUDA, Vulkan or CPU, picked for your machine) and the model. Starts on demand, stops when idle.
   A model counts as downloaded only when its checksum matches (a small `.sha256` file is kept next to it).
   Nothing is downloaded until you ask.
+  **Offline labs and distro packages:** set `"ai": {"local": {"engine": "system"}}` in
+  `~/.config/safeshell/config.json` to use the `llama-server` found on your `PATH` instead (default `"bundled"`).
+  Nothing is downloaded for the engine, and a missing `llama-server` is reported with what to install. Copy
+  the model file into `~/.local/share/safeshell/models/` by hand: it is used once its SHA-256 matches the pinned one.
+  `safeshell doctor` and `safeshell ai status` show which engine is used.
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
 - **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
