@@ -48,6 +48,16 @@ func TestWritePaths(t *testing.T) {
 		{"ls | xargs echo", nil, true},
 		{"ls -l", nil, true},
 		{"frobnicate x", nil, true},
+		{"touch a b", []string{"/w/a", "/w/b"}, true},
+		{"touch -d yesterday -r ref f", []string{"/w/f"}, true},
+		{"mkdir -p -m 700 d/e", []string{"/w/d/e"}, true},
+		{"ln -s a d/l", []string{"/w/d/l => /w/d/l/a"}, true},
+		{"ln -s /opt/app/bin", []string{"/w/bin"}, true},
+		{"ln -t d a", nil, false},
+		{"rsync -a --exclude .git src/ d/", []string{"/w/d/src"}, true},
+		{"rsync -e ssh a host:backup/", nil, true},
+		{"rsync a ./host:x", []string{"/w/host:x => /w/host:x/a"}, true},
+		{"ls | xargs touch", nil, false},
 	}
 	for _, tc := range tests {
 		res, err := shellparse.Parse(tc.line)
