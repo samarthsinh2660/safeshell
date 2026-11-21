@@ -45,7 +45,7 @@ func WritePaths(cmds []shellparse.Command, cwd string) (out []Written, complete 
 	for _, c := range cmds {
 		ops, ok := operandPaths(c)
 		complete = complete && ok
-		if (c.Name == "mv" || c.Name == "cp") && len(ops) >= 2 {
+		if (c.Name == "mv" || c.Name == "cp" || c.Name == "ln" || c.Name == "rsync") && len(ops) >= 2 {
 			srcs, dst := ops[:len(ops)-1], ops[len(ops)-1]
 			if c.Name == "mv" {
 				for _, s := range srcs {
@@ -90,7 +90,7 @@ func under(dir, p string) string {
 }
 
 // writers are the commands whose files are read from elsewhere when run through xargs or find.
-var writers = map[string]bool{"rm": true, "mv": true, "cp": true, "shred": true, "srm": true, "truncate": true, "chmod": true, "chown": true, "chgrp": true, "unlink": true, "tee": true, "sed": true, "perl": true}
+var writers = map[string]bool{"rm": true, "mv": true, "cp": true, "shred": true, "srm": true, "truncate": true, "chmod": true, "chown": true, "chgrp": true, "unlink": true, "tee": true, "sed": true, "perl": true, "touch": true, "mkdir": true, "ln": true, "rsync": true}
 
 // operandPaths are the files c's own arguments name as the ones it changes.
 // ok is false when they cannot all be known. A command not listed names none
@@ -122,10 +122,27 @@ func operandPaths(c shellparse.Command) (ops []string, ok bool) {
 		return parseFlags(dropValues(args, "-s", "--size", "-r", "--reference")).pos, true
 	case "rm", "unlink", "shred", "srm", "tee":
 		return parseFlags(args).pos, true
+	case "touch":
+		return parseFlags(dropValues(args, "-d", "-r", "-t", "--date", "--reference")).pos, true
+	case "mkdir":
+		return parseFlags(dropValues(args, "-m", "--mode")).pos, true
+	case "ln":
+		if slices.ContainsFunc(args, isTargetDir) {
+			return nil, false
+		}
+		pos := parseFlags(args).pos
+		if len(pos) == 1 { // ln -s /a/b makes ./b
+			pos = []string{path.Base(pos[0])}
+		}
+		return pos, true // WritePaths splits the target from the link
+	case "rsync":
+		pos := parseFlags(dropValues(args, "-e", "--rsh", "-f", "--filter", "--exclude", "--include", "--exclude-from", "--include-from", "--files-from")).pos
+		if len(pos) > 0 && remote(pos[len(pos)-1]) {
+			return nil, true // it changes another machine, not a file here
+		}
+		return pos, true // WritePaths splits sources from the destination
 	case "mv", "cp":
-		if slices.ContainsFunc(args, func(a string) bool {
-			return a == "-t" || a == "--target-directory" || strings.HasPrefix(a, "--target-directory=")
-		}) {
+		if slices.ContainsFunc(args, isTargetDir) {
 			return nil, false
 		}
 		return parseFlags(args).pos, true // WritePaths splits sources from the destination
@@ -135,6 +152,17 @@ func operandPaths(c shellparse.Command) (ops []string, ok bool) {
 		}
 	}
 	return nil, true
+}
+
+// isTargetDir is mv, cp and ln's -t option: the destination comes first, which is not read here.
+func isTargetDir(a string) bool {
+	return a == "-t" || a == "--target-directory" || strings.HasPrefix(a, "--target-directory=")
+}
+
+// remote is an rsync or scp operand on another machine: host:path, with no slash before the colon.
+func remote(p string) bool {
+	i := strings.IndexByte(p, ':')
+	return i > 0 && !strings.Contains(p[:i], "/")
 }
 
 func isInPlace(a string) bool {
