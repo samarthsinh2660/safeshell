@@ -98,3 +98,14 @@ func TestTrustedNeedsStatInformation(t *testing.T) {
 		t.Error("nothing known is not trusted")
 	}
 }
+
+func TestLoadTeamReportsStrict(t *testing.T) {
+	me := uint32(os.Getuid())
+	f, found, err := LoadTeam(policyFile(t, 0o755, 0o644, `{"strict":true,"rules":[{"match":"rm","min_level":"R3"}]}`), me)
+	if err != nil || !found || !f.Strict || len(f.Rules) != 1 {
+		t.Fatalf("%+v %v %v", f, found, err)
+	}
+	if f, _, _ := LoadTeam(policyFile(t, 0o755, 0o644, goodPolicy), me); f.Strict {
+		t.Error("a policy without strict must not turn it on")
+	}
+}

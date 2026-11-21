@@ -37,30 +37,44 @@ type wire struct {
 	MinLevel string  `json:"min_level"`
 }
 
-// Parse reads a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
+// File is a whole policy file: its rules, and whether the admin turns strict
+// mode on for everyone. A policy can turn strict on, never off.
+type File struct {
+	Rules  []Rule
+	Strict bool
+}
+
+// Parse reads the rules of a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
+func Parse(data []byte) ([]Rule, error) {
+	f, err := ParseFile(data)
+	return f.Rules, err
+}
+
+// ParseFile reads a policy file: {"strict":true,"rules":[...]}.
 // It refuses anything it does not understand, so a rule that tries to loosen
 // something (an unknown field such as "allow") is an error, never ignored.
-func Parse(data []byte) ([]Rule, error) {
+func ParseFile(data []byte) (File, error) {
 	var f struct {
-		Rules []wire `json:"rules"`
+		Rules  []wire `json:"rules"`
+		Strict bool   `json:"strict"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
-		return nil, fmt.Errorf("%w (a policy can only make things stricter; the fields are rules, match, block, snapshot and min_level)", err)
+		return File{}, fmt.Errorf("%w (a policy can only make things stricter; the fields are strict, rules, match, block, snapshot and min_level)", err)
 	}
 	if dec.More() {
-		return nil, errors.New("there is text after the end of the policy")
+		return File{}, errors.New("there is text after the end of the policy")
 	}
 	var rules []Rule
 	for i, w := range f.Rules {
 		r, err := w.rule(i + 1)
 		if err != nil {
-			return nil, err
+			return File{}, err
 		}
 		rules = append(rules, r)
 	}
-	return rules, nil
+	return File{Rules: rules, Strict: f.Strict}, nil
 }
 
 // rule checks one rule as written; n is its place in the file, for the message.

@@ -27,6 +27,10 @@ type Config struct {
 	// Plain turns on plain output for screen readers: no colour or columns,
 	// one full sentence per line and the choices spelled out in words.
 	Plain bool `json:"plain"`
+	// Strict makes the shell hook fail closed: when SafeShell itself breaks,
+	// only plain read-only commands run, and SAFESHELL_OFF is refused. A team
+	// policy can turn it on for everyone; nothing turns it off from there.
+	Strict bool `json:"strict"`
 	// Snapshots caps what undo keeps. After each new snapshot the oldest are
 	// deleted until none is older than KeepDays and all together fit in MaxGiB.
 	Snapshots struct {

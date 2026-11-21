@@ -83,6 +83,39 @@ func TestGuardUsageErrors(t *testing.T) {
 	}
 }
 
+func TestHookIsStrictWhenTheSettingOrTheTeamPolicyAsksForIt(t *testing.T) {
+	cfg := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "safeshell", "config.json")
+	defer os.Remove(cfg)
+	oldTeam := teamFile
+	defer func() { teamFile = oldTeam }()
+	strict := func() bool {
+		code, out, _ := runSS("hook", "bash")
+		return code == 0 && strings.Contains(out, "SAFESHELL_OFF is ignored")
+	}
+	if strict() {
+		t.Fatal("strict mode must be off by default")
+	}
+	_ = os.MkdirAll(filepath.Dir(cfg), 0o700)
+	_ = os.WriteFile(cfg, []byte(`{"strict":true}`), 0o600)
+	if !strict() {
+		t.Error("the setting did not turn strict mode on")
+	}
+	_ = os.WriteFile(cfg, []byte(`{"strict":false}`), 0o600)
+	teamFile = func() (policy.File, bool, error) { return policy.File{Strict: true}, true, nil }
+	if !strict() {
+		t.Error("the team policy did not turn strict mode on")
+	}
+	if code, out, _ := runSS("hook", "zsh"); code != 0 || !strings.Contains(out, "SAFESHELL_OFF is ignored") {
+		t.Error("zsh hook is not strict")
+	}
+	teamFile = func() (policy.File, bool, error) { return policy.File{}, true, errors.New("bad policy") }
+	_ = os.WriteFile(cfg, []byte(`{"strict":`), 0o600)
+	code, out, errOut := runSS("hook", "bash")
+	if code != 0 || strings.Contains(out, "SAFESHELL_OFF is ignored") || !strings.Contains(errOut, "settings file") || !strings.Contains(errOut, "team policy") {
+		t.Errorf("unreadable settings: %d %q", code, errOut)
+	}
+}
+
 func TestHookPrintsScript(t *testing.T) {
 	code, out, _ := runSS("hook", "bash")
 	if code != 0 || !strings.Contains(out, "-x '\"\\C-x\\C-s\": __ss_guard'") {
@@ -109,7 +142,9 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	backend = func() (ai.Backend, error) { return nil, nil }                 // tests never reach a real model
 	socketPath = func() string { return filepath.Join(d, "no-daemon.sock") } // nor a real daemon
 	realLoadPolicy = loadPolicy
-	loadPolicy = func() ([]policy.Rule, bool, error) { return nil, false, nil } // nor a policy on this machine
+	realTeamFile = teamFile
+	loadPolicy = func() ([]policy.Rule, bool, error) { return nil, false, nil }       // nor a policy on this machine
+	teamFile = func() (policy.File, bool, error) { return policy.File{}, false, nil } // nor its team policy
 	realLoadHosts = loadHosts
 	loadHosts = func() (map[string]string, error) { return nil, nil } // nor the developer's own host labels
 	realLoadProtected = loadProtected

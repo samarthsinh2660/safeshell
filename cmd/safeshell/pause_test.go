@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 )
 
 func TestDeactivateAndActivate(t *testing.T) {
@@ -77,5 +79,27 @@ func TestDoctorSaysWhenPaused(t *testing.T) {
 	runSS("activate")
 	if out := doctorOut(t); strings.Contains(out, "paused") {
 		t.Errorf("not paused any more:\n%s", out)
+	}
+}
+
+func TestDeactivateIsRefusedInStrictModeButActivateWorks(t *testing.T) {
+	home := doctorHome(t)
+	off := filepath.Join(home, "state", "safeshell", "off")
+	old := teamFile
+	defer func() { teamFile = old }()
+	teamFile = func() (policy.File, bool, error) { return policy.File{Strict: true}, true, nil }
+	if code, out, e := runSS("deactivate"); code != 1 || out != "" || !strings.Contains(e, "strict mode is on") {
+		t.Errorf("deactivate: %d %q %q", code, out, e)
+	}
+	if _, err := os.Stat(off); err == nil {
+		t.Fatal("deactivate created the off file in strict mode")
+	}
+	_ = os.MkdirAll(filepath.Dir(off), 0o700)
+	_ = os.WriteFile(off, nil, 0o600)
+	if code, _, _ := runSS("activate"); code != 0 {
+		t.Error("activate must still work")
+	}
+	if _, err := os.Stat(off); err == nil {
+		t.Error("activate did not remove the off file")
 	}
 }

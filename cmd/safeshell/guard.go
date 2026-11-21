@@ -163,7 +163,11 @@ func runHook(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "safeshell hook: cannot find where safeshell is installed:", err)
 		return 1
 	}
-	s, err := shellhook.Script(args[0], bin)
+	script := shellhook.Script
+	if strictOn(stderr) {
+		script = shellhook.StrictScript
+	}
+	s, err := script(args[0], bin)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell hook:", err)
 		return 2

@@ -128,6 +128,10 @@ safeshell activate       # checking is back on, nothing to restart
 
 While paused, commands run with no check and no delay. `SAFESHELL_OFF=1` pauses one terminal only. `safeshell doctor` tells you when checking is paused.
 
+### Strict mode
+
+By default the shell hook lets a line through, with a warning, when SafeShell itself breaks (missing, crashed), so you are never locked out. Set `"strict": true` in `~/.config/safeshell/config.json` and start a new terminal to fail closed instead: when SafeShell breaks, only plain read-only lines (`ls`, `pwd`, `cd`, `echo`, `cat`, `head`, `tail`, `wc`, `whoami`, `id`, `uname`, `df`, `du`, `uptime`, `clear`, `true`, `false`, with plain words and no quotes, variables, redirects, pipes or `;`) still run; everything else is cancelled with a message. `SAFESHELL_OFF=1` is refused: it prints a note and each line is still checked. `safeshell deactivate` is refused and a pause file is ignored with a note. An administrator can turn it on for everyone with `"strict": true` in the team policy (it can never be turned off there). See `safeshell help strict`.
+
 Without the hook you can use the pieces directly:
 
 ```bash
@@ -218,6 +222,8 @@ On a shared machine, an administrator can put rules in `/etc/safeshell/policy.js
   {"match": "rm", "min_level": "R3"}
 ]}
 ```
+
+Add `"strict": true` next to `"rules"` to turn on strict mode for everyone (see above); a rules-free `{"strict": true}` is a valid policy.
 
 `match` is a command followed by the words that must come next (`apt purge` also matches `sudo apt -y purge nginx`). A rule can `block` with a reason (no "do it anyway"), ask for a `snapshot`, or set a `min_level` of R1 to R4. A rule that tries anything else, such as lowering a level, is rejected with an error. The file must be owned by root and not writable by anyone else (and so must `/etc/safeshell`), or it is ignored with a warning. The file must be readable by everyone. `safeshell doctor` shows which policy is active.
 
