@@ -16,11 +16,18 @@ More filesystems, big folders and offline machines.
 ### Changed
 - Changes to small files sitting directly in a folder that holds a mount point (up to 256 KiB each, 2 MiB in all) are now seen by the sandbox; bigger ones stay flagged as before. (#70)
 - `scripts/install-apparmor.sh` gives each binary its own AppArmor profile and refuses files owned by a package; an old single profile is replaced. (#66)
+- The AI bench has 68 English requests (was 49), adding packages, services, disk use, archives, ports, git, ssh and four destructive requests that must be refused. Local Qwen 3B: 68 of 68, 0 too dangerous. (#239)
+- Dependabot proposes GitHub Action updates only once a release is a week old. (#235)
 
 ### Fixed
 - A command that removes the search bit from a folder (`chmod -R 600 .`) made the simulation fail. (#225)
 - Deleting old btrfs snapshots failed because they are read-only. (#224)
 - `safeshell doctor` showed the snapshot backend twice, once as a guess from the root filesystem. (#228)
+- Undo never takes a native snapshot that would miss files (a nested btrfs subvolume or a child ZFS dataset inside a changed folder), or that the user could not delete later; it copies instead. Pruning goes on past a snapshot it cannot delete, and a ZFS snapshot folder that is not readable yet is waited for instead of giving an empty snapshot. (#234)
+- `safeshell ai status` and `doctor` said the local engine was not installed when `ai.local.engine` is `system`. (#230)
+- Undo after `systemctl disable` re-enabled a unit that was only enabled until the next boot permanently; it now uses `enable --runtime`. (#231)
+- The size check now sizes every source of `cp -t DIR` and `mv --target-directory`; loose-file copies in the sandbox can no longer block on a pipe or read a file that grew; a new file in a partly mirrored folder with no other loose files is now seen. (#232)
+- A release could be cancelled by an ordinary pull request merging at the same moment. (#235)
 
 ## 1.8.0 - 2026-11-21
 
