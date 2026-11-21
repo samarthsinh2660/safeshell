@@ -34,11 +34,13 @@ func Detect(shellEnv, home string) (Shell, error) {
 	return Shell{}, errors.New("only bash, zsh and fish are supported (your shell is " + filepath.Base(shellEnv) + ")")
 }
 
+// block is the startup-file text. It skips the hook when this shell already has it
+// (a machine-wide install loaded it first); there is no return, so the rest of the file still runs.
 func block(sh Shell, bin string) string {
 	if sh.Name == "fish" {
-		return begin + "\ntest -x " + shellhook.FishQuote(bin) + "; and " + shellhook.FishQuote(bin) + " hook fish | source\n" + end + "\n"
+		return begin + "\ntest -x " + shellhook.FishQuote(bin) + "; and test \"$SAFESHELL_HOOK\" != \"$fish_pid\"; and " + shellhook.FishQuote(bin) + " hook fish | source\n" + end + "\n"
 	}
-	return begin + "\n[ -x " + quote(bin) + " ] && eval \"$(" + quote(bin) + " hook " + sh.Name + ")\"\n" + end + "\n"
+	return begin + "\n[ -x " + quote(bin) + " ] && { [ \"${SAFESHELL_HOOK-}\" = \"$$\" ] || eval \"$(" + quote(bin) + " hook " + sh.Name + ")\"; }\n" + end + "\n"
 }
 
 func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

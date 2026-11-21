@@ -141,7 +141,7 @@ func TestInstallAndUninstallForFish(t *testing.T) {
 		t.Fatalf("%d %q", code, out)
 	}
 	b, _ := os.ReadFile(file)
-	if !strings.Contains(string(b), "test -x '/opt/ss/safeshell'; and '/opt/ss/safeshell' hook fish | source") {
+	if !strings.Contains(string(b), "test -x '/opt/ss/safeshell'; and test \"$SAFESHELL_HOOK\" != \"$fish_pid\"; and '/opt/ss/safeshell' hook fish | source") {
 		t.Errorf("%s", b)
 	}
 	if code, out, _ := runSS("uninstall"); code != 0 || !strings.Contains(out, "Removed the SafeShell hook from "+file) {
@@ -152,9 +152,87 @@ func TestInstallAndUninstallForFish(t *testing.T) {
 	}
 }
 
+// fakeSystem points --system at a temp root and sets whether we are root.
+func fakeSystem(t *testing.T, root bool) string {
+	t.Helper()
+	oldRoot, oldIs := systemRoot, isRoot
+	t.Cleanup(func() { systemRoot, isRoot = oldRoot, oldIs })
+	dir := t.TempDir()
+	systemRoot, isRoot = dir, func() bool { return root }
+	return dir
+}
+
+func TestSystemInstallAndUninstallNeedRoot(t *testing.T) {
+	dir := fakeSystem(t, false)
+	for _, cmd := range []string{"install", "uninstall"} {
+		code, _, e := runSS(cmd, "--system")
+		if code != 1 || !strings.Contains(e, "must run as root") || !strings.Contains(e, "sudo safeshell "+cmd+" --system") {
+			t.Errorf("%s: %d %q", cmd, code, e)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "etc")); !os.IsNotExist(err) {
+		t.Error("nothing may be written without root")
+	}
+}
+
+func TestSystemInstallAndUninstallRoundTrip(t *testing.T) {
+	dir := fakeSystem(t, true)
+	fakeExecutable(t, "/usr/bin/safeshell", nil)
+	file := filepath.Join(dir, "etc/profile.d/safeshell.sh")
+	if code, out, e := runSS("install", "--system"); code != 0 || !strings.Contains(out, "Added the SafeShell hook for every user") || !strings.Contains(out, file) {
+		t.Fatalf("%d %q %q", code, out, e)
+	}
+	if code, out, _ := runSS("install", "--system"); code != 0 || !strings.Contains(out, "already set up") {
+		t.Errorf("second run: %d %q", code, out)
+	}
+	if code, out, _ := runSS("uninstall", "--system"); code != 0 || !strings.Contains(out, "Removed the SafeShell hook for every user") || !strings.Contains(out, file) {
+		t.Fatalf("%d %q", code, out)
+	}
+	if _, err := os.Stat(file); !os.IsNotExist(err) {
+		t.Error("uninstall must delete the file it created")
+	}
+	if code, out, _ := runSS("uninstall", "--system"); code != 0 || !strings.Contains(out, "was not set up") {
+		t.Errorf("again: %d %q", code, out)
+	}
+}
+
+func TestSystemInstallRejectsOtherArguments(t *testing.T) {
+	fakeSystem(t, true)
+	if code, _, e := runSS("install", "--system", "--ai"); code != 2 || e == "" {
+		t.Errorf("--system --ai: %d %q", code, e)
+	}
+	if code, _, _ := runSS("uninstall", "--bogus"); code != 2 {
+		t.Errorf("uninstall --bogus: %d", code)
+	}
+}
+
+func TestSystemInstallAndUninstallReportFailures(t *testing.T) {
+	dir := fakeSystem(t, true)
+	fakeExecutable(t, "", errors.New("gone"))
+	if code, _, e := runSS("install", "--system"); code != 1 || !strings.Contains(e, "gone") {
+		t.Errorf("no binary: %d %q", code, e)
+	}
+	fakeExecutable(t, "/usr/bin/safeshell", nil)
+	if err := os.MkdirAll(filepath.Join(dir, "etc/profile.d/safeshell.sh"), 0o755); err != nil { // a folder where the file goes
+		t.Fatal(err)
+	}
+	if code, _, e := runSS("install", "--system"); code != 1 || !strings.Contains(e, "safeshell install:") {
+		t.Errorf("install: %d %q", code, e)
+	}
+	if code, _, e := runSS("uninstall", "--system"); code != 1 || !strings.Contains(e, "safeshell uninstall:") {
+		t.Errorf("uninstall: %d %q", code, e)
+	}
+}
+
 func TestFishHookNamesTheBinaryItCalls(t *testing.T) {
 	fakeExecutable(t, "/opt/it's/safeshell", nil)
 	if code, out, _ := runSS("hook", "fish"); code != 0 || !strings.Contains(out, `'/opt/it\'s/safeshell' $argv`) {
 		t.Errorf("%d %q", code, out)
+	}
+}
+
+func TestIsRootAsksTheKernel(t *testing.T) {
+	if isRoot() != (os.Geteuid() == 0) {
+		t.Error("isRoot does not match the effective user id")
 	}
 }

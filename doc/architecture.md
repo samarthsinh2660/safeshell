@@ -101,7 +101,7 @@ safeshell/                        repository root = Go module root
 │   │   └── providers/        the hosted providers on offer: ids, keys, default models, model lists
 │   ├── models/               catalog of local models
 │   ├── runtime/              downloads, verifies and runs the local engine (llama.cpp); XDG data dirs
-│   ├── install/              adds and removes the shell hook in the user's startup file
+│   ├── install/              adds and removes the shell hook in the user's startup file, or (`--system`, root, root folder injectable) in the machine-wide files under /etc using marker blocks that are removed byte for byte; the user and system blocks both skip loading when `SAFESHELL_HOOK` equals the shell's pid, so a shell never gets two hooks
 │   ├── ipc/                  wire protocol + client + server for the daemon socket (the daemon command is in cmd/safeshell/daemon.go)
 │   ├── shellhook/            embedded bash/zsh/fish scripts + the hook text
 │   ├── voice/                microphone recorder + local whisper.cpp transcriber, set up by `safeshell voice setup`
@@ -325,7 +325,7 @@ Rules for this step:
 |---|---|
 | R3/R4 false negatives on corpus | 0 |
 | Overall level accuracy | reported, improved over phases |
-| Hook latency for R0/R1 (p95) | < 20 ms |
+| Hook latency for R0/R1 (p95) | < 20 ms (measured: `safeshell guard` about 9 ms p95 as a new process, classifier alone under 10 µs; `TestGuardLatencyForSafeLines` fails above 50 ms and `TestClassifySafeLinesP95` above 500 µs, and CI logs both numbers) |
 | Sandbox diff equals real run in a VM | identical for filesystem effects |
 | Undo restores exact tree hash | 100 % of verified plans |
 | AI impact review: harmful changes it caught that rules/scorer missed, and false alarms it raised | reported (compared with rules-only on the same corpus) |

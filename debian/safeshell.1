@@ -117,8 +117,13 @@ Pause checking in every terminal, open and new, and turn it back on. Nothing nee
 .B learn [on|off|status]
 Learning mode, off by default. When on, each command that passes without a warning gets one line saying what it does, its level and the safer form. It only adds output.
 .TP
-.B install [--ai], uninstall
+.B install [--ai|--system], uninstall [--system]
 Add or remove the shell hook. Running install again after moving or reinstalling safeshell updates the hook to the new path.
+With \-\-system (run as root, for example with sudo) the hook is installed for every user of the machine, in
+/etc/profile.d/safeshell.sh, /etc/bash.bashrc, /etc/zsh/zshrc and /etc/fish/conf.d/safeshell.fish (each only when that shell
+is installed). It only runs in interactive shells and is skipped when the shell already has the hook.
+Running it again changes nothing; uninstall \-\-system restores every edited file exactly and deletes the files it created.
+The package does not enable it.
 .TP
 .B hook bash|zsh|fish
 Print the shell hook.

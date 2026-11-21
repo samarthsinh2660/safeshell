@@ -71,7 +71,8 @@ Usage:
   safeshell note checks-off|not-checked N   what the shell hook calls to log "checks turned off" and "SafeShell failed"
   safeshell daemon [stop]                   keep SafeShell warm in the background (optional; faster checks)
   safeshell install [--ai]                  add the hook to your shell startup file (and set up the AI)
-  safeshell uninstall                       remove the hook
+  safeshell install --system                (root) add the hook for every user of this machine
+  safeshell uninstall [--system]            remove the hook
   safeshell hook bash|zsh|fish              print the shell hook; add  eval "$(safeshell hook bash)"  to your rc file
   safeshell version                         which release this is
   safeshell help [topic]                    short guides: start, safety, models, undo, commands and more
@@ -130,10 +131,7 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 	case "install":
 		return runInstall(args[1:], stdout, stderr)
 	case "uninstall":
-		if !unexpectedArgs("uninstall", args[1:], stderr) {
-			return 2
-		}
-		return runUninstall(stdout, stderr)
+		return runUninstall(args[1:], stdout, stderr)
 	case "models":
 		return runModels(args[1:], guardInput(), stdout, stderr)
 	case "help":
