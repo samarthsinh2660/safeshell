@@ -141,7 +141,7 @@ func TestInstallAndUninstallForFish(t *testing.T) {
 		t.Fatalf("%d %q", code, out)
 	}
 	b, _ := os.ReadFile(file)
-	if !strings.Contains(string(b), "test -x '/opt/ss/safeshell'; and '/opt/ss/safeshell' hook fish | source") {
+	if !strings.Contains(string(b), "test -x '/opt/ss/safeshell'; and test \"$SAFESHELL_HOOK\" != \"$fish_pid\"; and '/opt/ss/safeshell' hook fish | source") {
 		t.Errorf("%s", b)
 	}
 	if code, out, _ := runSS("uninstall"); code != 0 || !strings.Contains(out, "Removed the SafeShell hook from "+file) {

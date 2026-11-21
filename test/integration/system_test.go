@@ -117,3 +117,70 @@ func TestSystemHookDoesNothingWithoutAnInteractiveShell(t *testing.T) {
 		t.Errorf("a script must not get the hook: %q %v", out, err)
 	}
 }
+
+// A fake safeshell whose hook only records that it was loaded and marks the shell as hooked,
+// so the test can count loads in every shell without the sandbox.
+func countingBinary(t *testing.T, counter string) string {
+	t.Helper()
+	bin := filepath.Join(t.TempDir(), "safeshell")
+	script := "#!/bin/sh\ncase \"$2\" in\nfish) echo 'echo x >> " + counter + "; set -gx SAFESHELL_HOOK $fish_pid' ;;\n*) echo 'echo x >> " + counter + "; export SAFESHELL_HOOK=$$' ;;\nesac\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+func TestSystemHookAndAUsersOwnHookLoadOnce(t *testing.T) {
+	cases := []struct {
+		name, sysFile string
+		argv          []string
+		user          install.Shell
+	}{
+		{"bash", "etc/profile.d/safeshell.sh", []string{"bash", "--norc", "--noprofile", "-i"}, install.Shell{Name: "bash", RC: ".bashrc"}},
+		{"zsh", "etc/zsh/zshrc", zshArgv, install.Shell{Name: "zsh", RC: ".zshrc"}},
+		{"fish", "etc/fish/conf.d/safeshell.fish", fishArgv, install.Shell{Name: "fish", RC: ".config/fish/conf.d/safeshell.fish"}},
+	}
+	for _, c := range cases {
+		for _, systemFirst := range []bool{true, false} {
+			name := c.name + " user file first"
+			if systemFirst {
+				name = c.name + " system file first"
+			}
+			t.Run(name, func(t *testing.T) {
+				if _, err := exec.LookPath(c.argv[0]); err != nil {
+					t.Skip(c.argv[0] + " is not installed")
+				}
+				counter := filepath.Join(t.TempDir(), "loads")
+				bin := countingBinary(t, counter)
+				root := t.TempDir()
+				for _, d := range []string{"etc/zsh", "etc/fish"} {
+					if err := os.MkdirAll(filepath.Join(root, d), 0o755); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if _, err := install.AddSystem(root, bin); err != nil {
+					t.Fatal(err)
+				}
+				home := t.TempDir()
+				user := install.Shell{Name: c.user.Name, RC: filepath.Join(home, c.user.RC)}
+				if _, err := install.Add(user, bin); err != nil {
+					t.Fatal(err)
+				}
+				files := []string{filepath.Join(root, c.sysFile), user.RC}
+				if !systemFirst {
+					files[0], files[1] = files[1], files[0]
+				}
+				sh := startShell(t, c.argv, "HOME="+home)
+				sh.waitFor(t, "READY>")
+				for _, f := range files {
+					sh.send("source " + f + "\r")
+					sh.waitFor(t, "READY>")
+				}
+				b, err := os.ReadFile(counter)
+				if err != nil || string(b) != "x\n" {
+					t.Errorf("the hook must load exactly once, got %q (%v)", b, err)
+				}
+			})
+		}
+	}
+}
