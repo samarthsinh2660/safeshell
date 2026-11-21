@@ -230,3 +230,9 @@ func TestFishHookNamesTheBinaryItCalls(t *testing.T) {
 		t.Errorf("%d %q", code, out)
 	}
 }
+
+func TestIsRootAsksTheKernel(t *testing.T) {
+	if isRoot() != (os.Geteuid() == 0) {
+		t.Error("isRoot does not match the effective user id")
+	}
+}
