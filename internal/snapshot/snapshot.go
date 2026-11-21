@@ -132,7 +132,7 @@ func createAt(h *Host, store string, o Origin, line string, targets []Target, li
 	defer func() {
 		if err != nil {
 			if ref != nil {
-				_ = h.Delete(*ref)
+				err = errors.Join(err, h.Delete(*ref)) // say so when the filesystem snapshot stays behind
 			}
 			_ = os.RemoveAll(d)
 		}

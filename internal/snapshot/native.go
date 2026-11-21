@@ -23,6 +23,9 @@ const (
 // btrfsSubvolIno is the inode number of the top folder of every btrfs subvolume.
 const btrfsSubvolIno = 256
 
+// snapshotReady is how long a new zfs snapshot may take to become readable.
+const snapshotReady = 3 * time.Second
+
 // toolTimeout bounds one run of btrfs or zfs.
 const toolTimeout = 30 * time.Second
 
@@ -37,6 +40,9 @@ type Host struct {
 	Run    func(ctx context.Context, name string, args ...string) ([]byte, error) // runs a tool, returns its output
 	Statfs func(path string) (Fs, error)
 	Ino    func(path string) (uint64, error) // inode number; an error means the path does not exist
+	Dev    func(path string) (uint64, error) // device number of the path itself (a nested subvolume or child dataset has its own)
+	Euid   func() int
+	Mounts func() ([]byte, error) // /proc/self/mountinfo
 }
 
 // OS is the real machine.
@@ -59,6 +65,15 @@ func OS() Host {
 			}
 			return s.Ino, nil
 		},
+		Dev: func(path string) (uint64, error) {
+			var s unix.Stat_t
+			if err := unix.Lstat(path, &s); err != nil {
+				return 0, err
+			}
+			return uint64(s.Dev), nil
+		},
+		Euid:   os.Geteuid,
+		Mounts: func() ([]byte, error) { return os.ReadFile("/proc/self/mountinfo") },
 	}
 }
 
@@ -85,6 +100,7 @@ func (r NativeRef) live(src string) string {
 // Native takes a filesystem snapshot that covers every path it was chosen for.
 type Native struct {
 	Kind string
+	root string // the live folder the snapshot mirrors
 	take func(ctx context.Context, id, dest string) (NativeRef, error)
 }
 
@@ -135,14 +151,76 @@ func (h Host) Choose(store string, targets []Target) *Native {
 	if len(targets) == 0 {
 		return nil
 	}
-	var paths []string
+	var paths, own []string
 	for _, t := range targets {
-		paths = append(paths, h.existing(resolveParents(t.Path)))
+		own = append(own, resolveParents(t.Path))
+		paths = append(paths, h.existing(own[len(own)-1]))
 	}
-	if n := h.btrfs(store, paths); n != nil {
-		return n
+	n := h.btrfs(store, paths)
+	if n == nil {
+		n = h.zfs(paths)
 	}
-	return h.zfs(paths)
+	if n == nil || h.crossesDevices(n.root, own) {
+		return nil
+	}
+	return n
+}
+
+// crossesDevices reports whether anything under paths is on another device than
+// root. A btrfs snapshot leaves out nested subvolumes and a zfs snapshot leaves
+// out child datasets, and each of them shows up as a folder on its own device.
+// A folder that cannot be read counts: it may hold one.
+func (h Host) crossesDevices(root string, paths []string) bool {
+	want, err := h.Dev(root)
+	if err != nil {
+		return true
+	}
+	crosses := false
+	for _, p := range paths {
+		_ = filepath.WalkDir(p, func(q string, de fs.DirEntry, werr error) error {
+			if werr != nil && !errors.Is(werr, fs.ErrNotExist) || werr == nil && de.IsDir() {
+				if got, err := h.Dev(q); werr != nil || err != nil || got != want {
+					crosses = true
+					return fs.SkipAll
+				}
+			}
+			return nil
+		})
+		if crosses {
+			break
+		}
+	}
+	return crosses
+}
+
+// userMayDeleteSubvolumes reports whether a user who is not root may delete the
+// subvolume at root: only a mount with user_subvol_rm_allowed lets them.
+func (h Host) userMayDeleteSubvolumes(root string) bool {
+	if h.Euid() == 0 {
+		return true
+	}
+	b, err := h.Mounts()
+	if err != nil {
+		return false
+	}
+	best, opts := -1, ""
+	for _, line := range strings.Split(string(b), "\n") {
+		before, after, ok := strings.Cut(line, " - ")
+		f, g := strings.Fields(before), strings.Fields(after)
+		if !ok || len(f) < 5 || len(g) < 3 {
+			continue
+		}
+		mp := strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, "\n", `\134`, `\`).Replace(f[4])
+		if rel, err := filepath.Rel(mp, root); err == nil && rel != ".." && !strings.HasPrefix(rel, "../") && len(mp) >= best {
+			best, opts = len(mp), g[2]
+		}
+	}
+	for _, o := range strings.Split(opts, ",") {
+		if o == "user_subvol_rm_allowed" {
+			return true
+		}
+	}
+	return false
 }
 
 // Backend names the backend that would cover path: "btrfs", "zfs" or "copy".
@@ -192,7 +270,10 @@ func (h Host) btrfs(store string, paths []string) *Native {
 		}
 		root = r
 	}
-	return &Native{Kind: "btrfs", take: func(ctx context.Context, id, dest string) (NativeRef, error) {
+	if !h.userMayDeleteSubvolumes(root) { // a snapshot nobody could delete later would fill the disk
+		return nil
+	}
+	return &Native{Kind: "btrfs", root: root, take: func(ctx context.Context, id, dest string) (NativeRef, error) {
 		out, err := h.Run(ctx, "btrfs", "subvolume", "snapshot", "-r", root, dest)
 		if err != nil {
 			return NativeRef{}, fmt.Errorf("btrfs snapshot: %s", firstLine(out, err))
@@ -234,11 +315,22 @@ func (h Host) zfs(paths []string) *Native {
 			return nil
 		}
 	}
-	return &Native{Kind: "zfs", take: func(ctx context.Context, id, _ string) (NativeRef, error) {
+	return &Native{Kind: "zfs", root: mount, take: func(ctx context.Context, id, _ string) (NativeRef, error) {
 		name := ds + "@safeshell-" + id
 		if out, err := h.Run(ctx, "zfs", "snapshot", name); err != nil {
 			return NativeRef{}, fmt.Errorf("zfs snapshot: %s", firstLine(out, err))
 		}
-		return NativeRef{Kind: "zfs", Root: mount, Path: filepath.Join(mount, ".zfs", "snapshot", "safeshell-"+id), Name: name}, nil
+		ref := NativeRef{Kind: "zfs", Root: mount, Path: filepath.Join(mount, ".zfs", "snapshot", "safeshell-"+id), Name: name}
+		// The snapshot folder is mounted on first access and can take a moment to show up. An
+		// empty folder would read as "nothing to restore", so wait for it, or give the snapshot up.
+		for end := time.Now().Add(snapshotReady); ; time.Sleep(50 * time.Millisecond) {
+			if _, err := os.ReadDir(ref.Path); err == nil {
+				return ref, nil
+			}
+			if time.Now().After(end) {
+				_ = h.Delete(ref)
+				return NativeRef{}, fmt.Errorf("zfs snapshot: %s did not become readable", ref.Path)
+			}
+		}
 	}}
 }
