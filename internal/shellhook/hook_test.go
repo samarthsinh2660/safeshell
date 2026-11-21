@@ -175,6 +175,9 @@ func TestStrictScriptChangesEveryShellAndTheDefaultStaysAsItWas(t *testing.T) {
 				t.Errorf("%s: strict hook is missing %q", sh, want)
 			}
 		}
+		if !strings.Contains(strict, "Checking is not paused") || !strings.Contains(strict, "__ss_pause") {
+			t.Errorf("%s: the pause file still pauses checking", sh)
+		}
 		if strings.Contains(strict, `-n "${SAFESHELL_OFF-}" ||`) || strings.Contains(strict, `test -n "$SAFESHELL_OFF"; or`) {
 			t.Errorf("%s: SAFESHELL_OFF still pauses checking", sh)
 		}

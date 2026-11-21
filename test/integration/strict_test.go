@@ -92,3 +92,28 @@ func TestWithoutStrictModeSafeshellOffStillPausesChecking(t *testing.T) {
 		t.Fatal("the line was checked although SAFESHELL_OFF is set and strict mode is off")
 	}
 }
+
+func TestStrictModeIgnoresThePauseFile(t *testing.T) {
+	needSandbox(t)
+	for _, c := range allHookShells {
+		t.Run(c.name, func(t *testing.T) {
+			victim := victimDir(t)
+			state := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(state, "safeshell"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(state, "safeshell", "off"), nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			sh := hooked(t, c.name, c.argv, "XDG_CONFIG_HOME="+strictConfig(t), "XDG_STATE_HOME="+state)
+			sh.send("rm -rf " + victim + "\r")
+			sh.waitFor(t, "Checking is not paused")
+			sh.waitFor(t, "[c] cancel")
+			sh.send("c\r")
+			sh.waitFor(t, "Nothing was run")
+			if _, err := os.Stat(filepath.Join(victim, "a.txt")); err != nil {
+				t.Fatal("the pause file skipped the check in strict mode")
+			}
+		})
+	}
+}

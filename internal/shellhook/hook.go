@@ -254,30 +254,39 @@ func Script(shell, bin string) (string, error) {
 const strictRead = `^ *(ls|pwd|cd|echo|cat|head|tail|wc|whoami|id|uname|df|du|uptime|clear|true|false)( +[A-Za-z0-9_./~=,:@%+-]+)* *$`
 
 const (
-	strictOffMsg  = `SAFESHELL_OFF is ignored: strict mode is on, so every line is still checked.`
-	strictFailMsg = `SafeShell failed (exit %s) and strict mode is on, so this line was cancelled. Only simple read-only commands such as ls run until it works again. Run: safeshell doctor`
-	strictOkMsg   = `SafeShell failed (exit %s), so this read-only line was NOT checked. Run: safeshell doctor`
+	strictPauseMsg = `Checking is not paused: strict mode is on. Turn strict mode off to pause checking.`
+	strictOffMsg   = `SAFESHELL_OFF is ignored: strict mode is on, so every line is still checked.`
+	strictFailMsg  = `SafeShell failed (exit %s) and strict mode is on, so this line was cancelled. Only simple read-only commands such as ls run until it works again. Run: safeshell doctor`
+	strictOkMsg    = `SafeShell failed (exit %s), so this read-only line was NOT checked. Run: safeshell doctor`
 )
+
+// offDef is the line that names the pause file. Strict mode renames it, so the
+// hook no longer treats that file as a reason to skip the check.
+const offDef = `__ss_off="${XDG_STATE_HOME:-${HOME-}/.local/state}/safeshell/off"`
 
 type swap struct{ old, new string }
 
 // strictSwaps rewrites each hook for strict mode: SAFESHELL_OFF is refused, and
 // when safeshell itself fails the line is cancelled unless it matches strictRead.
 var strictSwaps = map[string][]swap{
-	"bash": {{
+	"bash": {{offDef, "__ss_pause=" + offDef[len("__ss_off="):]}, {
 		`  [[ -n "${SAFESHELL_OFF-}" || -z "${READLINE_LINE//[[:space:]]/}" && -z $__ss_pend ]] && return 0
+  [[ -e "${__ss_off-}" ]] && return 0
 `, `  [[ -z "${READLINE_LINE//[[:space:]]/}" && -z $__ss_pend ]] && return 0
   [[ -n "${SAFESHELL_OFF-}" ]] && printf '\n` + strictOffMsg + `\n' >/dev/tty
+  [[ -e "${__ss_pause-}" ]] && printf '\n` + strictPauseMsg + `\n' >/dev/tty
 `}, {
 		`       printf '\nSafeShell failed (exit %s), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' "$rc" >/dev/tty ;;`,
 		`       local re=` + "'" + strictRead + "'" + `
        if [[ $line =~ $re ]]; then printf '\n` + strictOkMsg + `\n' "$rc" >/dev/tty
        else printf '\n` + strictFailMsg + `\n' "$rc" >/dev/tty; READLINE_LINE=; rc=1; fi ;;`,
 	}},
-	"zsh": {{
+	"zsh": {{offDef, "__ss_pause=" + offDef[len("__ss_off="):]}, {
 		`  [[ -n "${SAFESHELL_OFF-}" || -z "${BUFFER//[[:space:]]/}" && -z $PREBUFFER ]] && return 0
+  [[ -e "${__ss_off-}" ]] && return 0
 `, `  [[ -z "${BUFFER//[[:space:]]/}" && -z $PREBUFFER ]] && return 0
   [[ -n "${SAFESHELL_OFF-}" ]] && { zle -I; print -u2 "\n` + strictOffMsg + `" }
+  [[ -e "${__ss_pause-}" ]] && { zle -I; print -u2 "\n` + strictPauseMsg + `" }
 `}, {
 		`    *) zle -I; print -u2 "\nSafeShell failed (exit $rc), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this." ;;`,
 		`    *) zle -I
@@ -285,10 +294,11 @@ var strictSwaps = map[string][]swap{
        if [[ $line =~ $re ]]; then print -u2 "\n` + strings.ReplaceAll(strictOkMsg, "%s", "$rc") + `"
        else print -u2 "\n` + strings.ReplaceAll(strictFailMsg, "%s", "$rc") + `"; BUFFER=; return 1; fi ;;`,
 	}},
-	"fish": {{
+	"fish": {{"  set -g __ss_off $XDG_STATE_HOME/", "  set -g __ss_pause $XDG_STATE_HOME/"}, {"  set -g __ss_off $HOME/", "  set -g __ss_pause $HOME/"}, {
 		`  if test -n "$SAFESHELL_OFF"; or test -e "$__ss_off"; or string match -qr '^\s*$' -- "$line"`,
 		`  test -n "$SAFESHELL_OFF"; and printf '\n` + strictOffMsg + `\n' >/dev/tty
-  if test -e "$__ss_off"; or string match -qr '^\s*$' -- "$line"`,
+  test -e "$__ss_pause"; and printf '\n` + strictPauseMsg + `\n' >/dev/tty
+  if string match -qr '^\s*$' -- "$line"`,
 	}, {
 		`      printf '\nSafeShell failed (exit %s), so this line was NOT checked. Set SAFESHELL_OFF=1 to silence this.\n' $rc >/dev/tty
       commandline -f execute`,
