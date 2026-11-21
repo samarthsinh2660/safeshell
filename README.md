@@ -130,7 +130,7 @@ safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
 safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
 safeshell snapshots                      # what undo can restore, and how much room it takes
 safeshell snapshots prune --max 1G       # delete the oldest snapshots (also automatic: 30 days, 5 GiB)
-safeshell history                        # what SafeShell decided, newest first
+safeshell history                        # what SafeShell decided, newest first (marks AI-raised levels)
 ```
 
 ### AI coding agents
