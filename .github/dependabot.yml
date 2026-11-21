@@ -6,3 +6,7 @@ updates:
       - /.github/actions/safeshell-check
     schedule:
       interval: weekly
+    # Patch and minor bumps come as one pull request a week; each major bump comes alone, for a person to review.
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

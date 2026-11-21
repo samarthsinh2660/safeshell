@@ -204,6 +204,15 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
   `.deb` contents and lintian), and the Debian package built from `debian/` in a sid container. `check` passes only when all of them pass.
 - Reviewers look for: the safety invariants above, tests, plain-English messages, and a diff that matches the description.
 
+## Dependency updates (Dependabot)
+
+Every GitHub Action is pinned to a commit. Dependabot checks the pins weekly and opens pull requests:
+
+- **Patch and minor updates** come together as one pull request. The `dependabot auto-merge` workflow turns on auto-merge for it, and GitHub merges it only after the required `check` job passes (unit, integration with the real sandbox, the sweep, the Debian build and the reproducibility check). If anything fails, it stays open.
+- **Major updates** come one per pull request and are never merged automatically. Read the action's release notes, check that CI passes, then merge by hand.
+
+Go modules are not updated this way: every dependency must also be packaged in Debian, so a new version is a normal pull request.
+
 ## Releases
 
 Only maintainers release. A release is a pull request from a branch named exactly
