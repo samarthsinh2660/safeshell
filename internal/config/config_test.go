@@ -53,6 +53,8 @@ func TestRejectsBadValues(t *testing.T) {
 		"provider": `{"ai":{"cloud":{"provider":"acme"}}}`,
 		"gpu":      `{"ai":{"local":{"gpu":"metal"}}}`,
 		"hosts":    `{"hosts":{"prod*":"production"}}`,
+		"vmodel":   `{"voice":{"model":"huge"}}`,
+		"vlang":    `{"voice":{"language":"English"}}`,
 	} {
 		if _, err := Load(write(t, s)); err == nil {
 			t.Errorf("%s accepted", name)
@@ -311,5 +313,19 @@ func TestHostsAreLoaded(t *testing.T) {
 	c, err := Load(write(t, `{"hosts":{"prod*":"prod","staging-*":"staging"}}`))
 	if err != nil || c.Hosts["prod*"] != "prod" || c.Hosts["staging-*"] != "staging" {
 		t.Errorf("%+v %v", c.Hosts, err)
+	}
+}
+
+func TestSetVoiceChangesOnlyItsKey(t *testing.T) {
+	p := write(t, `{"ai":{"mode":"off"}}`)
+	if err := SetVoice(p, "small", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil || c.Voice.Model != "small" || c.Voice.Language != "hi" || c.AI.Mode != "off" {
+		t.Errorf("%+v %v", c, err)
+	}
+	if b, _ := os.ReadFile(p); strings.Contains(string(b), "snapshots") {
+		t.Errorf("defaults must not be written: %s", b)
 	}
 }

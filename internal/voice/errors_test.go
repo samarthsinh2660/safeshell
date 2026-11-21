@@ -200,7 +200,7 @@ func TestEnsureModelWhenPresent(t *testing.T) {
 	s := setup(t)
 	_ = os.MkdirAll(filepath.Dir(s.ModelPath()), 0o755)
 	f, _ := os.Create(s.ModelPath())
-	_ = f.Truncate(modelSize)
+	_ = f.Truncate(147964211)
 	f.Close()
 	if p, err := s.EnsureModel(context.Background()); err != nil || p != s.ModelPath() {
 		t.Errorf("%q %v", p, err)

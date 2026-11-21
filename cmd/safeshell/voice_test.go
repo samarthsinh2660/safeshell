@@ -155,7 +155,7 @@ func useSetup(t *testing.T, s voice.Setup) {
 func TestVoiceStatus(t *testing.T) {
 	useSetup(t, fakeSetup(t))
 	_, out, _ := runSS("voice", "status")
-	for _, want := range []string{"recorder: none found: safeshell voice setup installs one", "engine:   not set up: safeshell voice setup", "model:    not downloaded"} {
+	for _, want := range []string{"recorder: none found: safeshell voice setup installs one", "engine:   not set up: safeshell voice setup", "model:    base.en, not downloaded", "language: en"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in %q", want, out)
 		}
@@ -442,7 +442,7 @@ func TestVoiceSetupModelDownloadFails(t *testing.T) {
 func TestVoiceStatusReady(t *testing.T) {
 	useSetup(t, readySetup(t, "pw-record"))
 	_, out, _ := runSS("voice", "status")
-	if !strings.Contains(out, "recorder: pw-record") || !strings.Contains(out, "model:    downloaded") {
+	if !strings.Contains(out, "recorder: pw-record") || !strings.Contains(out, "model:    base.en, downloaded") {
 		t.Errorf("%q", out)
 	}
 	// A built engine that is not on PATH.

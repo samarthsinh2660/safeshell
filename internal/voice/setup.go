@@ -27,14 +27,6 @@ const (
 	whisperTarSize = 9626464
 )
 
-// Pinned model, from the whisper.cpp model repository on Hugging Face.
-const (
-	modelFile = "ggml-base.en.bin"
-	modelURL  = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
-	modelSize = 147964211
-	modelSHA  = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"
-)
-
 const errNoBuildTools = "Building the speech engine needs cmake, make and a C++ compiler. On Debian or Ubuntu:  sudo apt-get install cmake g++ make  then run  safeshell voice setup  again."
 
 const retry = "Check your internet connection and disk space, then run  safeshell voice setup  again."
@@ -45,6 +37,7 @@ type Setup struct {
 	LookPath func(string) (string, error)
 	Client   *http.Client
 	Out      io.Writer
+	Model    Model       // the speech model; base.en when zero
 	Run      BuildRunner // runs cmake, writing stdout and stderr together to w as it goes; exec when nil
 	// RunTTY runs a program attached to the terminal (sudo apt-get); use RunTTY.
 	RunTTY func(ctx context.Context, name string, args ...string) error
@@ -56,7 +49,15 @@ func (s Setup) EnginePath() string {
 }
 
 // ModelPath is where the speech model is kept.
-func (s Setup) ModelPath() string { return s.Dirs.ModelPath(modelFile) }
+func (s Setup) ModelPath() string { return s.Dirs.ModelPath(s.model().File) }
+
+func (s Setup) model() Model {
+	if s.Model.File == "" {
+		m, _ := FindModel("")
+		return m
+	}
+	return s.Model
+}
 
 // Status is what is installed.
 type Status struct {
@@ -77,7 +78,7 @@ func (s Setup) Status() Status {
 		st.EngineBin = st.EnginePath
 	}
 	fi, err := os.Stat(s.ModelPath())
-	st.ModelReady = err == nil && fi.Size() == modelSize
+	st.ModelReady = err == nil && fi.Size() == s.model().Size
 	return st
 }
 
@@ -206,13 +207,15 @@ func tail(b []byte) string {
 	return strings.Join(lines, "\n")
 }
 
-// EnsureModel downloads the speech model if it is not there.
+// EnsureModel downloads the speech model if it is not there. Each model has
+// its own file, so an earlier model stays until the new one is verified.
 func (s Setup) EnsureModel(ctx context.Context) (string, error) {
 	if s.Status().ModelReady {
 		return s.ModelPath(), nil
 	}
-	fmt.Fprintf(s.Out, "Downloading the English speech model (%d MB)...\n", modelSize/1_000_000)
-	if err := runtime.Download(ctx, s.Client, modelURL, s.ModelPath(), modelSHA, modelSize, s.Out); err != nil {
+	m := s.model()
+	fmt.Fprintf(s.Out, "Downloading the %s speech model (%d MB)...\n", m.Title, m.Size/1_000_000)
+	if err := runtime.Download(ctx, s.Client, m.URL(), s.ModelPath(), m.SHA, m.Size, s.Out); err != nil {
 		return "", fmt.Errorf("could not download the speech model: %w. %s", err, retry)
 	}
 	return s.ModelPath(), nil
