@@ -37,66 +37,71 @@ type wire struct {
 	MinLevel string  `json:"min_level"`
 }
 
-// file is the policy as written: the rules, and whether every audit entry also
-// goes to the systemd journal for everyone on the machine.
-type file struct {
-	Rules   []wire `json:"rules"`
-	Journal bool   `json:"journal"`
+// File is a whole policy file: its rules, and whether the admin turns strict
+// mode on for everyone. A policy can turn strict on, never off.
+type File struct {
+	Rules   []Rule
+	Strict  bool
+	Journal bool // every audit entry also goes to the systemd journal
 }
 
-func decode(data []byte) (file, error) {
-	var f file
+// Parse reads the rules of a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
+func Parse(data []byte) ([]Rule, error) {
+	f, err := ParseFile(data)
+	return f.Rules, err
+}
+
+// ParseFile reads a policy file: {"strict":true,"rules":[...]}.
+// It refuses anything it does not understand, so a rule that tries to loosen
+// something (an unknown field such as "allow") is an error, never ignored.
+func ParseFile(data []byte) (File, error) {
+	var f struct {
+		Rules   []wire `json:"rules"`
+		Strict  bool   `json:"strict"`
+		Journal bool   `json:"journal"`
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
-		return f, fmt.Errorf("%w (a policy can only make things stricter; the fields are rules, journal, match, block, snapshot and min_level)", err)
+		return File{}, fmt.Errorf("%w (a policy can only make things stricter; the fields are strict, journal, rules, match, block, snapshot and min_level)", err)
 	}
 	if dec.More() {
-		return f, errors.New("there is text after the end of the policy")
-	}
-	return f, nil
-}
-
-// Journal reports whether the policy asks for audit entries in the journal.
-func Journal(data []byte) (bool, error) {
-	f, err := decode(data)
-	return f.Journal, err
-}
-
-// Parse reads a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
-// It refuses anything it does not understand, so a rule that tries to loosen
-// something (an unknown field such as "allow") is an error, never ignored.
-func Parse(data []byte) ([]Rule, error) {
-	f, err := decode(data)
-	if err != nil {
-		return nil, err
+		return File{}, errors.New("there is text after the end of the policy")
 	}
 	var rules []Rule
 	for i, w := range f.Rules {
-		n := i + 1
-		r := Rule{Match: strings.Fields(w.Match), Snapshot: w.Snapshot}
-		if len(r.Match) == 0 {
-			return nil, fmt.Errorf("rule %d: match is empty. Say which command it covers, such as \"docker system prune\"", n)
-		}
-		if w.Block != nil {
-			if strings.TrimSpace(*w.Block) == "" {
-				return nil, fmt.Errorf("rule %d: block needs a reason to show people", n)
-			}
-			r.Block = *w.Block
-		}
-		if w.MinLevel != "" {
-			l, ok := domain.ParseLevel(w.MinLevel)
-			if !ok || l == domain.R0 {
-				return nil, fmt.Errorf("rule %d: min_level must be R1, R2, R3 or R4, not %q. A policy can raise a level, never lower one", n, w.MinLevel)
-			}
-			r.MinLevel = l
-		}
-		if r.Block == "" && !r.Snapshot && r.MinLevel == domain.R0 {
-			return nil, fmt.Errorf("rule %d does nothing: add block, snapshot or min_level", n)
+		r, err := w.rule(i + 1)
+		if err != nil {
+			return File{}, err
 		}
 		rules = append(rules, r)
 	}
-	return rules, nil
+	return File{Rules: rules, Strict: f.Strict, Journal: f.Journal}, nil
+}
+
+// rule checks one rule as written; n is its place in the file, for the message.
+func (w wire) rule(n int) (Rule, error) {
+	r := Rule{Match: strings.Fields(w.Match), Snapshot: w.Snapshot}
+	if len(r.Match) == 0 {
+		return Rule{}, fmt.Errorf("rule %d: match is empty. Say which command it covers, such as \"docker system prune\"", n)
+	}
+	if w.Block != nil {
+		if strings.TrimSpace(*w.Block) == "" {
+			return Rule{}, fmt.Errorf("rule %d: block needs a reason to show people", n)
+		}
+		r.Block = *w.Block
+	}
+	if w.MinLevel != "" {
+		l, ok := domain.ParseLevel(w.MinLevel)
+		if !ok || l == domain.R0 {
+			return Rule{}, fmt.Errorf("rule %d: min_level must be R1, R2, R3 or R4, not %q. A policy can raise a level, never lower one", n, w.MinLevel)
+		}
+		r.MinLevel = l
+	}
+	if r.Block == "" && !r.Snapshot && r.MinLevel == domain.R0 {
+		return Rule{}, fmt.Errorf("rule %d does nothing: add block, snapshot or min_level", n)
+	}
+	return r, nil
 }
 
 // Evaluate combines every rule that matches any command of the line.

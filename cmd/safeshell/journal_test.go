@@ -12,6 +12,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 )
 
 // fakeJournal listens on a socket in a temp folder and points journalSocket at it.
@@ -78,9 +79,9 @@ func TestEntriesStayOutOfTheJournalByDefault(t *testing.T) {
 func TestTheTeamPolicyTurnsTheJournalOnForEveryone(t *testing.T) {
 	c := fakeJournal(t)
 	journalConfig(t, false)
-	old := teamJournal
-	t.Cleanup(func() { teamJournal = old })
-	teamJournal = func() bool { return true }
+	old := teamFile
+	t.Cleanup(func() { teamFile = old })
+	teamFile = func() (policy.File, bool, error) { return policy.File{Journal: true}, true, nil }
 	logEntry(audit.Entry{Line: "team-line", Level: "R0", Decision: "allow", Outcome: "allowed"})
 	if got := sent(c); !strings.Contains(got, "SAFESHELL_LINE=team-line\n") {
 		t.Errorf("journal got %q", got)

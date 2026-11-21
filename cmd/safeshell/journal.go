@@ -14,15 +14,13 @@ import (
 // journalSocket is where the systemd journal listens; tests replace it.
 var journalSocket = journal.Socket
 
-// teamJournal is true when the administrator's policy asks for the journal; tests replace it.
-var teamJournal = func() bool { return config.LoadPolicyJournal(config.PolicyPath, 0) }
-
 // logEntry writes e to the audit file and, when the config or the team policy
 // asks for it, to the systemd journal as well. A full disk or a machine with no
 // journal must never stop a command, so neither failure is reported.
 func logEntry(e audit.Entry) {
 	_ = audit.Append(auditPath(), e)
-	if c, err := config.Load(config.Path()); (err == nil && c.Audit.Journal) || teamJournal() {
+	c, err := config.Load(config.Path())
+	if t, _, _ := teamFile(); (err == nil && c.Audit.Journal) || t.Journal {
 		_ = journal.Send(journalSocket, e)
 	}
 }

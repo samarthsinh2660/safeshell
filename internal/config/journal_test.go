@@ -4,25 +4,24 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 )
 
-func TestLoadPolicyJournal(t *testing.T) {
+func TestLoadTeamReportsJournalAndKeepsRules(t *testing.T) {
 	me := uint32(os.Getuid())
-	for _, tc := range []struct {
-		name  string
-		path  string
-		owner uint32
-		want  bool
-	}{
-		{"asked for", policyFile(t, 0o755, 0o644, `{"journal":true}`), me, true},
-		{"not asked for", policyFile(t, 0o755, 0o644, goodPolicy), me, false},
-		{"no file", filepath.Join(t.TempDir(), "policy.json"), me, false},
-		{"not trusted", policyFile(t, 0o755, 0o644, `{"journal":true}`), me + 1, false},
-		{"damaged", policyFile(t, 0o755, 0o644, `{"journal":`), me, false},
-	} {
-		if got := LoadPolicyJournal(tc.path, tc.owner); got != tc.want {
-			t.Errorf("%s: %v, want %v", tc.name, got, tc.want)
-		}
+	f, found, err := LoadTeam(policyFile(t, 0o755, 0o644, `{"journal":true,"strict":true,"rules":[{"match":"rm","min_level":"R3"}]}`), me)
+	if err != nil || !found || !f.Journal || !f.Strict || len(f.Rules) != 1 {
+		t.Errorf("%+v %v %v", f, found, err)
+	}
+	if f, _, _ := LoadTeam(policyFile(t, 0o755, 0o644, goodPolicy), me); f.Journal {
+		t.Error("journal is off unless the policy asks")
+	}
+	if f, found, _ := LoadTeam(policyFile(t, 0o755, 0o644, `{"journal":true}`), me+1); found && f.Journal {
+		t.Error("a policy that is not trusted must not turn anything on")
+	}
+	if _, err := policy.ParseFile([]byte(`{"journal":"yes"}`)); err == nil {
+		t.Error("a journal setting that is not true or false must be refused")
 	}
 }
 

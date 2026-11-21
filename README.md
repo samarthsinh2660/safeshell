@@ -81,6 +81,15 @@ bash scripts/install.sh    # add --ai to also set up the built-in AI
 
 Checksums for every file are in `SHA256SUMS` on the [release page](https://github.com/samarthsinh2660/safeshell/releases/latest).
 
+**Verify a download.** Every release file carries a signed build attestation (made by the release workflow, no keys to manage). Check where a file was built, then its checksum:
+
+```bash
+gh attestation verify safeshell_X.Y.Z_amd64.deb --repo samarthsinh2660/safeshell
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+The tarballs are also reproducible: building the same commit twice gives identical bytes, and CI checks that on every pull request.
+
 **From source** (needs Go):
 
 ```bash
@@ -118,6 +127,10 @@ safeshell activate       # checking is back on, nothing to restart
 ```
 
 While paused, commands run with no check and no delay. `SAFESHELL_OFF=1` pauses one terminal only. `safeshell doctor` tells you when checking is paused.
+
+### Strict mode
+
+By default the shell hook lets a line through, with a warning, when SafeShell itself breaks (missing, crashed), so you are never locked out. Set `"strict": true` in `~/.config/safeshell/config.json` and start a new terminal to fail closed instead: when SafeShell breaks, only plain read-only lines (`ls`, `pwd`, `cd`, `echo`, `cat`, `head`, `tail`, `wc`, `whoami`, `id`, `uname`, `df`, `du`, `uptime`, `clear`, `true`, `false`, with plain words and no quotes, variables, redirects, pipes or `;`) still run; everything else is cancelled with a message. `SAFESHELL_OFF=1` is refused: it prints a note and each line is still checked. `safeshell deactivate` is refused and a pause file is ignored with a note. An administrator can turn it on for everyone with `"strict": true` in the team policy (it can never be turned off there). See `safeshell help strict`.
 
 Without the hook you can use the pieces directly:
 
@@ -229,6 +242,8 @@ On a shared machine, an administrator can put rules in `/etc/safeshell/policy.js
 
 Add `"journal": true` next to `rules` to send every user's audit entries to the journal (see above).
 
+Add `"strict": true` next to `"rules"` to turn on strict mode for everyone (see above); a rules-free `{"strict": true}` is a valid policy.
+
 `match` is a command followed by the words that must come next (`apt purge` also matches `sudo apt -y purge nginx`). A rule can `block` with a reason (no "do it anyway"), ask for a `snapshot`, or set a `min_level` of R1 to R4. A rule that tries anything else, such as lowering a level, is rejected with an error. The file must be owned by root and not writable by anyone else (and so must `/etc/safeshell`), or it is ignored with a warning. The file must be readable by everyone. `safeshell doctor` shows which policy is active.
 
 The policy is a guard rail in each person's SafeShell, not access control: people can still pause their own SafeShell (`safeshell deactivate`) or run commands without the hook. To stop a command for real, use file permissions, sudo rules or groups.
@@ -242,6 +257,24 @@ Tell SafeShell which machines matter in `~/.config/safeshell/config.json`. Patte
 ```
 
 With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with "this is a production host (prod1)". It works with `user@host`, `-p`, `-l` and the like. Only commands that change something (R2 or more) are raised; reads and unlabelled hosts are unchanged, and when both labels match a host, `prod` wins. An interactive `ssh prod1` (no command) is not blocked, but prints one line saying commands typed there are only checked if SafeShell is installed on that host. A `staging` label only gets that line. An invalid label or pattern makes the settings file unusable until fixed.
+
+## Protected folders and project files (optional)
+
+List folders you never want changed by accident in `~/.config/safeshell/config.json` (full paths, or starting with `~/`):
+
+```json
+{"protect": ["~/thesis", "/srv/data"]}
+```
+
+Any command that changes or removes something inside one, or removes a folder that holds one, is raised to at least R3 with "this folder is on your protected list: /home/you/thesis". `rm ~/thesis/a.tex` is blocked; `rm ~/thesis2/a.tex` and `cat ~/thesis/a.tex` are not. Paths are compared as written (symlinks are not followed), and a glob or variable is cut back to the folder before it, so `rm ~/thesis/*.tex` is caught too.
+
+A project can ship a `.safeshell.json` at its top. SafeShell reads the nearest one in the working directory or above it (it stops at your home folder and `/`). A cloned project is not trusted, so the file can only make SafeShell stricter. It uses the same `rules` format as the team policy, plus a `protect` list of folders relative to the project:
+
+```json
+{"protect": ["deploy"], "rules": [{"match": "rm -rf", "min_level": "R4"}, {"match": "terraform apply", "block": "Use the pipeline."}]}
+```
+
+Anything that would loosen (a level below R1, an `allow`, a folder outside the project, an unknown key) is ignored and a one-line warning names the file and the key. A file that is not valid JSON is ignored whole with a warning; the command is still checked as usual.
 
 ## AI (optional, off until you choose)
 

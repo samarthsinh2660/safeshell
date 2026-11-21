@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/ai/providers"
@@ -26,6 +27,10 @@ type Config struct {
 	// Plain turns on plain output for screen readers: no colour or columns,
 	// one full sentence per line and the choices spelled out in words.
 	Plain bool `json:"plain"`
+	// Strict makes the shell hook fail closed: when SafeShell itself breaks,
+	// only plain read-only commands run, and SAFESHELL_OFF is refused. A team
+	// policy can turn it on for everyone; nothing turns it off from there.
+	Strict bool `json:"strict"`
 	// Snapshots caps what undo keeps. After each new snapshot the oldest are
 	// deleted until none is older than KeepDays and all together fit in MaxGiB.
 	Snapshots struct {
@@ -40,6 +45,9 @@ type Config struct {
 	// Hosts maps a host name pattern (* matches any text) to a label, prod or
 	// staging. A change made on a prod host over ssh is raised one level.
 	Hosts map[string]string `json:"hosts"`
+	// Protect lists folders (full paths, or starting with ~/) that nothing may
+	// change without being blocked, such as ["~/thesis", "/srv/data"].
+	Protect []string `json:"protect"`
 	// Voice is the speech model (base.en, base or small) and the language it
 	// listens for (auto or a code such as hi); empty means base.en and its default.
 	Voice struct {
@@ -134,6 +142,11 @@ func Load(path string) (Config, error) {
 	}
 	if err := policy.ValidateHosts(c.Hosts); err != nil {
 		return Config{}, err
+	}
+	for _, f := range c.Protect {
+		if f != "~" && !strings.HasPrefix(f, "~/") && !strings.HasPrefix(f, "/") {
+			return Config{}, fmt.Errorf("protect: %q must be a full path such as \"/srv/data\" or start with ~/ such as \"~/thesis\"", f)
+		}
 	}
 	if p := c.AI.Cloud.Provider; p != "" {
 		if _, ok := providers.Find(p); !ok {
