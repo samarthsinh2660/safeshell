@@ -124,7 +124,7 @@ func TestServiceRestore(t *testing.T) {
 		{"stop active", "systemctl stop nginx", UnitState{"active", "enabled"}, "sudo systemctl start nginx"},
 		{"stop already stopped", "systemctl stop nginx", UnitState{"inactive", "enabled"}, ""},
 		{"disable enabled", "systemctl disable nginx", UnitState{"active", "enabled"}, "sudo systemctl enable nginx"},
-		{"disable runtime-enabled", "systemctl disable nginx", UnitState{"active", "enabled-runtime"}, "sudo systemctl enable nginx"},
+		{"disable runtime-enabled", "systemctl disable nginx", UnitState{"active", "enabled-runtime"}, "sudo systemctl enable --runtime nginx"},
 		{"disable already disabled", "systemctl disable nginx", UnitState{"active", "disabled"}, ""},
 		{"disable static", "systemctl disable nginx", UnitState{"active", "static"}, ""},
 		{"disable now", "systemctl disable --now nginx", UnitState{"active", "enabled"}, "sudo systemctl enable nginx && sudo systemctl start nginx"},
