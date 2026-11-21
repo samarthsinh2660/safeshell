@@ -52,7 +52,6 @@ func doctor(w io.Writer, r platform.Report) int {
 	row("seccomp", r.Seccomp, "")
 	row("landlock", r.Landlock, "")
 	row("cgroup v2", r.CgroupV2, "")
-	fmt.Fprintf(w, "  info     %-26s %s\n", "snapshot backend", r.SnapshotBackend()+" (root is "+r.RootFS+")")
 	fmt.Fprintf(w, "  info     %-26s %s\n", "shells found", strings.Join(r.Shells, ", "))
 	fmt.Fprintf(w, "\nSandbox simulation: %v\n", map[bool]string{true: "available", false: "NOT available"}[r.CanSimulate()])
 	for _, h := range r.Hints() {

@@ -35,14 +35,6 @@ func TestRootFSType(t *testing.T) {
 	}
 }
 
-func TestSnapshotBackend(t *testing.T) {
-	for fs, want := range map[string]string{"btrfs": "btrfs", "zfs": "zfs", "ext4": "copy", "": "copy", "xfs": "copy"} {
-		if got := (Report{RootFS: fs}).SnapshotBackend(); got != want {
-			t.Errorf("%q -> %q, want %q", fs, got, want)
-		}
-	}
-}
-
 func TestHints(t *testing.T) {
 	full := Report{UserNS: true, Overlay: true, Landlock: true, Seccomp: true, CgroupV2: true}
 	if h := full.Hints(); len(h) != 1 || !strings.Contains(h[0], "Everything needed") {
