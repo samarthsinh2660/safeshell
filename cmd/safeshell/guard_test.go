@@ -151,6 +151,7 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	loadProtected = func(string) ([]string, []policy.Rule, []string) { return nil, nil, nil } // nor their protected folders or a project file
 	learning = func() bool { return false }                                                   // nor the developer's own settings
 	plainSetting = func() bool { return false }                                               // nor whether they asked for plain output
+	journalSocket = filepath.Join(d, "no-journal.sock")                                       // nor the real journal
 	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") }                     // nor the real state folder
 	os.Setenv("XDG_CONFIG_HOME", d)                                                           // nor the developer's own config
 	code := m.Run()

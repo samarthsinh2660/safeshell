@@ -37,6 +37,11 @@ type Config struct {
 		KeepDays int `json:"keep_days"` // default 30
 		MaxGiB   int `json:"max_gib"`   // default 5
 	} `json:"snapshots"`
+	// Audit.Journal also sends every audit entry to the systemd journal
+	// (journalctl -t safeshell). The audit file is written either way.
+	Audit struct {
+		Journal bool `json:"journal"`
+	} `json:"audit"`
 	// Hosts maps a host name pattern (* matches any text) to a label, prod or
 	// staging. A change made on a prod host over ssh is raised one level.
 	Hosts map[string]string `json:"hosts"`

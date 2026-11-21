@@ -156,6 +156,7 @@ safeshell explain --why 'rm -rf build'   # which rule and evidence set the level
 safeshell snapshots                      # what undo can restore, and how much room it takes
 safeshell snapshots prune --max 1G       # delete the oldest snapshots (also automatic: 30 days, 5 GiB)
 safeshell history                        # what SafeShell decided, newest first (marks AI-raised levels)
+safeshell stats                          # counts from the log: levels, blocks, blocks run anyway, AI raises, failures
 ```
 
 ### AI coding agents
@@ -223,6 +224,22 @@ flowchart LR
 Observed effects and the AI can only raise a rating, never lower it. More in
 [doc/architecture.md](doc/architecture.md).
 
+## Servers and administrators: journal and statistics
+
+Every decision goes to `~/.local/state/safeshell/audit.jsonl`. Two more events are logged by the hook: `checks-off` (`SAFESHELL_OFF` was set in a terminal; logged once per terminal until it is unset) and `not-checked` (SafeShell itself failed, so the hook let a line through unchecked; if the `safeshell` file is gone nothing can record it, but the warning is still printed).
+
+To also send every entry to the systemd journal, set `"audit": {"journal": true}` in `~/.config/safeshell/config.json`, or `"journal": true` in the team policy to turn it on for everyone. The file is always written; with no journal on the machine nothing changes. Then read it with:
+
+```bash
+journalctl -t safeshell                          # everything
+journalctl -t safeshell SAFESHELL_LEVEL=R3       # one field
+journalctl -t safeshell -p warning               # blocks, checks turned off, failures
+```
+
+The fields are `MESSAGE`, `PRIORITY`, `SYSLOG_IDENTIFIER=safeshell`, `SAFESHELL_LEVEL`, `SAFESHELL_DECISION`, `SAFESHELL_OUTCOME`, `SAFESHELL_LINE` (secrets masked like the file) and `SAFESHELL_AI_PROVIDER`, `_LEVEL`, `_RAISED`, `_REASON` when an AI review was made. A value over 4096 bytes is cut in the journal copy only; the file keeps all of it.
+
+`safeshell stats` counts the log. `safeshell stats --prometheus /var/lib/node_exporter/textfile/safeshell.prom` writes the counts as Prometheus metrics (`safeshell_commands_total{level}`, `safeshell_blocks_total{decision}`, `safeshell_overrides_total{decision}`, `safeshell_ai_raises_total`, `safeshell_events_total{event}`) for node_exporter's textfile collector; run it from cron or a systemd timer. Only the current log counts (it moves to `audit.jsonl.old` at 5 MB, and a counter then restarts, which Prometheus handles). Sandbox timeouts are not logged, so they are not counted.
+
 ## Team policy (optional, for administrators)
 
 On a shared machine, an administrator can put rules in `/etc/safeshell/policy.json`. They apply to everyone and can only make SafeShell stricter; user settings cannot override them.
@@ -234,6 +251,8 @@ On a shared machine, an administrator can put rules in `/etc/safeshell/policy.js
   {"match": "rm", "min_level": "R3"}
 ]}
 ```
+
+Add `"journal": true` next to `rules` to send every user's audit entries to the journal (see above).
 
 Add `"strict": true` next to `"rules"` to turn on strict mode for everyone (see above); a rules-free `{"strict": true}` is a valid policy.
 

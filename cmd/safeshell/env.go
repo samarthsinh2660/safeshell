@@ -55,6 +55,9 @@ var conversations = func() convo.Store { return convo.Store{Dir: convo.DefaultDi
 func recentCommands() []nl.Recent {
 	var out []nl.Recent
 	for _, e := range audit.Recent(auditPath(), time.Now(), 30*time.Minute, 8) {
+		if e.IsEvent() {
+			continue
+		}
 		o := "ran"
 		switch {
 		case e.Outcome == "cancelled" && strings.Contains(e.Decision, "block"):

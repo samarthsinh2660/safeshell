@@ -40,8 +40,9 @@ type wire struct {
 // File is a whole policy file: its rules, and whether the admin turns strict
 // mode on for everyone. A policy can turn strict on, never off.
 type File struct {
-	Rules  []Rule
-	Strict bool
+	Rules   []Rule
+	Strict  bool
+	Journal bool // every audit entry also goes to the systemd journal
 }
 
 // Parse reads the rules of a policy file: {"rules":[{"match":"apt purge","snapshot":true}, ...]}.
@@ -55,13 +56,14 @@ func Parse(data []byte) ([]Rule, error) {
 // something (an unknown field such as "allow") is an error, never ignored.
 func ParseFile(data []byte) (File, error) {
 	var f struct {
-		Rules  []wire `json:"rules"`
-		Strict bool   `json:"strict"`
+		Rules   []wire `json:"rules"`
+		Strict  bool   `json:"strict"`
+		Journal bool   `json:"journal"`
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&f); err != nil {
-		return File{}, fmt.Errorf("%w (a policy can only make things stricter; the fields are strict, rules, match, block, snapshot and min_level)", err)
+		return File{}, fmt.Errorf("%w (a policy can only make things stricter; the fields are strict, journal, rules, match, block, snapshot and min_level)", err)
 	}
 	if dec.More() {
 		return File{}, errors.New("there is text after the end of the policy")
@@ -74,7 +76,7 @@ func ParseFile(data []byte) (File, error) {
 		}
 		rules = append(rules, r)
 	}
-	return File{Rules: rules, Strict: f.Strict}, nil
+	return File{Rules: rules, Strict: f.Strict, Journal: f.Journal}, nil
 }
 
 // rule checks one rule as written; n is its place in the file, for the message.
