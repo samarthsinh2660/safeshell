@@ -88,6 +88,8 @@ gh attestation verify safeshell_X.Y.Z_amd64.deb --repo samarthsinh2660/safeshell
 sha256sum -c SHA256SUMS --ignore-missing
 ```
 
+`gh attestation` needs GitHub CLI 2.49 or newer; Ubuntu 24.04's own `gh` package is older, so install `gh` from [cli.github.com](https://cli.github.com) if the command is unknown. A file that was changed after the release fails the check. Attestations start with v1.8.0.
+
 The tarballs are also reproducible: building the same commit twice gives identical bytes, and CI checks that on every pull request.
 
 **From source** (needs Go):
