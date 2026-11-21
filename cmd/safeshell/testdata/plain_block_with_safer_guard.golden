@@ -1,0 +1,12 @@
+Risk level 3 of 4: this cannot be undone. The command is blocked, but you can choose to override that.
+The command is: rm -rf ~/projects
+Reason, risk level 3 of 4: Recursively and permanently deletes whole folders.
+Observed evidence about files: would delete 4,312 files (2.0 GiB).
+Detail: deleted /home/me/projects/ (4,312 files).
+Safer option 1 of 1: trash-put ~/projects
+What it does: moves them to the Trash.
+
+Type c to cancel. Pressing Enter also cancels.
+Type 1 to run the safer command: trash-put ~/projects
+Type d to run it anyway. You will be asked to type yes to confirm.
+What do you want to do? Cancelled. Nothing was run.

@@ -42,6 +42,10 @@ func runCheck(args []string, stdout, stderr io.Writer, color bool) int {
 var levelAction = [...]string{"ALLOW", "ALLOW (undo recorded)", "SIMULATE FIRST, THEN SNAPSHOT", "BLOCK (you can override)", "HARD BLOCK"}
 
 func printCheck(w io.Writer, line string, v domain.Verdict, color bool) {
+	if plainOn() {
+		printPlainCheck(w, line, v)
+		return
+	}
 	c := newPalette(color)
 	col := c.level(v.Level)
 	fmt.Fprintf(w, "%s%s %s%s  %s\n", c.bold+col, v.Level, v.Level.Label(), c.reset, levelAction[v.Level])
@@ -193,13 +197,19 @@ func printScripts(w io.Writer, files []report.ScriptFile, level domain.Level, c 
 		}
 		printScriptLines(w, f.Lines, c)
 	}
-	if len(files) > 0 {
+	if len(files) > 0 && plainOn() {
+		fmt.Fprintln(w, plainLevel(level), plainLevelAction[level])
+	} else if len(files) > 0 {
 		fmt.Fprintf(w, "\n%s%s %s%s  %s\n", c.bold+c.level(level), level, level.Label(), c.reset, levelAction[level])
 	}
 }
 
 // printScriptLines prints one row for each line rated above R0, in line order.
 func printScriptLines(w io.Writer, lines []classify.LineFinding, c palette) {
+	if plainOn() {
+		printPlainScriptLines(w, lines)
+		return
+	}
 	shown := false
 	for _, lf := range lines {
 		if lf.Level == domain.R0 {

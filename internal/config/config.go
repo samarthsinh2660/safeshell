@@ -23,6 +23,9 @@ type Config struct {
 	// Learn turns on learning mode: one line after each command that passes
 	// without a warning, saying what it does and the safer form.
 	Learn bool `json:"learn"`
+	// Plain turns on plain output for screen readers: no colour or columns,
+	// one full sentence per line and the choices spelled out in words.
+	Plain bool `json:"plain"`
 	// Snapshots caps what undo keeps. After each new snapshot the oldest are
 	// deleted until none is older than KeepDays and all together fit in MaxGiB.
 	Snapshots struct {

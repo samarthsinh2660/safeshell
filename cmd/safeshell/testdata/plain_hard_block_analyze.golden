@@ -1,0 +1,3 @@
+Risk level 4 of 4: this could destroy the machine or all your data. The command is hard blocked. Running it anyway needs a typed phrase.
+The command is: rm -rf /
+Reason, risk level 4 of 4: Erases the whole system.

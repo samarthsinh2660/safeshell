@@ -1,0 +1,6 @@
+Risk level 4 of 4: this could destroy the machine or all your data. The command is hard blocked. Running it anyway needs a typed phrase.
+The command is: echo hi | sudo rm -rf x
+Reason, risk level 4 of 4: Recursively and permanently deletes whole folders. There is no recycle bin. It runs as root, so system files are not protected.
+It applies to: sudo rm -rf x
+Safer option 1 of 1: trash-put x
+What it does: moves them to the Trash so they can be restored.

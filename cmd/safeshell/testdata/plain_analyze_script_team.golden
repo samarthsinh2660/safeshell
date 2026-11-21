@@ -1,0 +1,6 @@
+No risky commands found.
+The lines alone looked like risk level 0 of 4; what the script would really do raised it to level 3 of 4.
+Observed evidence about files: would delete 4,312 files (2.0 GiB).
+Detail: deleted /home/me/projects/ (4,312 files).
+Blocked by your team's policy: no scripts here.
+Risk level 3 of 4: this cannot be undone. The command is blocked.

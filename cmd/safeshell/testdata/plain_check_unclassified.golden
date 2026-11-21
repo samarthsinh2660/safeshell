@@ -1,0 +1,5 @@
+Risk level 1 of 4: it makes changes that are easy to undo. The command is allowed and SafeShell records how to undo it.
+The command is: mytool --go; ls
+Reason, risk level 1 of 4: Not a command SafeShell recognises yet. It will be tested in the sandbox before it runs.
+It applies to: mytool --go
+Not recognised yet: mytool. These are rated risk level 1 of 4; run safeshell analyze to test them in a sandbox.
