@@ -55,7 +55,8 @@ Usage:
   safeshell ask <what you want in English>
                                             AI proposes a command; it is checked like any other
   safeshell models [list]                   choose the AI model (menu), or list the models your cloud key offers
-  safeshell ai setup|status|stop|bench      download the built-in model (once) / show AI state / stop it / measure it
+  safeshell ai setup|status|stop|bench [--injection]
+                                            download the built-in model (once) / show AI state / stop it / measure it (--injection: planted-text test)
   safeshell voice [setup [--yes] [--model base.en|base|small] [--language CODE]|status|--text]
                                             speak a request (local speech engine; set up once with  voice setup)
   safeshell deactivate                      pause checking in every terminal, open and new, until  safeshell activate
