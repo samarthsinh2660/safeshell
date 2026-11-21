@@ -156,7 +156,7 @@ func fakeModelWith(t *testing.T, reply string, system bool) []string {
 	if system {
 		engine = t.TempDir()
 		engineCfg = `,"engine":"system"`
-		pathEnv = []string{"PATH=" + engine + string(os.PathListSeparator) + os.Getenv("PATH")}
+		pathEnv = []string{"PATH=" + engine + string(os.PathListSeparator) + filepath.Dir(ssBin) + string(os.PathListSeparator) + os.Getenv("PATH")}
 	}
 	_ = os.MkdirAll(engine, 0o755)
 	build := exec.Command("go", "build", "-o", filepath.Join(engine, "llama-server"), "./fakellama")
