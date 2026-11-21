@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,6 +36,12 @@ func TestUndoFromNativeSnapshot(t *testing.T) {
 			_ = os.MkdirAll(victim, 0o755)
 			if err := os.WriteFile(filepath.Join(victim, "a.txt"), []byte("x"), 0o644); err != nil {
 				t.Fatal(err)
+			}
+
+			// Say why before the long wait if the real checks would pick the copy backend.
+			if got := snapshot.OS().Backend(filepath.Join(data, "safeshell", "snapshots"), victim); got != tc.kind {
+				out, _ := snapshot.OS().Run(context.Background(), "sh", "-c", "stat -f -c %T "+victim+"; zfs list -H -o name,mountpoint "+victim+" 2>&1; findmnt -T "+victim+" 2>&1")
+				t.Fatalf("the backend for %s is %q, not %q:\n%s", victim, got, tc.kind, out)
 			}
 
 			sh := startBash(t, "XDG_DATA_HOME="+data)

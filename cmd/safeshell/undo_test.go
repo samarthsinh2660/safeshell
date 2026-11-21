@@ -225,6 +225,7 @@ func TestProtectUsesNativeSnapshotWhenItCoversTheFiles(t *testing.T) {
 	os.WriteFile(f, []byte("hello"), 0o644)
 	h := snapshot.OS()
 	h.Statfs = func(string) (snapshot.Fs, error) { return snapshot.Fs{Type: 0x9123683E}, nil }
+	h.Euid = func() int { return 0 } // the mount options of the real machine do not matter here
 	ino := h.Ino
 	h.Ino = func(p string) (uint64, error) {
 		if p == root {

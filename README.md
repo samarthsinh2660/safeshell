@@ -39,7 +39,7 @@ sits between you and the shell and answers one question first: **can this be und
 - **Rates every command, R0 to R4,** by reversibility, not by how scary it sounds.
 - **Shows the real effect.** Risky commands run in a rootless sandbox (user namespaces + OverlayFS) on a copy of your files, with the network blocked and watched. You see what would be deleted, which processes and disks it would touch, which files and commits a risky `git` command would lose, and which containers, volumes or cluster objects a `docker` or `kubectl` delete would remove, and how many rows a `psql`, `mysql` or `sqlite3` change (or keys a `redis-cli` delete) would touch, before anything happens. A SQL change that would touch 1,000 rows or more is blocked; you can override.
 - **Blocks with a reason and a safer alternative,** and still lets you say "do it anyway".
-- **Undo that is verified.** Before an approved risky command runs, the files it will change are saved; `safeshell undo` shows which command it will undo, asks, puts the files back (contents, permissions, times, pipes, hard links) and checks the result, including files added to a saved folder since. Anything it could not read or cannot restore is named, never hidden. On btrfs and ZFS, when you may take filesystem snapshots, SafeShell uses one instead of copying (instant, no extra space); otherwise it copies. The snapshots folder (`~/.local/share/safeshell/snapshots`) must be on the same btrfs filesystem as your files; if it is on another one, SafeShell copies. `safeshell doctor` shows which applies to your home folder. For `apt install` and `systemctl stop|disable|mask`, which files cannot hold, undo proposes the reverse command (`sudo apt remove` with exactly the packages that run installed, or the start/enable/unmask that restores the service) and runs it only through the normal check, after you say yes.
+- **Undo that is verified.** Before an approved risky command runs, the files it will change are saved; `safeshell undo` shows which command it will undo, asks, puts the files back (contents, permissions, times, pipes, hard links) and checks the result, including files added to a saved folder since. Anything it could not read or cannot restore is named, never hidden. On btrfs and ZFS, when you may take filesystem snapshots, SafeShell uses one instead of copying (instant, no extra space); otherwise it copies (also when the folder holds a nested btrfs subvolume or child ZFS dataset, which a snapshot leaves out). Without root, btrfs needs the mount option `user_subvol_rm_allowed` and ZFS needs `zfs allow` to include `snapshot,mount,destroy`, so the snapshot can be deleted later. The snapshots folder (`~/.local/share/safeshell/snapshots`) must be on the same btrfs filesystem as your files; if it is on another one, SafeShell copies. `safeshell doctor` shows which applies to your home folder. For `apt install` and `systemctl stop|disable|mask`, which files cannot hold, undo proposes the reverse command (`sudo apt remove` with exactly the packages that run installed, or the start/enable/unmask that restores the service) and runs it only through the normal check, after you say yes.
 - **Optional AI helper.** Type plain English and get a command that is checked like any other. It knows your project (git branch, Makefile targets, npm scripts) and what you just did, so follow-ups like "now delete them" or "undo that" work. The AI can only make a command look riskier, never safer. Runs locally or with your own Claude, GPT or Gemini key.
 - **Never in your way.** Read-only commands pass untouched, and if SafeShell itself breaks the shell hook fails open with a visible warning.
 
@@ -100,7 +100,7 @@ make build && bash scripts/install.sh
 ```
 
 Open a new terminal and every command you press Enter on is checked first. A command typed over several lines (a here-document, an open quote, a trailing backslash) is checked once, when it is complete. The hook runs the `safeshell` that installed it, wherever that is on `PATH`, and running `safeshell install` again after you move or reinstall SafeShell updates the hook. Run `safeshell doctor` to check
-every part (sandbox, hook, daemon, snapshots, AI) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
+every part (sandbox, hook, daemon, snapshots, AI, and settings in `config.json` that SafeShell does not know, such as a misspelled key) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
 otherwise run `scripts/install-apparmor.sh [path/to/safeshell]` (uses sudo). It writes one profile per binary, so it never touches the `.deb`'s rule and can sit next to it; `scripts/install-apparmor.sh --uninstall [path]` removes only that binary's profile.
 
 ### Servers and shared machines
@@ -305,6 +305,11 @@ Anything that would loosen (a level below R1, an `allow`, a folder outside the p
   Nothing is downloaded for the engine, and a missing `llama-server` is reported with what to install. Copy
   the model file into `~/.local/share/safeshell/models/` by hand: it is used once its SHA-256 matches the pinned one.
   `safeshell doctor` and `safeshell ai status` show which engine is used.
+  `"ai": {"local": {"gpu": ...}}` forces the graphics engine: `auto` (default), `cuda`, `vulkan` or `cpu`
+  (`on` means `vulkan` and `off` means `cpu`, kept from older settings).
+  `safeshell doctor` and `safeshell ai status` also list settings in `config.json` that SafeShell does not
+  know (a typo such as `ai.local.modle`, with the closest known name); the shell hook never prints this.
+  `ai status` also says why AI is off (mode off, no cloud key, local model or engine not installed).
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
 - **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
@@ -317,7 +322,7 @@ exchanges (30 minutes, 5 turns), so "now do the same for the logs folder" or "un
 to use this context instead of asking, and never to fill in a made-up value such as `user@server`. A cloud
 model receives this too (secrets masked); see `safeshell help privacy`.
 
-`safeshell ai bench` measures the active model on 49 labelled requests: local Qwen 3B scores 100% (49 of 49),
+`safeshell ai bench` measures the active model on 68 labelled requests: local Qwen 3B scores 100% (68 of 68),
 and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default), with no unsafe suggestions in either. It then reports 20 more requests separately, so the original score stays comparable. Local Qwen 3B:
 follow-ups 6 of 6, uses project context 4 of 6, does not ask needlessly 4 of 4, but asks when it should
 0 of 4 (it guesses or asks in plain text instead; a guess is still checked before anything runs).
@@ -330,7 +335,7 @@ Requests in any language are recognised (a Hindi sentence needs no leading `?`),
 | | |
 |---|---|
 | Held-out classifier accuracy | 91.8% exactly right on 220 commands the rules were never tuned on |
-| English to command | 100% (local Qwen 3B, 49 of 49) on 49 requests |
+| English to command | 100% (local Qwen 3B, 68 of 68) on 68 requests |
 | English with context and follow-ups | 14 of 20 (local Qwen 3B): follow-ups 6/6, context 4/6, not asking needlessly 4/4, asking 0/4 |
 | Sandbox safety sweep | 700 labelled commands run through the real binary: no file outside the sandbox changed |
 | Tests | unit, fuzz, and integration tests on a real terminal and the real kernel |

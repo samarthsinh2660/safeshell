@@ -188,7 +188,7 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
   independent set that only grows with new, unseen commands. `TestHeldoutReport` enforces
   accuracy floors: fix the rule, never lower a floor.
 - AI code is unit-tested with fake backends, never the network. `safeshell ai bench` measures real
-  accuracy on 49 fixed requests (local Qwen 3B 49/49; cloud about 95-100%, measured on gemini-flash-lite-latest, so re-run `safeshell ai bench` for the current default),
+  accuracy on 68 fixed requests (local Qwen 3B 68/68; cloud about 95-100%, measured on gemini-flash-lite-latest, so re-run `safeshell ai bench` for the current default),
   then 20 requests with context and follow-ups from `eval/context.tsv`, reported per category (local Qwen 3B 14/20).
 - Live tests against a provider are opt-in and take keys from environment variables only.
 
@@ -200,13 +200,15 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
 - Before you open the PR, review your own diff for the architecture rules, consistency with the
   existing code and docs, the safety invariants and the business logic.
 - CI shows each part as its own check: format and vet, unit tests and coverage, installer script,
-  fuzz, integration with the real sandbox plus the sweep, package build (with a check of the
-  `.deb` contents and lintian), and the Debian package built from `debian/` in a sid container. `check` passes only when all of them pass.
+  fuzz, integration with the real sandbox plus the sweep, native snapshots on real btrfs and ZFS,
+  the SafeShell check action (passes a good script, fails a bad one), package build (with a check of
+  the `.deb` contents and lintian), reproducible release tarballs (two clean builds, same bytes), and
+  the Debian package built from `debian/` in a sid container. `check` passes only when all of them pass.
 - Reviewers look for: the safety invariants above, tests, plain-English messages, and a diff that matches the description.
 
 ## Dependency updates (Dependabot)
 
-Every GitHub Action is pinned to a commit. Dependabot checks the pins weekly and opens pull requests:
+Every GitHub Action is pinned to a commit. Dependabot checks the pins weekly and opens pull requests, only for releases at least 7 days old (`cooldown` in `.github/dependabot.yml`):
 
 - **Patch and minor updates** come together as one pull request. The `dependabot auto-merge` workflow turns on auto-merge for it, and GitHub merges it only after the required `check` job passes (unit, integration with the real sandbox, the sweep, the Debian build and the reproducibility check). If anything fails, it stays open.
 - **Major updates** come one per pull request and are never merged automatically. Read the action's release notes, check that CI passes, then merge by hand.

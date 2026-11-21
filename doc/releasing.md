@@ -12,7 +12,8 @@ is merged, `.github/workflows/release.yml` does the following:
 2. Checks the tag does not exist yet and that `CHANGELOG.md` and `debian/changelog` mention the version.
 3. Runs `make check`.
 4. Builds the amd64 and arm64 tarballs and `.deb` files (with man page, copyright and AppArmor conffile; `test/scripts/deb_test.sh` checks them), plus `SHA256SUMS`.
-5. Creates the tag `vX.Y.Z` on the merge commit and the GitHub Release with those files attached.
+5. Attests the tarballs, the `.deb` files and `SHA256SUMS` with signed build provenance (keyless, no secrets).
+6. Runs `gh release create`, which creates the tag `vX.Y.Z` on the merge commit and the GitHub Release with those files attached.
 
 The version comes from the branch name. Nothing else needs to be bumped in code.
 
@@ -85,6 +86,17 @@ git switch -c release/vX.Y.Z
 Don't delete or move a published tag. Fix it in a normal PR and release the next patch
 version (`vX.Y.Z+1`). If the release workflow fails before publishing, fix the workflow in a
 PR, then re-run the failed job.
+
+`gh release create` is the step that creates the tag, so a failed upload can leave the tag and a partial
+release behind. A plain re-run then stops at the "tag vX.Y.Z already exists" check. Nothing was published
+in a usable form, so delete the GitHub Release and the tag, then re-run the workflow:
+
+```bash
+gh release delete vX.Y.Z --cleanup-tag --yes
+gh run rerun RUN_ID          # or "Re-run all jobs" on the Actions page
+```
+
+If the failure came before `gh release create` (build, tests, attestation) no tag exists and a re-run is enough.
 
 ## Release plan
 
