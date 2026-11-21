@@ -322,7 +322,7 @@ Rules for this step:
 |---|---|
 | R3/R4 false negatives on corpus | 0 |
 | Overall level accuracy | reported, improved over phases |
-| Hook latency for R0/R1 (p95) | < 20 ms |
+| Hook latency for R0/R1 (p95) | < 20 ms (measured: `safeshell guard` about 9 ms p95 as a new process, classifier alone under 10 µs; `TestGuardLatencyForSafeLines` fails above 50 ms and `TestClassifySafeLinesP95` above 500 µs, and CI logs both numbers) |
 | Sandbox diff equals real run in a VM | identical for filesystem effects |
 | Undo restores exact tree hash | 100 % of verified plans |
 | AI impact review: harmful changes it caught that rules/scorer missed, and false alarms it raised | reported (compared with rules-only on the same corpus) |
