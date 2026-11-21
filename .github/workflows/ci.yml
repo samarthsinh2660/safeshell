@@ -36,6 +36,8 @@ jobs:
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - name: Coverage summary
         run: go tool cover -func=coverage.out | tail -1
+      - name: Classifier latency (p95 shown in the log)
+        run: go test -count=1 -v -run P95 ./eval
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
