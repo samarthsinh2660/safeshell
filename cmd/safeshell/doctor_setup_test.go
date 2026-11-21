@@ -266,5 +266,9 @@ func TestDoctorShowsTheSnapshotBackendForTheHomeFolder(t *testing.T) {
 		return ino(p)
 	}
 	snapshotHost = func() snapshot.Host { return h }
-	wantAll(t, doctorOut(t), "snapshot backend", "btrfs snapshots for your home folder")
+	out := doctorOut(t)
+	wantAll(t, out, "snapshot backend", "btrfs snapshots for your home folder")
+	if n := strings.Count(out, "snapshot backend"); n != 1 {
+		t.Errorf("snapshot backend shown %d times; the root filesystem guess can contradict the real check:\n%s", n, out)
+	}
 }

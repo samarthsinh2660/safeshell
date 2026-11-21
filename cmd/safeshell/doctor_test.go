@@ -14,7 +14,7 @@ func TestDoctor(t *testing.T) {
 		return platform.Report{Kernel: "6.8.0", UserNS: true, Overlay: true, Seccomp: true, Landlock: true, CgroupV2: true, RootFS: "ext4", Shells: []string{"bash", "zsh"}}
 	}
 	code, out, _ := runSS("doctor")
-	if code != 0 || !strings.Contains(out, "available") || !strings.Contains(out, "copy (root is ext4)") || !strings.Contains(out, "bash, zsh") {
+	if code != 0 || !strings.Contains(out, "available") || !strings.Contains(out, "bash, zsh") {
 		t.Errorf("healthy doctor: exit %d\n%s", code, out)
 	}
 

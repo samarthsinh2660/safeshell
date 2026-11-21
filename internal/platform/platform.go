@@ -32,17 +32,6 @@ type Report struct {
 // CanSimulate reports whether the OverlayFS sandbox can run here.
 func (r Report) CanSimulate() bool { return r.UserNS && r.Overlay }
 
-// SnapshotBackend names the best snapshot method for the root filesystem.
-func (r Report) SnapshotBackend() string {
-	switch r.RootFS {
-	case "btrfs":
-		return "btrfs"
-	case "zfs":
-		return "zfs"
-	}
-	return "copy"
-}
-
 // Hints turns the report into advice, most important first.
 func (r Report) Hints() []string {
 	var h []string
