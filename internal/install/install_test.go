@@ -153,7 +153,7 @@ func TestFishGetsItsOwnFileInConfDAndUninstallDeletesIt(t *testing.T) {
 	if change, err := Add(sh, "/home/me/.local/bin/safeshell"); err != nil || change != Added {
 		t.Fatal(change, err)
 	}
-	want := begin + "\ntest -x '/home/me/.local/bin/safeshell'; and '/home/me/.local/bin/safeshell' hook fish | source\n" + end + "\n"
+	want := begin + "\ntest -x '/home/me/.local/bin/safeshell'; and test \"$SAFESHELL_HOOK\" != \"$fish_pid\"; and '/home/me/.local/bin/safeshell' hook fish | source\n" + end + "\n"
 	if got := read(t, sh); got != want {
 		t.Errorf("%q", got)
 	}
@@ -216,5 +216,33 @@ func TestFishAddFailsWhenConfDCannotBeCreated(t *testing.T) {
 	sh := Shell{"fish", filepath.Join(dir, "conf.d", "safeshell.fish")}
 	if _, err := Add(sh, "/safeshell"); err == nil {
 		t.Error("Add must say when the folder cannot be created")
+	}
+}
+
+func TestUserBlockSkipsTheHookWhenThisShellAlreadyHasIt(t *testing.T) {
+	for name, want := range map[string]string{
+		"bash": `[ -x '/b/ss' ] && { [ "${SAFESHELL_HOOK-}" = "$$" ] || eval "$('/b/ss' hook bash)"; }`,
+		"zsh":  `[ -x '/b/ss' ] && { [ "${SAFESHELL_HOOK-}" = "$$" ] || eval "$('/b/ss' hook zsh)"; }`,
+		"fish": `test -x '/b/ss'; and test "$SAFESHELL_HOOK" != "$fish_pid"; and '/b/ss' hook fish | source`,
+	} {
+		got := block(Shell{Name: name}, "/b/ss")
+		if got != begin+"\n"+want+"\n"+end+"\n" || strings.Contains(got, "return") {
+			t.Errorf("%s: %q", name, got)
+		}
+	}
+}
+
+func TestAddReplacesABlockWrittenBeforeTheSkipCheck(t *testing.T) {
+	old := begin + "\n[ -x '/b/ss' ] && eval \"$('/b/ss' hook bash)\"\n" + end + "\n"
+	sh := rc(t, "export A=1\n\n"+old)
+	if change, err := Add(sh, "/b/ss"); err != nil || change != Updated {
+		t.Fatal(change, err)
+	}
+	got := read(t, sh)
+	if strings.Contains(got, "&& eval") || !strings.Contains(got, `${SAFESHELL_HOOK-}`) || strings.Count(got, begin) != 1 || !strings.HasPrefix(got, "export A=1\n") {
+		t.Errorf("%q", got)
+	}
+	if bin, ok := Binary(sh); !ok || bin != "/b/ss" {
+		t.Errorf("Binary: %q %v", bin, ok)
 	}
 }

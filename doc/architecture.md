@@ -101,7 +101,7 @@ safeshell/                        repository root = Go module root
 │   │   └── providers/        the hosted providers on offer: ids, keys, default models, model lists
 │   ├── models/               catalog of local models
 │   ├── runtime/              downloads, verifies and runs the local engine (llama.cpp); XDG data dirs
-│   ├── install/              adds and removes the shell hook in the user's startup file
+│   ├── install/              adds and removes the shell hook in the user's startup file, or (`--system`, root, root folder injectable) in the machine-wide files under /etc using marker blocks that are removed byte for byte; the user and system blocks both skip loading when `SAFESHELL_HOOK` equals the shell's pid, so a shell never gets two hooks
 │   ├── ipc/                  wire protocol + client + server for the daemon socket (the daemon command is in cmd/safeshell/daemon.go)
 │   ├── shellhook/            embedded bash/zsh/fish scripts + the hook text
 │   ├── voice/                microphone recorder + local whisper.cpp transcriber, set up by `safeshell voice setup`

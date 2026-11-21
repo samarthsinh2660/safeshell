@@ -191,6 +191,7 @@ naming the file and the key.`},
    safeshell agent snippet claude|wrapper   print the Claude Code hook, or a script that checks each command
    safeshell voice [setup|status]    speak a request (Ctrl-X Ctrl-V in your terminal)
    safeshell install / safeshell uninstall  add or remove the hook in your shell startup file
+   sudo safeshell install --system   the hook for every user of this machine (undo: sudo safeshell uninstall --system)
    safeshell hook bash|zsh|fish      print the shell hook
    safeshell version                 which release this is
    safeshell doctor                  check every part (sandbox, hook, daemon, snapshots, AI) and say what to fix

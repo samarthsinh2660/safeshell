@@ -8,6 +8,13 @@ After installing, each user runs once:
 which adds a small hook to ~/.bashrc or ~/.zshrc. Open a new terminal and every
 command you press Enter on is checked first. Remove it with `safeshell uninstall`.
 
+To guard every user of the machine instead, an administrator runs once:
+
+    sudo safeshell install --system
+
+(undo with `sudo safeshell uninstall --system`). The package does not do this by
+itself: it installs nothing in /etc that changes anyone's shell.
+
 The command is called `safeshell` (not `ss`) because /usr/bin/ss belongs to iproute2.
 
 Sandbox on Ubuntu 24.04 and later
