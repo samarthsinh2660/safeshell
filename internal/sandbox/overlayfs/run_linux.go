@@ -140,6 +140,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		}
 		res.Diff.Truncated = res.Diff.Truncated || d.Truncated
 	}
+	res.Diff.Changes = append(res.Diff.Changes, out.Loose...)
 	return res, nil
 }
 
