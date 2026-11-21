@@ -130,7 +130,7 @@ safeshell explain 'find . -delete'       # plain-English explanation (needs AI)
 safeshell explain --why 'rm -rf build'   # which rule and evidence set the level (no AI needed)
 safeshell snapshots                      # what undo can restore, and how much room it takes
 safeshell snapshots prune --max 1G       # delete the oldest snapshots (also automatic: 30 days, 5 GiB)
-safeshell history                        # what SafeShell decided, newest first
+safeshell history                        # what SafeShell decided, newest first (marks AI-raised levels)
 ```
 
 ### AI coding agents
@@ -233,6 +233,7 @@ With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
 - **Voice.** Speech is turned into text locally by whisper.cpp, built and managed by `safeshell voice setup`, which also installs what it needs (cmake, a C++ compiler and a recorder such as `pipewire-bin`) with `sudo apt-get` after asking; `--yes` skips the question.
+  It uses the English `base.en` model (148 MB) by default. For other languages run `safeshell voice setup --model base --language hi` (or `--model small`, 488 MB, more accurate); `--language` is a two or three letter code such as `hi` or `es`, or `auto` to let the model guess. The choice is remembered, the old model file is kept until the new one is verified, and `safeshell voice status` shows what is in use. Whatever language you speak, the transcribed text is passed on unchanged.
   The words then go through the same path as typed English, so the usual checks apply.
 
 English requests are understood in context: the assistant is told your git branch, the project's

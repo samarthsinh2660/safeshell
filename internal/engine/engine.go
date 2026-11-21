@@ -83,6 +83,17 @@ type Analysis struct {
 	PolicyWarning string         `json:"policy_warning,omitempty"`
 	// Host is what the user's host labels ask of this line.
 	Host policy.HostOutcome `json:"host"`
+	// AI is the AI's review of this line; nil when none was made.
+	AI *AIReview `json:"ai,omitempty"`
+}
+
+// AIReview is what an AI review said: who answered, the level it gave and why,
+// and whether that raised the level.
+type AIReview struct {
+	Provider string       `json:"provider"`
+	Level    domain.Level `json:"level"`
+	Reason   string       `json:"reason"`
+	Raised   bool         `json:"raised"`
 }
 
 // Analyze rates line, inspects the real system, simulates when the rules say the

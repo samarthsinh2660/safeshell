@@ -14,6 +14,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/ai/providers"
 	"github.com/samarthsinh2660/safeshell/internal/models"
 	"github.com/samarthsinh2660/safeshell/internal/policy"
+	"github.com/samarthsinh2660/safeshell/internal/voice"
 	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
@@ -31,7 +32,13 @@ type Config struct {
 	// Hosts maps a host name pattern (* matches any text) to a label, prod or
 	// staging. A change made on a prod host over ssh is raised one level.
 	Hosts map[string]string `json:"hosts"`
-	AI    struct {
+	// Voice is the speech model (base.en, base or small) and the language it
+	// listens for (auto or a code such as hi); empty means base.en and its default.
+	Voice struct {
+		Model    string `json:"model"`
+		Language string `json:"language"`
+	} `json:"voice"`
+	AI struct {
 		// Mode: auto (local if its files are installed), off, local, cloud, or
 		// hybrid (local first, cloud when local fails).
 		Mode  ai.Mode `json:"mode"`
@@ -102,6 +109,12 @@ func Load(path string) (Config, error) {
 	default:
 		return Config{}, errors.New("ai.local.gpu must be auto, cuda, vulkan or cpu, not " + c.AI.Local.GPU)
 	}
+	if _, err := voice.FindModel(c.Voice.Model); err != nil {
+		return Config{}, errors.New("voice.model: " + err.Error())
+	}
+	if err := voice.CheckLanguage(c.Voice.Language); err != nil {
+		return Config{}, errors.New("voice.language: " + err.Error())
+	}
 	if c.Snapshots.KeepDays < 0 || c.Snapshots.MaxGiB < 0 {
 		return Config{}, errors.New("snapshots.keep_days and snapshots.max_gib must be whole numbers above zero")
 	}
@@ -158,6 +171,18 @@ func writePrivate(path string, b []byte) error {
 // turning learning mode on never freezes today's defaults into the file. A
 // damaged file is refused and left alone.
 func SetLearn(path string, on bool) error {
+	return setKey(path, "learn", json.RawMessage(strconv.FormatBool(on)))
+}
+
+// SetVoice records the speech model and language the same way: only the
+// voice key changes.
+func SetVoice(path, model, language string) error {
+	v, _ := json.Marshal(map[string]string{"model": model, "language": language})
+	return setKey(path, "voice", v)
+}
+
+// setKey changes one top-level key and keeps everything else as it is.
+func setKey(path, key string, value json.RawMessage) error {
 	if _, err := Load(path); err != nil {
 		return err
 	}
@@ -165,7 +190,7 @@ func SetLearn(path string, on bool) error {
 	if b, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(b, &raw) // Load already proved it is a JSON object
 	}
-	raw["learn"] = json.RawMessage(strconv.FormatBool(on))
+	raw[key] = value
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}

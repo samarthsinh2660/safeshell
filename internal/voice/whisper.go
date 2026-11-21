@@ -19,12 +19,17 @@ func execRunner(ctx context.Context, name string, args ...string) ([]byte, error
 type WhisperCLI struct {
 	Bin   string
 	Model string
+	Lang  string // language code or auto; en when empty
 	Run   Runner // exec when nil
 }
 
 // Args is the command line that transcribes wav and writes outBase.txt.
 func (w WhisperCLI) Args(wav, outBase string) []string {
-	return []string{"-m", w.Model, "-f", wav, "-l", "en", "-nt", "-np", "-otxt", "-of", outBase}
+	lang := w.Lang
+	if lang == "" {
+		lang = "en"
+	}
+	return []string{"-m", w.Model, "-f", wav, "-l", lang, "-nt", "-np", "-otxt", "-of", outBase}
 }
 
 func (w WhisperCLI) Transcribe(ctx context.Context, wav string) (string, error) {

@@ -224,3 +224,15 @@ func TestOneLineFlattensAndTruncatesByRunes(t *testing.T) {
 		t.Errorf("expected visible escapes in: %q", escaped)
 	}
 }
+
+func TestHistoryMarksEntriesTheAIRaised(t *testing.T) {
+	now := time.Date(2026, 11, 12, 9, 0, 0, 0, time.Local)
+	useHistoryLog(t,
+		audit.Entry{Time: now, Line: "mv a b", Level: "R3", Decision: "block", Outcome: "cancelled", AIProvider: "fake", AIRaised: true, AILevel: "R3"},
+		audit.Entry{Time: now, Line: "touch c", Level: "R2", Decision: "confirm", Outcome: "ran", AIProvider: "fake", AILevel: "R1"},
+	)
+	_, out, _ := runSS("history")
+	if strings.Count(out, "AI raised to") != 1 || !strings.Contains(out, "mv a b  [AI raised to R3]") {
+		t.Errorf("%s", out)
+	}
+}

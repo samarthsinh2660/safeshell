@@ -80,7 +80,7 @@ func runHistory(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "%-19s  %-5s  %-8s  %-9s  %s\n", "TIME", "LEVEL", "DECISION", "OUTCOME", "LINE")
 	for _, e := range newest {
 		fmt.Fprintf(stdout, "%-19s  %-5s  %-8s  %-9s  %s\n",
-			e.Time.Local().Format("2006-01-02 15:04:05"), e.Level, e.Decision, e.Outcome, oneLine(e.Line))
+			e.Time.Local().Format("2006-01-02 15:04:05"), e.Level, e.Decision, e.Outcome, oneLine(e.Line)+aiMarker(e))
 	}
 	if skipped > 0 {
 		printSkipped(stderr, skipped)
@@ -94,6 +94,14 @@ func printSkipped(w io.Writer, count int) {
 		unit = "line"
 	}
 	fmt.Fprintf(w, "%d %s in the log could not be read and were skipped.\n", count, unit)
+}
+
+// aiMarker is a short note for an entry where the AI raised the level.
+func aiMarker(e audit.Entry) string {
+	if !e.AIRaised {
+		return ""
+	}
+	return "  [AI raised to " + e.AILevel + "]"
 }
 
 // oneLine flattens a command for the table so a multi-line entry stays on one row,

@@ -35,10 +35,12 @@ func aiReview(a *engine.Analysis, stderr io.Writer) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	v, raised, err := ai.Review(ctx, b, facts(*a))
-	switch {
-	case err != nil:
+	if err != nil {
 		fmt.Fprintln(stderr, "AI review unavailable:", firstErrLine(err))
-	case raised:
+		return
+	}
+	a.AI = &engine.AIReview{Provider: b.Name(), Level: v.Level, Reason: v.Reason, Raised: raised}
+	if raised {
 		a.AddEffect(ai.Effect(b, v))
 	}
 }

@@ -318,13 +318,13 @@ func TestStatus(t *testing.T) {
 	if s.Status().ModelReady {
 		t.Error("a partial model is not ready")
 	}
-	if err := os.Truncate(s.ModelPath(), modelSize); err != nil {
+	if err := os.Truncate(s.ModelPath(), 147964211); err != nil {
 		t.Fatal(err)
 	}
 	if s.Status().ModelReady {
 		t.Error("a model of the right size that does not match its checksum is not ready")
 	}
-	if err := runtime.MarkVerified(s.ModelPath(), modelSHA); err != nil {
+	if err := runtime.MarkVerified(s.ModelPath(), s.model().SHA); err != nil {
 		t.Fatal(err)
 	}
 	if st := s.Status(); !st.ModelReady || !st.Ready() {

@@ -61,13 +61,19 @@ Choose the AI model from a menu, or list the models your cloud key offers.
 Manage the optional built-in AI. Nothing is downloaded until you run
 .BR "ai setup" .
 .TP
-.B voice [setup [\-\-yes]|status|\-\-text]
+.B voice [setup [\-\-yes] [\-\-model base.en|base|small] [\-\-language CODE]|status|\-\-text]
 Speak a request. The speech is turned into text on this machine and then handled like
 typed English. Run
 .B voice setup
 once to install the tools it needs (cmake, g++ and a recorder, with apt-get after asking;
 .B \-\-yes
 skips the question), build the speech engine and download the model.
+.B \-\-model
+chooses base.en (English only, the default), base or small (many languages);
+.B \-\-language
+is a two or three letter code such as hi or es, or auto. The choice is saved in the config file and
+.B voice status
+shows it. The earlier model file is kept until the new one is downloaded and verified.
 .TP
 .RB "undo [--yes] [" ID ]
 Put back what an approved command changed, and verify it. With no ID it offers the newest snapshot from this terminal, else this folder, else any, shows the command, time, folder and file count, and asks before restoring. Files changed since the command ran are listed and need a full "yes". A snapshot already undone is skipped unless its ID is given. Undo restores contents, permissions and times, recreates pipes, and writes a hard-linked file back in place; it then checks every path and lists anything that differs: a socket or device it cannot recreate, other hard links it could not restore, new files added to a saved folder (left alone). Paths that could not be read are left out of the snapshot and named. With no terminal to ask, nothing is restored and the command to confirm is printed.
@@ -89,7 +95,7 @@ and
 in the config file (30 days and 5 GiB by default); the same limits are applied automatically after each new snapshot. A snapshot is refused before anything is copied when the files are over 2 GiB or the disk holding snapshots has too little free space.
 .TP
 .BI "history [-n " LINES "] [--json]"
-Print decisions SafeShell recorded, newest first.
+Print decisions SafeShell recorded, newest first. A line the AI review raised is marked "[AI raised to R3]".
 .TP
 .B daemon [stop]
 Keep SafeShell warm in the background for faster checks. A daemon left running from an older version exits on its first request and checks run directly until it is restarted. stop waits for the daemon to exit.

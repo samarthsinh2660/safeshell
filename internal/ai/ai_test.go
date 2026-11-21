@@ -3,8 +3,10 @@ package ai
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 )
@@ -135,5 +137,54 @@ func TestCleanCannotRebuildAClosingTagFromPieces(t *testing.T) {
 	got := Clean("a\x1b[2Jb\nc"+strings.Repeat("z", 50), 10, "</data>")
 	if strings.ContainsAny(got, "\x1b\n") || len(got) > 13 {
 		t.Errorf("%q", got)
+	}
+}
+
+func TestCleanTruncatesOnACharacterBoundary(t *testing.T) {
+	hindi := strings.Repeat("नमस्ते", 20) // 3 bytes per rune
+	for max := 3; max < 40; max++ {
+		got := Clean(hindi, max, "</data>")
+		if !utf8.ValidString(got) || len(got) > max || !strings.HasSuffix(got, "...") {
+			t.Errorf("max %d: %q (%d bytes)", max, got, len(got))
+		}
+	}
+	if got := Clean("नमस्ते", 100, "</data>"); got != "नमस्ते" {
+		t.Errorf("short text changed: %q", got)
+	}
+	if got := Clean("a\xffb", 100); got != "ab" {
+		t.Errorf("invalid bytes kept: %q", got)
+	}
+}
+
+func TestCleanRemovesClosingTagVariants(t *testing.T) {
+	closing := regexp.MustCompile(`(?i)<\s*/\s*data\s*>`)
+	for _, in := range []string{"</DATA>", "</Data>", "</data >", "< /data>", "<\t/ data\n>", "</da</DATA >ta>", "x</data>y"} {
+		if got := Clean(in, 100, "</data>"); closing.MatchString(got) {
+			t.Errorf("%q became %q", in, got)
+		}
+	}
+	if got := Clean("keep <data> and </database>", 100, "</data>"); got != "keep <data> and </database>" {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestRedactHome(t *testing.T) {
+	for _, c := range []struct{ in, home, want string }{
+		{"rm /home/sam/x", "/home/sam", "rm ~/x"},
+		{"ls /home/sam", "/home/sam", "ls ~"},
+		{"cd '/home/sam' && ls", "/home/sam", "cd '~' && ls"},
+		{"PATH=/home/sam:/bin", "/home/sam", "PATH=~:/bin"},
+		{"rm /home/samuel/x", "/home/sam", "rm /home/samuel/x"},
+		{"cat /home/sam.old/x", "/home/sam", "cat /home/sam.old/x"},
+		{"ls /home/samuel/x /home/sam/y", "/home/sam", "ls /home/samuel/x ~/y"},
+		{"chown jonathan /tmp/jonathan_x jonathan.txt", "/home/jonathan", "chown user /tmp/jonathan_x user.txt"},
+		{"echo samantha says hi sam", "/home/sam", "echo samantha says hi sam"},
+		{"echo jon", "/home/jon", "echo jon"},
+		{"echo root /root/x", "/root", "echo root ~/x"},
+		{"echo /x", "/", "echo /x"},
+	} {
+		if got := redact(c.in, c.home); got != c.want {
+			t.Errorf("%q with %s: got %q want %q", c.in, c.home, got, c.want)
+		}
 	}
 }
