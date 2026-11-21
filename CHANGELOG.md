@@ -2,6 +2,27 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.8.0 - 2026-11-21
+
+Servers, shared machines and verifiable releases.
+
+### Added
+- Strict mode for servers: `"strict": true` in config.json, or in the team policy (which can turn it on, never off). When SafeShell itself is missing or fails, only plain read-only lines (`ls`, `cat`, `df` and a few more, with plain words) run and every other line is cancelled. `SAFESHELL_OFF`, `safeshell deactivate` and the pause file are refused. See `safeshell help strict`. (#111)
+- Protected folders: `"protect": ["~/thesis"]` in config.json. Anything that writes or deletes inside one (including `touch`, `mkdir`, `ln` and `rsync`) is raised to at least R3, with the reason; reading is unchanged. See `safeshell help protect`. (#112)
+- A project's own `.safeshell.json` (the nearest one above the working directory) can protect folders inside the project and add stricter rules. A cloned project is not trusted, so anything that would loosen a rule is ignored with a warning naming the key. (#113)
+- `sudo safeshell install --system` turns the hook on for every user on a shared machine (bash, zsh and fish), and `sudo safeshell uninstall --system` puts the system files back exactly. A user's own install and the system one never load the hook twice. (#114)
+- The system journal: with `"audit": {"journal": true}` (or `"journal": true` in the team policy), every decision also goes to journald (`journalctl -t safeshell`), along with two new events: checks turned off, and a line that ran unchecked because SafeShell failed. (#115)
+- `safeshell stats` counts commands by level, blocks, overrides, AI raises and those events from the audit log; `--prometheus FILE` writes them for node_exporter's textfile collector. (#116)
+- Verifiable releases: every release file has a GitHub build attestation (`gh attestation verify FILE --repo samarthsinh2660/safeshell`), and CI checks that the release tarballs build byte for byte the same twice. See "Verify a download" in the README. (#117)
+- CI measures check latency: classifier p95 about 10 µs, `safeshell guard` p95 about 5 ms on CI (limits 500 µs and 50 ms). (#118)
+
+### Changed
+- The per-user hook block written by `safeshell install` skips loading when the shell already has the hook; run `safeshell install` again to update an older block. (#114)
+- CI tokens are read-only by default, and every GitHub Action is pinned to a commit. (#79)
+
+### Fixed
+- The local AI engine's key is sent only after checking that the engine's own process holds its port, so another local user who grabbed the port first cannot receive prompts or the key. (#76)
+
 ## 1.7.0 - 2026-11-21
 
 AI, voice, accessibility and other languages.

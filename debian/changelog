@@ -1,3 +1,14 @@
+safeshell (1.8.0-1) unstable; urgency=medium
+
+  * New upstream release: strict mode that fails closed; protected
+    folders and a tighten-only per-project .safeshell.json; system-wide
+    install for shared machines; decisions and bypasses in the system
+    journal; safeshell stats with Prometheus output; build attestations
+    and reproducible release tarballs; the local engine key is sent only
+    to a port its own process holds.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Sat, 21 Nov 2026 19:30:00 +0530
+
 safeshell (1.7.0-1) unstable; urgency=medium
 
   * New upstream release: choose the voice model and language; requests
