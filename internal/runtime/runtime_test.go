@@ -40,6 +40,25 @@ func TestMain(m *testing.M) {
 				if ms, _ := strconv.Atoi(os.Getenv("SS_FAKE_LOADING_MS")); ms > 0 {
 					loaded = loaded.Add(time.Duration(ms) * time.Millisecond)
 				}
+				// Like llama-server it answers the model list only to the key it was started with.
+				keyFile := ""
+				for j, b := range os.Args {
+					if b == "--api-key-file" {
+						keyFile = os.Args[j+1]
+					}
+				}
+				mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
+					want, _ := os.ReadFile(keyFile)
+					if r.Header.Get("Authorization") != "Bearer "+string(want) {
+						http.Error(w, "no", http.StatusUnauthorized)
+						return
+					}
+					if time.Now().Before(loaded) {
+						http.Error(w, `{"error":"loading model"}`, http.StatusServiceUnavailable)
+						return
+					}
+					w.Write([]byte(`{"object":"list","data":[{"id":"m"}]}`))
+				})
 				mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 					if time.Now().Before(loaded) {
 						http.Error(w, `{"error":"loading model"}`, http.StatusServiceUnavailable)
@@ -537,7 +556,7 @@ func TestAStaleStateFileNeverKillsAnUnrelatedProcess(t *testing.T) {
 
 func TestEnsureGivesUpWhenTheEngineNeverAnswers(t *testing.T) {
 	d := Dirs{State: t.TempDir()}
-	_, err := d.waitReady(context.Background(), 1, "", time.Now(), func() bool { return false })
+	_, err := d.waitReady(context.Background(), os.Getpid(), 1, "", time.Now(), func() bool { return false })
 	if err == nil || !strings.Contains(err.Error(), "did not become ready") {
 		t.Errorf("%v", err)
 	}
