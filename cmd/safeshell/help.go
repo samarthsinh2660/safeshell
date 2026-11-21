@@ -65,7 +65,11 @@ Then, in your terminal, press Ctrl-X then Ctrl-V and speak. Press Enter when you
 Your words replace whatever is on the command line so you can read and edit them; press Enter as usual and
 SafeShell turns them into a command and checks it like anything you typed.
      safeshell voice            speak, confirm the words, then run the request
-     safeshell voice status     which recorder, engine and model it would use
+     safeshell voice status     which recorder, engine, model and language it would use
+Other languages: choose a bigger model and say which language you speak (the choice is remembered):
+     safeshell voice setup --model base --language hi
+   Models: base.en (English, 148 MB, default), base (many languages, 148 MB), small (many languages, 488 MB).
+   Language: a code such as hi or es, or auto (the default for base and small). base.en is English only.
 Setup installs cmake, g++ and a recorder (pipewire-bin) if they are missing. The recording is deleted right
 after it is read, and nothing leaves your machine: the speech engine runs locally.`},
 	{"learn", "Learning mode: see what each command does", `Turn it on once:

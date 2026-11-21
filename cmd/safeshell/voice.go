@@ -11,21 +11,38 @@ import (
 	"strings"
 	"time"
 
+	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/runtime"
 	"github.com/samarthsinh2660/safeshell/internal/voice"
 )
 
-const voiceNotSetUp = "Voice is not set up yet. Run:  safeshell voice setup   (builds a small speech engine and downloads a 148 MB English model; everything stays on this machine)"
+const voiceNotSetUp = "Voice is not set up yet. Run:  safeshell voice setup   (builds a small speech engine and downloads a speech model, 148 MB by default; everything stays on this machine)"
 
 // voiceSetup says where voice files live and which tools exist; tests replace it.
 var voiceSetup = func() voice.Setup {
 	return voice.Setup{Dirs: runtime.DefaultDirs(), LookPath: exec.LookPath, RunTTY: voice.RunTTY}
 }
 
+// voiceChoice is voiceSetup() set to the speech model chosen in the config,
+// with the language as saved (empty = the default). An unreadable config is an error.
+func voiceChoice() (voice.Setup, string, error) {
+	s := voiceSetup()
+	c, err := config.Load(config.Path())
+	if err != nil {
+		return s, "", err
+	}
+	m, _ := voice.FindModel(c.Voice.Model) // Load already checked it
+	s.Model = m
+	return s, c.Voice.Language, nil
+}
+
 // newVoice returns the recorder and transcriber to use, or an error saying
 // what to install or run first; tests replace it.
 var newVoice = func() (voice.Recorder, voice.Transcriber, error) {
-	s := voiceSetup()
+	s, lang, err := voiceChoice()
+	if err != nil {
+		return nil, nil, err
+	}
 	st := s.Status()
 	if !st.Ready() {
 		return nil, nil, errors.New(voiceNotSetUp)
@@ -34,7 +51,7 @@ var newVoice = func() (voice.Recorder, voice.Transcriber, error) {
 	if !ok {
 		return nil, nil, errors.New("No recorder found. Run  safeshell voice setup  to install one")
 	}
-	return rec, voice.WhisperCLI{Bin: st.EngineBin, Model: s.ModelPath()}, nil
+	return rec, voice.WhisperCLI{Bin: st.EngineBin, Model: s.ModelPath(), Lang: s.Model.Language(lang)}, nil
 }
 
 // interruptContext is cancelled by Ctrl-C. It is a test seam: tests replace it.
@@ -62,8 +79,7 @@ func runVoice(args []string, stdout, stderr io.Writer, color bool) int {
 	case len(args) >= 1 && args[0] == "setup":
 		return voiceSetupRun(args[1:], stdout, stderr)
 	case len(args) == 1 && args[0] == "status":
-		voiceStatus(stdout)
-		return 0
+		return voiceStatus(stdout, stderr)
 	}
 	fmt.Fprint(stderr, usage)
 	return 2
@@ -151,13 +167,42 @@ func voiceCancelled(stderr io.Writer) int {
 	return 1
 }
 
+// voiceSetupArgs reads [--yes] [--model NAME] [--language CODE]. An empty
+// model or language means "keep what is chosen".
+func voiceSetupArgs(args []string) (yes bool, model, lang string, err error) {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--yes":
+			yes = true
+		case (a == "--model" || a == "--language") && i+1 < len(args):
+			i++
+			if a == "--model" {
+				model = args[i]
+			} else {
+				lang = args[i]
+			}
+		default:
+			return false, "", "", errors.New("bad option")
+		}
+	}
+	return yes, model, lang, nil
+}
+
 func voiceSetupRun(args []string, stdout, stderr io.Writer) int {
-	yes := len(args) == 1 && args[0] == "--yes"
-	if len(args) > 1 || (len(args) == 1 && !yes) {
+	yes, model, lang, err := voiceSetupArgs(args)
+	if err != nil {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	s := voiceSetup()
+	s, chosenLang, err := voiceChoice()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell voice setup:", err)
+		return 1
+	}
+	if s.Model, lang, err = voiceSetupChoice(s.Model, chosenLang, model, lang); err != nil {
+		fmt.Fprintln(stderr, "safeshell voice setup:", err)
+		return 1
+	}
 	s.Out = stdout
 	ctx, cancel := interruptContext()
 	defer cancel()
@@ -180,17 +225,50 @@ func voiceSetupRun(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "Speech engine ready: %s\n", bin)
-	model, err := s.EnsureModel(ctx)
+	path, err := s.EnsureModel(ctx)
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell voice setup:", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "Speech model ready: %s\nTry it: press Ctrl-X then Ctrl-V in your terminal, or run  safeshell voice\n", model)
+	if err := config.SetVoice(config.Path(), s.Model.Name, lang); err != nil {
+		fmt.Fprintln(stderr, "safeshell voice setup: the model is ready but your choice could not be saved:", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "Speech model ready: %s (language: %s)\nTry it: press Ctrl-X then Ctrl-V in your terminal, or run  safeshell voice\n", path, s.Model.Language(lang))
 	return 0
 }
 
-func voiceStatus(w io.Writer) {
-	s := voiceSetup()
+// voiceSetupChoice applies --model and --language to what is already chosen.
+// It returns the model and the language to save ("" when the model is
+// English-only or the language is the default).
+func voiceSetupChoice(cur voice.Model, curLang, model, lang string) (voice.Model, string, error) {
+	m := cur
+	if model != "" {
+		var err error
+		if m, err = voice.FindModel(model); err != nil {
+			return m, "", err
+		}
+	}
+	if err := voice.CheckLanguage(lang); err != nil {
+		return m, "", err
+	}
+	switch {
+	case lang == "" && m.English:
+		return m, "", nil
+	case lang == "":
+		return m, curLang, nil
+	case m.English && lang != "en":
+		return m, "", fmt.Errorf("the %s model only understands English. Use  --model base  or  --model small  for %q", m.Name, lang)
+	}
+	return m, lang, nil
+}
+
+func voiceStatus(w, stderr io.Writer) int {
+	s, lang, err := voiceChoice()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell voice status:", err)
+		return 1
+	}
 	st := s.Status()
 	if rec, ok := voice.PickRecorder(s.LookPath); ok {
 		fmt.Fprintf(w, "recorder: %s\n", rec.Name)
@@ -199,10 +277,12 @@ func voiceStatus(w io.Writer) {
 	}
 	fmt.Fprintf(w, "engine:   %s\n", voiceEngineText(st))
 	if st.ModelReady {
-		fmt.Fprintf(w, "model:    downloaded (%s)\n", s.ModelPath())
+		fmt.Fprintf(w, "model:    %s, downloaded (%s)\n", s.Model.Name, s.ModelPath())
 	} else {
-		fmt.Fprintln(w, "model:    not downloaded: safeshell voice setup")
+		fmt.Fprintf(w, "model:    %s, not downloaded: safeshell voice setup --model %s\n", s.Model.Name, s.Model.Name)
 	}
+	fmt.Fprintf(w, "language: %s\n", s.Model.Language(lang))
+	return 0
 }
 
 func voiceEngineText(st voice.Status) string {

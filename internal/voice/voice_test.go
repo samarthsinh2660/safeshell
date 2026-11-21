@@ -318,7 +318,7 @@ func TestStatus(t *testing.T) {
 	if s.Status().ModelReady {
 		t.Error("a partial model is not ready")
 	}
-	if err := os.Truncate(s.ModelPath(), modelSize); err != nil {
+	if err := os.Truncate(s.ModelPath(), 147964211); err != nil {
 		t.Fatal(err)
 	}
 	if st := s.Status(); !st.ModelReady || !st.Ready() {
