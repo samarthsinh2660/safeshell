@@ -76,8 +76,7 @@ func (s Setup) Status() Status {
 	} else if fi, err := os.Stat(st.EnginePath); err == nil && fi.Mode()&0o111 != 0 {
 		st.EngineBin = st.EnginePath
 	}
-	fi, err := os.Stat(s.ModelPath())
-	st.ModelReady = err == nil && fi.Size() == modelSize
+	st.ModelReady = runtime.Verified(s.ModelPath(), modelSHA, modelSize)
 	return st
 }
 

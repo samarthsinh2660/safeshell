@@ -19,8 +19,34 @@ func (d Dirs) EngineInstalled(b Build) bool {
 
 // ModelInstalled reports whether the model file is present and complete.
 func (d Dirs) ModelInstalled(m models.Model) bool {
-	fi, err := os.Stat(d.ModelPath(m.File))
-	return err == nil && fi.Size() == m.Size
+	return Verified(d.ModelPath(m.File), m.SHA, m.Size)
+}
+
+// markerPath is the small file next to a verified download that holds its SHA-256.
+func markerPath(path string) string { return path + ".sha256" }
+
+// MarkVerified records that the file at path was checked against sha.
+func MarkVerified(path, sha string) error {
+	return os.WriteFile(markerPath(path), []byte(sha), 0o644)
+}
+
+// Verified reports whether the file at path has the pinned size and SHA-256. A matching marker (written after a
+// verified download) answers at once. A file with no matching marker, such as one downloaded by an older version,
+// is checked against the SHA once and, if it matches, gets a marker; a damaged file of the right size does not
+// count.
+func Verified(path, sha string, size int64) bool {
+	fi, err := os.Stat(path)
+	if err != nil || fi.Size() != size {
+		return false
+	}
+	if b, err := os.ReadFile(markerPath(path)); err == nil && string(b) == sha {
+		return true
+	}
+	if ok, _ := fileMatches(path, sha, nil); !ok {
+		return false
+	}
+	_ = MarkVerified(path, sha) // best effort: without it the file is just checked again next time
+	return true
 }
 
 // InstallEngine downloads, verifies and unpacks a build (and its runtime
@@ -82,5 +108,8 @@ func (d Dirs) InstallModel(ctx context.Context, client *http.Client, m models.Mo
 		return nil
 	}
 	fmt.Fprintf(w, "Downloading %s (%s)...\n", m.Title, mb(m.Size))
-	return Download(ctx, client, m.URL, d.ModelPath(m.File), m.SHA, m.Size, w)
+	if err := Download(ctx, client, m.URL, d.ModelPath(m.File), m.SHA, m.Size, w); err != nil {
+		return err
+	}
+	return MarkVerified(d.ModelPath(m.File), m.SHA)
 }

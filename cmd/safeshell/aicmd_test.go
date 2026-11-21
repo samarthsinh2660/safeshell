@@ -45,6 +45,7 @@ func TestAIStatusSaysWhatIsOffAndWhatIsDownloaded(t *testing.T) {
 	f, _ := os.Create(p)
 	_ = f.Truncate(m.Size)
 	f.Close()
+	_ = runtime.MarkVerified(p, m.SHA)
 	_, out, _ = runSS("ai", "status")
 	if !strings.Contains(out, "AI: fake") || !strings.Contains(out, ": downloaded") {
 		t.Errorf("%q", out)
@@ -162,6 +163,7 @@ func fakeEngine(t *testing.T) {
 	f, _ := os.Create(d.ModelPath(m.File))
 	_ = f.Truncate(m.Size)
 	f.Close()
+	_ = runtime.MarkVerified(d.ModelPath(m.File), m.SHA)
 	bin := d.ServerBin(runtime.Candidates(hostArch, "cpu")[0])
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
 		t.Fatal(err)

@@ -10,6 +10,7 @@ import (
 	goruntime "runtime"
 	"time"
 
+	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/ai/openai"
 	"github.com/samarthsinh2660/safeshell/internal/models"
 	"github.com/samarthsinh2660/safeshell/internal/runtime"
@@ -35,12 +36,15 @@ func (l Llama) Ready() bool {
 // the answer down instead of breaking it.
 func (l Llama) Complete(ctx context.Context, system, user string) (string, error) {
 	if !l.Ready() {
-		return "", errors.New("the local model is not downloaded yet: type /models or run  safeshell ai setup")
+		return "", fmt.Errorf("%w: the local model is not downloaded yet: type /models or run  safeshell ai setup", ai.ErrUnavailable)
 	}
 	var failures []error
 	for _, b := range l.Dirs.Installed(goruntime.GOARCH, l.GPU) {
 		ep, err := l.Dirs.Ensure(ctx, runtime.Spec{Bin: l.Dirs.ServerBin(b), Model: l.Dirs.ModelPath(l.Model.File), GPU: b.GPU()}, l.Log)
 		if err != nil {
+			if ctx.Err() == nil { // out of time is not the engine's fault
+				err = fmt.Errorf("%w: %w", ai.ErrUnavailable, err)
+			}
 			failures = append(failures, fmt.Errorf("%s engine: %w", b.Variant, err))
 			continue
 		}

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,7 +35,18 @@ func TestMain(m *testing.M) {
 					os.Exit(3)
 				}
 				mux := http.NewServeMux()
-				mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"status":"ok"}`)) })
+				// SS_FAKE_LOADING_MS makes it answer 503 "loading" for that long first, like a big model loading.
+				loaded := time.Now()
+				if ms, _ := strconv.Atoi(os.Getenv("SS_FAKE_LOADING_MS")); ms > 0 {
+					loaded = loaded.Add(time.Duration(ms) * time.Millisecond)
+				}
+				mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+					if time.Now().Before(loaded) {
+						http.Error(w, `{"error":"loading model"}`, http.StatusServiceUnavailable)
+						return
+					}
+					w.Write([]byte(`{"status":"ok"}`))
+				})
 				_ = http.ListenAndServe(fmt.Sprintf("127.0.0.1:%d", port), mux)
 			}
 		}
@@ -368,6 +380,128 @@ func TestEnsureStartsOnceReusesAndRestartsForAnotherModel(t *testing.T) {
 	}
 }
 
+// holdLock takes the start lock the way another SafeShell process would.
+func holdLock(t *testing.T, d Dirs) {
+	t.Helper()
+	f, err := os.OpenFile(filepath.Join(d.State, "llama.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { f.Close() })
+}
+
+func TestEnsureStopsWaitingForTheLockWhenItsTimeIsUpAndLeavesTheEngineAlone(t *testing.T) {
+	t.Setenv("SS_FAKE_LLAMA", "1")
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	t.Cleanup(func() { d.Stop() })
+	spec := Spec{Bin: os.Args[0], Model: "/m/a.gguf"}
+	if _, err := d.Ensure(context.Background(), spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := d.readState()
+	holdLock(t, d)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { _, err := d.Ensure(ctx, spec, nil); done <- err }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("want the deadline error, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Ensure kept waiting for the lock past its deadline")
+	}
+	if after, _ := d.readState(); after != before || !after.running() {
+		t.Error("the engine another caller started was killed or replaced")
+	}
+}
+
+func TestEnsureReturnsTheDeadlineErrorInsteadOfKillingAnEngineItCouldNotCheck(t *testing.T) {
+	t.Setenv("SS_FAKE_LLAMA", "1")
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	t.Cleanup(func() { d.Stop() })
+	spec := Spec{Bin: os.Args[0], Model: "/m/a.gguf"}
+	if _, err := d.Ensure(context.Background(), spec, nil); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := d.readState()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // time ran out while it waited for the lock
+	if _, err := d.Ensure(ctx, spec, nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("want the context error, got %v", err)
+	}
+	if after, _ := d.readState(); after != before || !after.running() {
+		t.Error("a healthy engine was killed because the caller ran out of time")
+	}
+}
+
+func TestEnsureWaitsForAnEngineThatIsStillLoadingInsteadOfRestartingIt(t *testing.T) {
+	t.Setenv("SS_FAKE_LLAMA", "1")
+	t.Setenv("SS_FAKE_LOADING_MS", "1500")
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	t.Cleanup(func() { d.Stop() })
+	spec := Spec{Bin: os.Args[0], Model: "/m/a.gguf"}
+
+	short, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	if _, err := d.Ensure(short, spec, nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("the first call should run out of time while the model loads: %v", err)
+	}
+	first, _ := d.readState()
+	ep, err := d.Ensure(context.Background(), spec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second, _ := d.readState(); second != first || ep.Port != first.Port {
+		t.Errorf("the loading engine was restarted: %+v then %+v", first, second)
+	}
+}
+
+func TestEnsureReportsAnEngineThatStopsWhileItIsWaitedFor(t *testing.T) {
+	t.Setenv("SS_FAKE_LLAMA", "1")
+	t.Setenv("SS_FAKE_LOADING_MS", "60000")
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	t.Cleanup(func() { d.Stop() })
+	spec := Spec{Bin: os.Args[0], Model: "/m/a.gguf"}
+	short, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	_, _ = d.Ensure(short, spec, nil)
+	s, _ := d.readState()
+	go func() { time.Sleep(500 * time.Millisecond); _ = syscall.Kill(s.PID, syscall.SIGKILL) }()
+	if _, err := d.Ensure(context.Background(), spec, nil); err == nil || !strings.Contains(err.Error(), "stopped while starting") {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestEnsureRestartsAnEngineThatHasBeenLoadingForTooLong(t *testing.T) {
+	t.Setenv("SS_FAKE_LLAMA", "1")
+	t.Setenv("SS_FAKE_LOADING_MS", "60000")
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	t.Cleanup(func() { d.Stop() })
+	spec := Spec{Bin: os.Args[0], Model: "/m/a.gguf"}
+	short, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	_, _ = d.Ensure(short, spec, nil)
+	stuck, _ := d.readState()
+	old := time.Now().Add(-startLimit - time.Minute)
+	if err := os.Chtimes(d.statePath(), old, old); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SS_FAKE_LOADING_MS", "0")
+	ep, err := d.Ensure(context.Background(), spec, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if now, _ := d.readState(); now.PID == stuck.PID || ep.Port != now.Port {
+		t.Error("a wedged engine was not replaced")
+	}
+}
+
 func TestEnsureReportsAnEngineThatCrashes(t *testing.T) {
 	t.Setenv("SS_FAKE_LLAMA", "crash")
 	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
@@ -398,6 +532,20 @@ func TestAStaleStateFileNeverKillsAnUnrelatedProcess(t *testing.T) {
 	}
 	if victim.Process.Signal(syscall.Signal(0)) != nil {
 		t.Error("the unrelated process was killed")
+	}
+}
+
+func TestEnsureGivesUpWhenTheEngineNeverAnswers(t *testing.T) {
+	d := Dirs{State: t.TempDir()}
+	_, err := d.waitReady(context.Background(), 1, "", time.Now(), func() bool { return false })
+	if err == nil || !strings.Contains(err.Error(), "did not become ready") {
+		t.Errorf("%v", err)
+	}
+}
+
+func TestAStateFileThatCannotBeReadHasNoStartTime(t *testing.T) {
+	if !(Dirs{State: t.TempDir()}).startedAt().IsZero() {
+		t.Error("no state file, no start time")
 	}
 }
 
@@ -607,5 +755,57 @@ func TestFileSizeOfClosedFile(t *testing.T) {
 func TestChecksumOfSomethingUnreadableIsAnError(t *testing.T) {
 	if ok, err := fileMatches(t.TempDir(), "x", nil); ok || err == nil { // a folder opens but cannot be read
 		t.Errorf("ok %v err %v", ok, err)
+	}
+}
+
+func TestAModelOfTheRightSizeButTheWrongContentIsNotInstalled(t *testing.T) {
+	good := payload(30_000)
+	m := models.Model{File: "m.gguf", Size: int64(len(good)), SHA: sum(good)}
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	if err := os.MkdirAll(filepath.Dir(d.ModelPath(m.File)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bad := payload(30_000)
+	bad[100] ^= 1
+	if err := os.WriteFile(d.ModelPath(m.File), bad, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if d.ModelInstalled(m) {
+		t.Fatal("a corrupted file of the right size counted as installed")
+	}
+	if _, err := os.Stat(markerPath(d.ModelPath(m.File))); err == nil {
+		t.Error("a marker was written for a file that does not match")
+	}
+	// A marker for another checksum does not vouch for it either.
+	_ = MarkVerified(d.ModelPath(m.File), "other")
+	if d.ModelInstalled(m) {
+		t.Error("a marker with another checksum was trusted")
+	}
+}
+
+func TestAnOlderInstallWithoutAMarkerIsCheckedOnceAndThenTrusted(t *testing.T) {
+	good := payload(30_000)
+	m := models.Model{File: "m.gguf", Size: int64(len(good)), SHA: sum(good)}
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	_ = os.MkdirAll(filepath.Dir(d.ModelPath(m.File)), 0o755)
+	if err := os.WriteFile(d.ModelPath(m.File), good, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !d.ModelInstalled(m) {
+		t.Fatal("a good file from an older version should still count")
+	}
+	if b, _ := os.ReadFile(markerPath(d.ModelPath(m.File))); string(b) != m.SHA {
+		t.Error("the marker was not written")
+	}
+	// With the marker in place the content is no longer read: damage that keeps the size is not looked at again.
+	bad := payload(30_000)
+	bad[5] ^= 1
+	_ = os.WriteFile(d.ModelPath(m.File), bad, 0o644)
+	if !d.ModelInstalled(m) {
+		t.Error("a marked file should be trusted without hashing it again")
+	}
+	_ = os.Truncate(d.ModelPath(m.File), 10)
+	if d.ModelInstalled(m) {
+		t.Error("a file of another size is never installed")
 	}
 }

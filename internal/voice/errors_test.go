@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/samarthsinh2660/safeshell/internal/runtime"
 )
 
 func TestArgsAndHintsForEveryTool(t *testing.T) {
@@ -202,6 +204,7 @@ func TestEnsureModelWhenPresent(t *testing.T) {
 	f, _ := os.Create(s.ModelPath())
 	_ = f.Truncate(modelSize)
 	f.Close()
+	_ = runtime.MarkVerified(s.ModelPath(), modelSHA)
 	if p, err := s.EnsureModel(context.Background()); err != nil || p != s.ModelPath() {
 		t.Errorf("%q %v", p, err)
 	}

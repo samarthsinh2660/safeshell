@@ -326,6 +326,7 @@ func TestDoctorVoiceRows(t *testing.T) {
 	f, _ := os.Create(s.ModelPath())
 	_ = f.Truncate(147964211)
 	f.Close()
+	_ = runtime.MarkVerified(s.ModelPath(), whisperModelSHA)
 	doctorVoice(&b, s, run, " 0 [PCH            ]: HDA-Intel\n")
 	out = b.String()
 	if !strings.Contains(out, "none (safeshell voice setup installs one") || !strings.Contains(out, "a sound card is present") || !strings.Contains(out, "downloaded") || strings.Contains(out, "not downloaded") {
@@ -387,6 +388,7 @@ func readySetup(t *testing.T, have ...string) voice.Setup {
 	f, _ := os.Create(s.ModelPath())
 	_ = f.Truncate(147964211)
 	f.Close()
+	_ = runtime.MarkVerified(s.ModelPath(), whisperModelSHA)
 	return s
 }
 
@@ -464,3 +466,6 @@ func TestVoiceSetupReportsAnEngineSourceDownloadFailure(t *testing.T) {
 		t.Errorf("%d %q", code, errOut)
 	}
 }
+
+// whisperModelSHA is the pinned checksum of the speech model (see internal/voice).
+const whisperModelSHA = "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"

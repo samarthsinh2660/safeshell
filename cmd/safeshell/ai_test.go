@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -380,5 +382,22 @@ func TestReadLineDrainsLongReplyThroughEOF(t *testing.T) {
 	}
 	if _, err := readLine(reader); !errors.Is(err, io.EOF) {
 		t.Fatalf("next read: %v", err)
+	}
+}
+
+func TestAskLineKnowsUnavailableAIFromTheErrorKindNotItsText(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want bool
+	}{
+		{fmt.Errorf("%w: type /models or run safeshell ai setup", ai.ErrUnavailable), false},
+		{errors.New("the local engine stopped while starting; run safeshell ai setup"), true}, // same words, different kind
+		{errors.New("quota used up"), true},
+	} {
+		useAI(t, fakeAI{err: tc.err}, nil)
+		var out, errOut bytes.Buffer
+		if _, available := askLine("list files", t.TempDir(), &out, &errOut, false); available != tc.want {
+			t.Errorf("%v: available=%v, want %v", tc.err, available, tc.want)
+		}
 	}
 }

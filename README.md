@@ -228,6 +228,7 @@ With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with
 
 - **Local, default Qwen2.5-Coder 3B.** SafeShell downloads and manages a pinned, checksum-verified `llama.cpp`
   server (CUDA, Vulkan or CPU, picked for your machine) and the model. Starts on demand, stops when idle.
+  A model counts as downloaded only when its checksum matches (a small `.sha256` file is kept next to it).
   Nothing is downloaded until you ask.
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
