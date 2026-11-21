@@ -223,7 +223,11 @@ flowchart LR
     P -->|R3| BL[Block, reason,<br/>safer alternative]
 ```
 
-Observed effects and the AI can only raise a rating, never lower it. More in
+Observed effects and the AI can only raise a rating, never lower it. Before a sandbox run SafeShell
+checks, without changing anything, how much data the command could touch. A run that would not fit in
+memory (about 2 GiB at most) keeps its scratch files on disk in `~/.cache/safeshell/sandbox` instead,
+and is deleted afterwards; if the disk is too full as well, the command is not tested, you are told
+why, and it is never run without asking you. More in
 [doc/architecture.md](doc/architecture.md).
 
 ## Servers and administrators: journal and statistics

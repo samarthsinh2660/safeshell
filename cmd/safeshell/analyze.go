@@ -22,6 +22,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox/effects"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox/overlayfs"
+	"github.com/samarthsinh2660/safeshell/internal/sandbox/sizing"
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
 
@@ -133,7 +134,7 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	rules, warning := teamPolicy()
 	hosts, hostWarning := hostLabels()
 	protected, projectRules, protectWarnings := loadProtected(cwd)
-	e := &engine.Engine{Rules: append(rules, projectRules...), Hosts: hosts, Protect: protected, Home: userHome(), Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	e := &engine.Engine{Rules: append(rules, projectRules...), Hosts: hosts, Protect: protected, Home: userHome(), Sim: realSandbox{}, Sizer: sizing.Sizer{Dir: overlayfs.DiskBase()}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	a := e.Analyze(ctx, line, cwd)
 	a.PolicyWarning = strings.TrimSpace(strings.Join(append([]string{warning, hostWarning}, protectWarnings...), " "))

@@ -77,7 +77,7 @@ func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, loose *
 	if err := skeleton(merged); err != nil {
 		return nil, nil, nil, err
 	}
-	b := &builder{root: req.Root, merged: merged, static: map[string]bool{}}
+	b := &builder{store: req.Store, merged: merged, static: map[string]bool{}}
 	for _, l := range req.Layers {
 		b.static[l.Mount] = true
 	}
@@ -112,13 +112,13 @@ func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, loose *
 const maxDepth = 6
 
 type builder struct {
-	root, merged string
-	static       map[string]bool // mounts that have their own layer in the plan
-	done         []Layer
-	warnings     []sandbox.Warning // paths that are missing from the sandbox
-	partial      []string          // directories with loose files that are not visible
-	loose        looseCopies       // loose files copied into the sandbox
-	dyn          int
+	store, merged string          // store holds the extra layers made while building (see request.Store)
+	static        map[string]bool // mounts that have their own layer in the plan
+	done          []Layer
+	warnings      []sandbox.Warning // paths that are missing from the sandbox
+	partial       []string          // directories with loose files that are not visible
+	loose         looseCopies       // loose files copied into the sandbox
+	dyn           int
 }
 
 // summary turns the collected problems into a few readable warnings.
@@ -179,7 +179,7 @@ func (b *builder) descend(mount string, depth int) {
 				continue // mounted from its own entry in the plan
 			}
 			b.dyn++
-			dir := filepath.Join(b.root, "dyn", fmt.Sprint(b.dyn))
+			dir := filepath.Join(b.store, "dyn", fmt.Sprint(b.dyn))
 			l := Layer{Mount: child, Upper: filepath.Join(dir, "upper"), Work: filepath.Join(dir, "work")}
 			if os.MkdirAll(l.Upper, 0o755) == nil && os.MkdirAll(l.Work, 0o755) == nil {
 				b.overlay(l, depth+1)

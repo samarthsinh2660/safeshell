@@ -1,6 +1,17 @@
 package overlayfs
 
-import "github.com/samarthsinh2660/safeshell/internal/sandbox"
+import (
+	"path/filepath"
+
+	"github.com/samarthsinh2660/safeshell/internal/sandbox"
+	"github.com/samarthsinh2660/safeshell/internal/xdg"
+)
+
+// DiskBase is the private folder under the user's cache where a run too big
+// for memory keeps its scratch layers.
+func DiskBase() string {
+	return filepath.Join(xdg.Dir("XDG_CACHE_HOME", ".cache"), "sandbox")
+}
 
 // request is what the parent sends the re-executed child on stdin.
 type request struct {
@@ -9,6 +20,7 @@ type request struct {
 	Cwd    string
 	Env    []string
 	Root   string // scratch directory; the merged view is Root/merged
+	Store  string // where extra layers get their upper and work folders: Root, or a folder on disk
 	Layers []Layer
 }
 

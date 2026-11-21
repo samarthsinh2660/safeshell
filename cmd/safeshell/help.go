@@ -240,6 +240,8 @@ replaced by *** there and in undo snapshots, and lines you start with a space ar
 The log keeps one old copy once it passes 5 MB.`},
 	{"trouble", "Something is wrong", `safeshell doctor                     checks every part and says what to do about each problem
 "sandbox unavailable"         Ubuntu 24.04+ needs a one-time rule: scripts/install-apparmor.sh
+"not simulated: ... files"    the command works on more data than fits in memory or free disk;
+                              free some space in ~/.cache, or check the command yourself
 "model is not downloaded"     type /models and pick one, or run  safeshell ai setup
 English is not recognised     start the line with ?   or run  safeshell ask "..."
 Turn SafeShell off or on      safeshell deactivate   /   safeshell activate   (every terminal)
