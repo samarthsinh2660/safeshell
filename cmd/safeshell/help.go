@@ -101,7 +101,7 @@ Exit status: 0 allowed (a Claude Code hook is always answered with 0), 2 denied.
      safeshell undo --yes      skip the question (for scripts; it also overwrites newer edits)
      safeshell snapshots       list what is saved, with the total size
      safeshell snapshots prune delete old ones: --older 30d --max 5G (default: the config limits)
-     safeshell history         what SafeShell decided, newest first (--json for the raw entries)
+     safeshell history         what SafeShell decided, newest first, with a note where the AI raised the level (--json for the raw entries)
 Undo shows which command it will undo (when, where, how many files) and asks before it restores.
 Without a terminal to ask, it restores nothing and prints the command to confirm. If you changed
 those files again after the command, it lists them and needs a full "yes". A snapshot that was

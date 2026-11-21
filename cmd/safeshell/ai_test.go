@@ -382,3 +382,33 @@ func TestReadLineDrainsLongReplyThroughEOF(t *testing.T) {
 		t.Fatalf("next read: %v", err)
 	}
 }
+
+func TestGuardAuditRecordsTheAIReviewOnlyWhenOneWasMade(t *testing.T) {
+	a := sampleAnalysis()
+	a.Level, a.Decision = domain.R2, domain.Confirm
+	a.Verdict.Level = domain.R2
+	fakeAnalyze(t, a)
+	useAI(t, fakeAI{reply: `{"level":"R3","reason":"Deletes the only copy, token=abc123secret."}`}, nil)
+	answer(t, "\n")
+	runSS("guard", "--", "mv thesis.pdf /dev/null")
+	e := lastAudit(t)
+	if e.AIProvider != "fake" || !e.AIRaised || e.AILevel != "R3" || !strings.Contains(e.AIReason, "only copy") || strings.Contains(e.AIReason, "abc123secret") {
+		t.Errorf("%+v", e)
+	}
+
+	useAI(t, fakeAI{reply: `{"level":"R1","reason":"fine"}`}, nil) // reviewed, not raised
+	answer(t, "y\n")
+	runSS("guard", "--", "touch x")
+	if e := lastAudit(t); e.AIProvider != "fake" || e.AIRaised || e.AILevel != "R1" {
+		t.Errorf("%+v", e)
+	}
+
+	useAI(t, nil, nil) // AI off: the entry has no AI keys at all
+	answer(t, "y\n")
+	runSS("guard", "--", "touch y")
+	b, _ := os.ReadFile(auditPath())
+	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if last := ls[len(ls)-1]; strings.Contains(last, "ai_") {
+		t.Errorf("AI off, but the entry has AI keys: %s", last)
+	}
+}

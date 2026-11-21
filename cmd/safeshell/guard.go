@@ -175,6 +175,9 @@ func record(a engine.Analysis, cmd string, ran bool) {
 	}
 	outcome, run := audit.Outcome(a.Decision, ran, a.Line, cmd)
 	e := audit.Entry{Time: time.Now().UTC(), Line: report.MaskSecrets(a.Line), Run: report.MaskSecrets(run), Level: a.Level.String(), Decision: a.Decision.String(), Outcome: outcome}
+	if a.AI != nil {
+		e.AIProvider, e.AIRaised, e.AILevel, e.AIReason = a.AI.Provider, a.AI.Raised, a.AI.Level.String(), report.MaskSecrets(a.AI.Reason)
+	}
 	_ = audit.Append(auditPath(), e) // a full disk must not stop a command
 }
 

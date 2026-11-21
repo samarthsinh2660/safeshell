@@ -23,6 +23,12 @@ type Entry struct {
 	Level    string    `json:"level"`
 	Decision string    `json:"decision"`
 	Outcome  string    `json:"outcome"`
+	// The AI review, when one was made: who answered, whether it raised the
+	// level, the level it gave and its reason. Never file contents.
+	AIProvider string `json:"ai_provider,omitempty"`
+	AIRaised   bool   `json:"ai_raised,omitempty"`
+	AILevel    string `json:"ai_level,omitempty"`
+	AIReason   string `json:"ai_reason,omitempty"`
 }
 
 // Outcome names what happened to a command: the Outcome of its Entry, and the

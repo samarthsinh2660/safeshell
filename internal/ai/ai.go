@@ -9,7 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
+	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/samarthsinh2660/safeshell/internal/report"
 )
@@ -61,12 +64,28 @@ func (c Chain) Complete(ctx context.Context, system, user string) (string, error
 	return "", errors.Join(errs...)
 }
 
+// minUserName is the shortest user name that is hidden as a bare word. Shorter
+// names ("sam", "al", "bob") are ordinary words and names too often, so hiding
+// them would mangle the text; the home path still hides them where it matters.
+const minUserName = 4
+
 // Redact replaces the home directory path with ~ and hides secret values
-// (tokens, passwords, keys) before text leaves the machine.
+// (tokens, passwords, keys) and the user name before text leaves the machine.
 func Redact(s string) string {
+	home, _ := os.UserHomeDir()
+	return redact(s, home)
+}
+
+func redact(s, home string) string {
 	s = report.MaskSecrets(s)
-	if h, err := os.UserHomeDir(); err == nil && len(h) > 1 {
-		s = strings.ReplaceAll(s, h, "~")
+	if len(home) <= 1 {
+		return s
+	}
+	// The home path counts only when it ends at a path boundary, so /home/sam
+	// does not eat the start of /home/samuel.
+	s = regexp.MustCompile(regexp.QuoteMeta(home)+`($|[^\pL\pN_.\-])`).ReplaceAllString(s, "~$1")
+	if name := path.Base(home); len(name) >= minUserName && name != "root" {
+		s = regexp.MustCompile(`\b`+regexp.QuoteMeta(name)+`\b`).ReplaceAllString(s, "user")
 	}
 	return s
 }
@@ -82,14 +101,22 @@ func (r redacting) Complete(ctx context.Context, system, user string) (string, e
 func Redacting(b Backend) Backend { return redacting{b} }
 
 // Clean makes untrusted text safe to place inside a prompt: the given closing
-// tags are removed (repeatedly, so a tag split around another cannot rebuild
-// itself), control characters become spaces, and the length is bounded.
+// tags (written like "</data>") are removed whatever their case and spacing
+// ("</DATA>", "< / data >"), repeatedly so a tag split around another cannot
+// rebuild itself, control characters become spaces, and the text is cut to at
+// most max bytes (including a trailing "...") on a character boundary.
 func Clean(s string, max int, closing ...string) string {
+	var tags []*regexp.Regexp
+	for _, t := range closing {
+		name := strings.TrimSuffix(strings.TrimPrefix(t, "</"), ">")
+		tags = append(tags, regexp.MustCompile(`(?i)<\s*/\s*`+regexp.QuoteMeta(name)+`\s*>`))
+	}
+	s = strings.ToValidUTF8(s, "")
 	for changed := true; changed; {
 		changed = false
-		for _, t := range closing {
-			if strings.Contains(s, t) {
-				s = strings.ReplaceAll(s, t, "")
+		for _, re := range tags {
+			if re.MatchString(s) {
+				s = re.ReplaceAllString(s, "")
 				changed = true
 			}
 		}
@@ -101,7 +128,11 @@ func Clean(s string, max int, closing ...string) string {
 		return r
 	}, s)
 	if len(s) > max {
-		s = s[:max] + "..."
+		cut := max - len("...")
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		s = s[:cut] + "..."
 	}
 	return s
 }
