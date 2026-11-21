@@ -1,13 +1,13 @@
 name: release
 # A release happens when a pull request from a branch named release/vX.Y.Z is merged into main.
-# It tags main, builds the tarballs and the .debs (amd64 and arm64), and creates the GitHub Release.
+# It tags main, builds the tarballs and the .debs (amd64 and arm64), attests them, and creates the GitHub Release.
 on:
   pull_request:
     types: [closed]
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency: release
 
@@ -15,6 +15,11 @@ jobs:
   release:
     if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-24.04
+    # Only this job writes: contents to create the tag and release, the other two to sign build provenance.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     env:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
@@ -27,7 +32,7 @@ jobs:
           [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "branch must be release/vX.Y.Z, got $HEAD_REF"; exit 1; }
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "deb=${v#v}" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           fetch-depth: 0
@@ -37,7 +42,7 @@ jobs:
           ! git rev-parse -q --verify "refs/tags/$v" >/dev/null || { echo "tag $v already exists"; exit 1; }
           grep -q "^## $d " CHANGELOG.md || { echo "CHANGELOG.md has no '## $d' entry"; exit 1; }
           grep -q "^safeshell ($d-" debian/changelog || { echo "debian/changelog has no $d entry"; exit 1; }
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - name: Build everything
@@ -47,6 +52,13 @@ jobs:
           make deb VERSION=${{ steps.v.outputs.version }}
           bash test/scripts/deb_test.sh dist/*.deb
           cd dist && sha256sum *.tar.gz *.deb > SHA256SUMS
+      - name: Attest build provenance (keyless, no secrets)
+        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # v3.2.0
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.deb
+            dist/SHA256SUMS
       - name: GitHub Release
         run: |
           gh release create "${{ steps.v.outputs.version }}" dist/*.tar.gz dist/*.deb dist/SHA256SUMS \

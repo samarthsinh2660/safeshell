@@ -81,6 +81,15 @@ bash scripts/install.sh    # add --ai to also set up the built-in AI
 
 Checksums for every file are in `SHA256SUMS` on the [release page](https://github.com/samarthsinh2660/safeshell/releases/latest).
 
+**Verify a download.** Every release file carries a signed build attestation (made by the release workflow, no keys to manage). Check where a file was built, then its checksum:
+
+```bash
+gh attestation verify safeshell_X.Y.Z_amd64.deb --repo samarthsinh2660/safeshell
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+The tarballs are also reproducible: building the same commit twice gives identical bytes, and CI checks that on every pull request.
+
 **From source** (needs Go):
 
 ```bash
