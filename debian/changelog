@@ -1,3 +1,13 @@
+safeshell (1.7.0-1) unstable; urgency=medium
+
+  * New upstream release: choose the voice model and language; requests
+    in Hindi and other languages; plain output for screen readers; a
+    prompt-injection bench for the AI review; AI reviews in the audit
+    log; model files verified by SHA-256; the local engine is kept while
+    it loads and respects deadlines; safer redaction and prompt text.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Sat, 21 Nov 2026 18:15:00 +0530
+
 safeshell (1.6.0-1) unstable; urgency=medium
 
   * New upstream release: fish shell hook; guarding commands from AI
