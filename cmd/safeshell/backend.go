@@ -23,7 +23,7 @@ var backend = func() (ai.Backend, error) {
 
 func buildBackend(c config.Config, dirs runtime.Dirs) (ai.Backend, error) {
 	m, _ := models.Find(c.AI.Local.Model)
-	loc := local.Llama{Dirs: dirs, Model: m, GPU: c.AI.Local.GPU, Log: os.Stderr}
+	loc := local.Llama{Dirs: dirs, Model: m, GPU: c.AI.Local.GPU, System: c.AI.Local.Engine == "system", Log: os.Stderr}
 	cloud := func() (ai.Backend, error) {
 		p, ok := providers.Find(c.AI.Cloud.Provider)
 		if !ok {

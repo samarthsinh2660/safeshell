@@ -19,6 +19,18 @@ func write(t *testing.T, s string) string {
 	return p
 }
 
+func TestEngineDefaultsToBundledAndMustBeKnown(t *testing.T) {
+	if c, err := Load(write(t, `{}`)); err != nil || c.AI.Local.Engine != "bundled" {
+		t.Errorf("%+v %v", c, err)
+	}
+	if c, err := Load(write(t, `{"ai":{"local":{"engine":"system"}}}`)); err != nil || c.AI.Local.Engine != "system" {
+		t.Errorf("%+v %v", c, err)
+	}
+	if _, err := Load(write(t, `{"ai":{"local":{"engine":"ollama"}}}`)); err == nil {
+		t.Error("an unknown engine was accepted")
+	}
+}
+
 func TestDefaultsWhenMissing(t *testing.T) {
 	c, err := Load(filepath.Join(t.TempDir(), "none.json"))
 	if err != nil || c.AI.Mode != ai.Auto || c.AI.Local.Model != models.Default || c.AI.Local.GPU != "auto" {

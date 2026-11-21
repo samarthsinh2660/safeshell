@@ -245,6 +245,12 @@ func doctorAI(w io.Writer) {
 		fmt.Fprintf(w, "  info     %-26s none found\n", "NVIDIA graphics card")
 	}
 	fmt.Fprintf(w, "  info     %-26s %v\n", "Vulkan loader", runtime.HasVulkan())
+	fmt.Fprintf(w, "  info     %-26s %s\n", "engine program", strings.TrimPrefix(engineLine(c.AI.Local.Engine), "Local engine program: "))
+	if c.AI.Local.Engine == "system" {
+		md, _ := models.Find(c.AI.Local.Model)
+		fmt.Fprintf(w, "  info     %-26s %s, downloaded: %v\n", "model", md.Title, d.ModelInstalled(md))
+		return
+	}
 	var order, have []string
 	for _, b := range runtime.Candidates(hostArch, c.AI.Local.GPU) {
 		order = append(order, b.Variant)
@@ -260,6 +266,21 @@ func doctorAI(w io.Writer) {
 	fmt.Fprintf(w, "  info     %-26s %s\n", "engines installed", orNone(have))
 	md, _ := models.Find(c.AI.Local.Model)
 	fmt.Fprintf(w, "  info     %-26s %s, downloaded: %v\n", "model", md.Title, d.ModelInstalled(md))
+}
+
+// engineLine says which llama-server the local AI uses: the one on PATH (with its version) or our downloaded build.
+func engineLine(engine string) string {
+	if engine != "system" {
+		return "Local engine program: bundled llama.cpp " + runtime.Tag + " (downloaded by SafeShell)"
+	}
+	bin, err := runtime.SystemServer()
+	if err != nil {
+		return "Local engine program: system llama-server NOT FOUND; install llama.cpp or set ai.local.engine to \"bundled\""
+	}
+	if v := runtime.SystemVersion(context.Background(), bin); v != "" {
+		return "Local engine program: system " + bin + " (" + v + ")"
+	}
+	return "Local engine program: system " + bin
 }
 
 func orNone(s []string) string {

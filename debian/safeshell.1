@@ -60,6 +60,19 @@ Choose the AI model from a menu, or list the models your cloud key offers.
 .B ai setup|status|stop|bench [\-\-injection]
 Manage the optional built-in AI. Nothing is downloaded until you run
 .BR "ai setup" .
+With
+.B ai.local.engine
+set to
+.B system
+in the config file (default
+.BR bundled )
+the local AI uses the
+.B llama-server
+found on PATH and downloads no engine; a model file copied by hand into the models folder is used once its SHA-256 matches.
+.B doctor
+and
+.B ai status
+show which engine is used.
 .B ai bench
 scores the model on English requests;
 .B ai bench \-\-injection

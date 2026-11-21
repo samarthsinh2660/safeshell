@@ -48,7 +48,11 @@ func newModelMenu(in io.Reader, out io.Writer) *modelMenu {
 // a fallback) and the model.
 func installLocal(ctx context.Context, cfg config.Config, m models.Model, w io.Writer) error {
 	d := runtime.DefaultDirs()
-	if err := d.InstallPreferred(ctx, nil, goruntime.GOARCH, cfg.AI.Local.GPU, w); err != nil {
+	if cfg.AI.Local.Engine == "system" { // nothing to download for the engine; only check it is there
+		if _, err := runtime.SystemServer(); err != nil {
+			return err
+		}
+	} else if err := d.InstallPreferred(ctx, nil, goruntime.GOARCH, cfg.AI.Local.GPU, w); err != nil {
 		return err
 	}
 	return d.InstallModel(ctx, nil, m, w)

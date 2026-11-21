@@ -27,6 +27,8 @@ type Spec struct {
 	Bin   string // llama-server
 	Model string // path to the .gguf
 	GPU   bool
+	// System is a llama-server from the system, not our own build: it keeps its own libraries and working folder.
+	System bool
 }
 
 type state struct {
@@ -166,8 +168,10 @@ func (d Dirs) Ensure(ctx context.Context, spec Spec, log io.Writer) (Endpoint, e
 		args = append(args, "-ngl", "0")
 	}
 	cmd := exec.Command(spec.Bin, args...)
-	cmd.Dir = filepath.Dir(spec.Bin)
-	cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+filepath.Dir(spec.Bin))
+	if !spec.System {
+		cmd.Dir = filepath.Dir(spec.Bin)
+		cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+filepath.Dir(spec.Bin))
+	}
 	cmd.Stdout, cmd.Stderr = logf, logf
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true} // outlives the shell command that started it
 	if err := cmd.Start(); err != nil {
