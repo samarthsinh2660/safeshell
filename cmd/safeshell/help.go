@@ -57,7 +57,8 @@ Needs an AI model: see  safeshell help models. What it is told: see  safeshell h
    Modes: auto (local if downloaded), local, cloud, hybrid (local first, cloud as backup), off.
 Graphics: the engine uses CUDA on a recent NVIDIA driver, otherwise Vulkan, otherwise the CPU, and
    falls back automatically if the graphics card fails. See what is used with  safeshell doctor.
-   Force one with "gpu": "cuda" | "vulkan" | "cpu" under ai.local in ~/.config/safeshell/config.json.
+   Force one with "gpu": "cuda" | "vulkan" | "cpu" under ai.local in ~/.config/safeshell/config.json
+   ("on" means vulkan and "off" means cpu, kept from older settings).
 Offline lab or distro package: set "engine": "system" under ai.local (default "bundled") to use the
    llama-server found on your PATH. No engine is downloaded. Copy the model file into
    ~/.local/share/safeshell/models/ by hand; it is used once its checksum matches. doctor and ai status say which engine is used.
@@ -156,8 +157,8 @@ Two system changes cannot be saved as files, so undo proposes the reverse comman
                    the start, enable or unmask that puts it back.
 Undo shows the command and asks. If you say yes it goes through SafeShell's normal check, like a command
 you typed, and asks again; it never runs by itself. With --yes it only shows the command.
-Nothing is saved when the files are over 2 GiB or the disk has too little room; it says so before
-copying anything. After each snapshot the oldest are deleted once they are older than 30 days or
+When SafeShell copies, nothing is saved if the files are over 2 GiB or the disk has too little room; it
+says so before copying anything. A btrfs or ZFS snapshot copies nothing, so it has no size limit. After each snapshot the oldest are deleted once they are older than 30 days or
 together over 5 GiB. Change that in ~/.config/safeshell/config.json:
      "snapshots": {"keep_days": 30, "max_gib": 5}`},
 	{"policy", "Team policy for administrators", `An administrator can set rules for everyone on the machine in /etc/safeshell/policy.json:
@@ -249,7 +250,10 @@ The log keeps one old copy once it passes 5 MB.`},
 "model is not downloaded"     type /models and pick one, or run  safeshell ai setup
 English is not recognised     start the line with ?   or run  safeshell ask "..."
 Turn SafeShell off or on      safeshell deactivate   /   safeshell activate   (every terminal)
-Disable for one terminal      SAFESHELL_OFF=1        Turn AI off: /models then  off`},
+Disable for one terminal      SAFESHELL_OFF=1        Turn AI off: /models then  off
+A setting seems ignored       doctor and  safeshell ai status  list settings in config.json that SafeShell
+                              does not know (a typo such as ai.local.modle) and suggest the right name; the
+                              shell hook never shows this. ai status also says why AI is off`},
 }
 
 // runHelp prints the overview, or one topic; an unknown topic goes to stderr.

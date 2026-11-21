@@ -72,3 +72,18 @@ func TestLooseFilesInAPartlyMirroredFolderAreObserved(t *testing.T) {
 		t.Errorf("analyze should show the loose-file change as OBSERVED, got %+v", fs)
 	}
 }
+
+// A partly mirrored folder with no loose files of its own (CI's has only the
+// mount point) still reports a file the command creates in it.
+func TestNewFileInAPartlyMirroredFolderIsObserved(t *testing.T) {
+	needSandbox(t)
+	dir := partlyMirroredDir(t)
+	newFile := filepath.Join(dir, "ss-loose-only-new.txt")
+	r := simulate(t, "--cwd", dir, "echo hi > "+newFile)
+	if c, ok := r.find("/ss-loose-only-new.txt"); !ok || c.Kind != "created" {
+		t.Errorf("want created, got %+v (all: %+v)", c, r.Diff.Changes)
+	}
+	if _, err := os.Stat(newFile); err == nil {
+		t.Error("the simulation created a real file")
+	}
+}
