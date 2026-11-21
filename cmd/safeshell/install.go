@@ -23,15 +23,32 @@ var executablePath = func() (string, error) {
 	return bin, err
 }
 
-// runInstall is `safeshell install [--ai]`: it adds the hook to your shell startup file.
+// systemRoot is the folder the machine-wide files live under, and isRoot says whether we may write them; tests replace both.
+var (
+	systemRoot = "/"
+	isRoot     = func() bool { return os.Geteuid() == 0 }
+)
+
+// runInstall is `safeshell install [--ai|--system]`: it adds the hook to your shell startup file, or to every user's.
 func runInstall(args []string, stdout, stderr io.Writer) int {
-	withAI := false
+	withAI, system := false, false
 	for _, a := range args {
-		if a != "--ai" {
+		switch a {
+		case "--ai":
+			withAI = true
+		case "--system":
+			system = true
+		default:
 			fmt.Fprint(stderr, usage)
 			return 2
 		}
-		withAI = true
+	}
+	if system {
+		if withAI {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		return runInstallSystem(stdout, stderr)
 	}
 	sh, err := shellFor()
 	if err != nil {
@@ -72,8 +89,65 @@ func runInstall(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// runUninstall is `safeshell uninstall`: it removes the hook and leaves everything else alone.
-func runUninstall(stdout, stderr io.Writer) int {
+// runInstallSystem is `safeshell install --system`: the hook for every user of this machine.
+func runInstallSystem(stdout, stderr io.Writer) int {
+	if !isRoot() {
+		fmt.Fprintln(stderr, "safeshell install --system changes files in /etc, so it must run as root. Run it again with sudo:  sudo safeshell install --system")
+		return 1
+	}
+	bin, err := executablePath()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell install:", err)
+		return 1
+	}
+	files, err := install.AddSystem(systemRoot, bin)
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell install:", err)
+		return 1
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(stdout, "The SafeShell hook is already set up for every user.")
+		return 0
+	}
+	fmt.Fprintln(stdout, "Added the SafeShell hook for every user in:")
+	for _, f := range files {
+		fmt.Fprintln(stdout, "  "+f)
+	}
+	fmt.Fprintln(stdout, "New login and terminal sessions are checked first. Undo with:  sudo safeshell uninstall --system")
+	return 0
+}
+
+// runUninstallSystem is `safeshell uninstall --system`: it takes the machine-wide hook out of /etc.
+func runUninstallSystem(stdout, stderr io.Writer) int {
+	if !isRoot() {
+		fmt.Fprintln(stderr, "safeshell uninstall --system changes files in /etc, so it must run as root. Run it again with sudo:  sudo safeshell uninstall --system")
+		return 1
+	}
+	files, err := install.RemoveSystem(systemRoot)
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell uninstall:", err)
+		return 1
+	}
+	if len(files) == 0 {
+		fmt.Fprintln(stdout, "The SafeShell hook was not set up for every user.")
+		return 0
+	}
+	fmt.Fprintln(stdout, "Removed the SafeShell hook for every user from:")
+	for _, f := range files {
+		fmt.Fprintln(stdout, "  "+f)
+	}
+	fmt.Fprintln(stdout, "New sessions are no longer guarded. Each user's own  safeshell install  is not touched.")
+	return 0
+}
+
+// runUninstall is `safeshell uninstall [--system]`: it removes the hook and leaves everything else alone.
+func runUninstall(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "--system" {
+		return runUninstallSystem(stdout, stderr)
+	}
+	if !unexpectedArgs("uninstall", args, stderr) {
+		return 2
+	}
 	sh, err := shellFor()
 	if err != nil {
 		fmt.Fprintln(stderr, "safeshell uninstall:", err)

@@ -92,6 +92,18 @@ Open a new terminal and every command you press Enter on is checked first. A com
 every part (sandbox, hook, daemon, snapshots, AI) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
 otherwise run `scripts/install-apparmor.sh` (uses sudo).
 
+### Servers and shared machines
+
+To guard every user of a lab machine or server (and root after `sudo -i`) in one step, run once as root:
+
+```bash
+sudo safeshell install --system     # undo: sudo safeshell uninstall --system
+```
+
+It adds a short block, only for interactive shells, to the files each shell reads for everyone: `/etc/profile.d/safeshell.sh` (bash login shells), `/etc/bash.bashrc` (other interactive bash shells on Debian and Ubuntu, which do not read `profile.d`), `/etc/zsh/zshrc` and `/etc/fish/conf.d/safeshell.fish`. A file is only touched when that shell is installed. Running it again changes nothing, and `uninstall --system` puts every edited file back exactly as it was and deletes the files it created. Scripts and cron jobs are not affected. Each user can still pause checking with `safeshell deactivate`. A user who also ran their own `safeshell install` loads the hook a second time, because their own file runs after the system one; run `safeshell uninstall` once to drop their copy.
+
+The `.deb` does not enable this: it installs the program and nothing in `/etc` that changes your shells, so `sudo apt install safeshell` alone guards no one until you run the command above.
+
 > The command is `safeshell`, not `ss`: `/usr/bin/ss` already belongs to the system's `iproute2`.
 
 ## Use
