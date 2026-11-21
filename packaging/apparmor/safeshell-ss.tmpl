@@ -4,8 +4,8 @@ include <tunables/global>
 # Lets this one binary create user namespaces that keep their capabilities.
 # Ubuntu 24.04+ otherwise lets it create the namespace but removes the right
 # to mount anything in it, which the OverlayFS sandbox needs.
-profile safeshell-ss @BIN@ flags=(unconfined) {
+profile @NAME@ @BIN@ flags=(unconfined) {
   userns,
 
-  include if exists <local/safeshell-ss>
+  include if exists <local/@NAME@>
 }
