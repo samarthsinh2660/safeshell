@@ -19,8 +19,13 @@ type fakeFS struct {
 	magic  int64
 	id     [2]int32
 	calls  []string
-	failOn string // a tool command that fails, e.g. "btrfs subvolume snapshot"
-	list   string // what `zfs list` prints; "" means "tank/home\t<root>"
+	failOn string            // a tool command that fails, e.g. "btrfs subvolume snapshot"
+	list   string            // what `zfs list` prints; "" means "tank/home\t<root>"
+	devs   map[string]uint64 // device of a path and everything under it; the default is 1
+	uid    int               // who runs; 0 is root
+	mounts string            // /proc/self/mountinfo; "" means btrfs mounted with user_subvol_rm_allowed
+	late   time.Duration     // a zfs snapshot folder shows up this long after `zfs snapshot`
+	never  bool              // ... or never
 }
 
 func (f *fakeFS) host() Host {
@@ -36,7 +41,14 @@ func (f *fakeFS) host() Host {
 				f.copyTo(args[len(args)-1])
 			case name == "zfs" && args[0] == "snapshot":
 				_, snap, _ := strings.Cut(args[1], "@")
-				f.copyTo(filepath.Join(f.root, ".zfs", "snapshot", snap))
+				dest := filepath.Join(f.root, ".zfs", "snapshot", snap)
+				switch {
+				case f.never:
+				case f.late > 0:
+					time.AfterFunc(f.late, func() { f.copyTo(dest) })
+				default:
+					f.copyTo(dest)
+				}
 			case name == "zfs" && args[0] == "list":
 				if f.list != "" {
 					return []byte(f.list), nil
@@ -55,6 +67,22 @@ func (f *fakeFS) host() Host {
 				return btrfsSubvolIno, nil
 			}
 			return OS().Ino(p)
+		},
+		Dev: func(p string) (uint64, error) {
+			best, dev := -1, uint64(1)
+			for q, d := range f.devs {
+				if (p == q || strings.HasPrefix(p, q+"/")) && len(q) > best {
+					best, dev = len(q), d
+				}
+			}
+			return dev, nil
+		},
+		Euid: func() int { return f.uid },
+		Mounts: func() ([]byte, error) {
+			if f.mounts == "" {
+				return []byte("36 25 0:30 / " + f.root + " rw - btrfs /dev/loop0 rw,user_subvol_rm_allowed,subvolid=256\n"), nil
+			}
+			return []byte(f.mounts), nil
 		},
 	}
 }
@@ -191,6 +219,24 @@ func TestNativeCleanupWhenBlobsFolderCannotBeMade(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(f.calls, "\n"), "zfs destroy tank/home@safeshell-") {
 		t.Errorf("the native snapshot should be destroyed: %v", f.calls)
+	}
+	// When it cannot be destroyed, the error says so instead of hiding it.
+	f, root, store = newFake(t, zfsMagic)
+	f.failOn = "zfs destroy"
+	h = f.host()
+	run = h.Run
+	h.Run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		out, err := run(ctx, name, args...)
+		if name == "zfs" && args[0] == "snapshot" {
+			dirs, _ := os.ReadDir(store)
+			for _, d := range dirs {
+				os.WriteFile(filepath.Join(store, d.Name(), "blobs"), nil, 0o600)
+			}
+		}
+		return out, err
+	}
+	if _, err = CreateWith(h, store, Origin{}, "rm a", []Target{{Path: filepath.Join(root, "proj")}}, 0); err == nil || !strings.Contains(err.Error(), "administrator") {
+		t.Errorf("want the failed destroy reported: %v", err)
 	}
 	if des, _ := os.ReadDir(store); len(des) != 0 {
 		t.Errorf("nothing should be left in the store: %v", des)
@@ -396,6 +442,23 @@ func TestPruneDeletesNativeSnapshotsFirst(t *testing.T) {
 	}
 }
 
+func TestOSHostDevEuidAndMounts(t *testing.T) {
+	h := OS()
+	d := t.TempDir()
+	if dev, err := h.Dev(d); err != nil || dev == 0 {
+		t.Errorf("dev %d %v", dev, err)
+	}
+	if _, err := h.Dev(filepath.Join(d, "none")); err == nil {
+		t.Error("dev of a missing path")
+	}
+	if h.Euid() != os.Geteuid() {
+		t.Error("euid")
+	}
+	if b, err := h.Mounts(); err != nil || len(b) == 0 {
+		t.Errorf("mounts %v", err)
+	}
+}
+
 func TestOSHost(t *testing.T) {
 	h := OS()
 	d := t.TempDir()
@@ -423,5 +486,153 @@ func TestOSHost(t *testing.T) {
 	}
 	if b := h.Backend(d, d); b != "copy" && b != "btrfs" && b != "zfs" {
 		t.Errorf("backend %q", b)
+	}
+}
+
+func TestNestedSubvolumeOrChildDatasetMeansCopy(t *testing.T) {
+	for _, tc := range []struct {
+		kind  string
+		magic int64
+	}{{"btrfs", btrfsMagic}, {"zfs", zfsMagic}} {
+		t.Run(tc.kind, func(t *testing.T) {
+			f, root, store := newFake(t, tc.magic)
+			write(t, filepath.Join(root, "proj/sub/deep/c.txt"), "child", 0o644)
+			f.devs = map[string]uint64{filepath.Join(root, "proj/sub"): 2} // a nested subvolume or child dataset
+			proj := filepath.Join(root, "proj")
+
+			if f.host().Backend(store, proj) != "copy" {
+				t.Error("something under the folder is on another device: copy")
+			}
+			m, err := CreateWith(f.host(), store, Origin{}, "rm -rf proj", []Target{{Path: proj}}, 0)
+			if err != nil || m.Native != nil || m.Bytes == 0 {
+				t.Fatalf("want a copy snapshot: %v %+v", err, m)
+			}
+			for _, c := range f.calls {
+				if strings.Contains(c, "snapshot") {
+					t.Errorf("no native snapshot should be taken: %v", f.calls)
+				}
+			}
+			os.RemoveAll(proj)
+			if r, err := Restore(store, m.ID); err != nil || len(r.Problems) != 0 {
+				t.Fatalf("restore: %v %v", err, r.Problems)
+			}
+			if read(t, filepath.Join(proj, "sub/deep/c.txt")) != "child" {
+				t.Error("the nested files must be restored")
+			}
+
+			// The same folder without the nested device is covered natively.
+			f.devs = nil
+			if f.host().Backend(store, proj) != tc.kind {
+				t.Error("one device: native")
+			}
+			// A target that is itself on another device than the snapshot's root.
+			f.devs = map[string]uint64{proj: 2}
+			if f.host().Backend(store, proj) != "copy" {
+				t.Error("the target itself on another device: copy")
+			}
+		})
+	}
+}
+
+func TestCrossesDevicesTreatsUnknownAsCrossing(t *testing.T) {
+	f, root, _ := newFake(t, btrfsMagic)
+	h := f.host()
+	proj := filepath.Join(root, "proj")
+	if h.crossesDevices(root, []string{proj, filepath.Join(root, "missing")}) {
+		t.Error("a missing path is nothing to cross")
+	}
+	noDev := h
+	noDev.Dev = func(string) (uint64, error) { return 0, errors.New("no") }
+	if !noDev.crossesDevices(root, []string{proj}) {
+		t.Error("an unreadable device number counts")
+	}
+	if os.Geteuid() == 0 {
+		return // root reads every folder
+	}
+	sub := filepath.Join(proj, "sub")
+	if err := os.Chmod(sub, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(sub, 0o755) })
+	if !h.crossesDevices(root, []string{proj}) {
+		t.Error("a folder that cannot be read counts")
+	}
+}
+
+func TestBtrfsNeedsUserSubvolRmAllowedForNonRoot(t *testing.T) {
+	f, root, store := newFake(t, btrfsMagic)
+	proj := []Target{{Path: filepath.Join(root, "proj")}}
+	f.uid = 1000
+	if f.host().Choose(store, proj) == nil {
+		t.Error("mounted with user_subvol_rm_allowed: native")
+	}
+	for name, mounts := range map[string]string{
+		"missing option": "36 25 0:30 / " + root + " rw - btrfs /dev/loop0 rw,subvolid=256\n",
+		"other mount":    "36 25 0:30 / /elsewhere rw - btrfs /dev/loop0 rw,user_subvol_rm_allowed\n",
+		"not mountinfo":  "garbage\n\n",
+		"inner mount wins": "1 0 0:1 / / rw - btrfs /dev/a rw,user_subvol_rm_allowed\n" +
+			"36 1 0:30 / " + root + " rw - btrfs /dev/loop0 rw,subvolid=256\n",
+	} {
+		f.mounts = mounts
+		if f.host().Choose(store, proj) != nil {
+			t.Errorf("%s: copy", name)
+		}
+	}
+	f.mounts = "1 0 0:1 / / rw - btrfs /dev/a rw,user_subvol_rm_allowed\n" +
+		"36 1 0:30 / /mnt/with\\040space rw - btrfs /dev/b rw\n"
+	if f.host().Choose(store, proj) == nil {
+		t.Error("the mount that holds the folder has the option: native")
+	}
+	h := f.host()
+	h.Mounts = func() ([]byte, error) { return nil, errors.New("no") }
+	if h.Choose(store, proj) != nil {
+		t.Error("unreadable mounts: copy")
+	}
+	f.uid = 0
+	if h.Choose(store, proj) == nil {
+		t.Error("root can always delete")
+	}
+}
+
+func TestPruneKeepsGoingPastASnapshotItCannotDelete(t *testing.T) {
+	f, root, store := newFake(t, btrfsMagic)
+	h := f.host()
+	var ms []Manifest
+	for range 3 {
+		m, err := CreateWith(h, store, Origin{}, "rm a", []Target{{Path: filepath.Join(root, "proj")}}, 0)
+		if err != nil || m.Native == nil {
+			t.Fatalf("%v %+v", err, m)
+		}
+		ms = append(ms, m)
+	}
+	f.failOn = "btrfs subvolume delete " + ms[0].Native.Path // the oldest cannot be deleted
+	r, err := prune(h, store, time.Nanosecond, 0, "")
+	if err == nil || !strings.Contains(err.Error(), "administrator") {
+		t.Errorf("want the delete error at the end: %v", err)
+	}
+	if r.Removed != 2 || r.Left != 1 {
+		t.Errorf("the others must still be pruned: %+v", r)
+	}
+	if _, err := Load(store, ms[0].ID); err != nil {
+		t.Errorf("the stuck snapshot must stay: %v", err)
+	}
+}
+
+func TestZfsWaitsForTheSnapshotFolder(t *testing.T) {
+	f, root, store := newFake(t, zfsMagic)
+	f.late = 200 * time.Millisecond
+	m, err := CreateWith(f.host(), store, Origin{}, "rm a", []Target{{Path: filepath.Join(root, "proj")}}, 0)
+	if err != nil || m.Native == nil {
+		t.Fatalf("a late folder is waited for: %v %+v", err, m.Native)
+	}
+
+	f, root, store = newFake(t, zfsMagic)
+	f.never = true
+	m, err = CreateWith(f.host(), store, Origin{}, "rm a", []Target{{Path: filepath.Join(root, "proj")}}, 0)
+	if err != nil || m.Native != nil || m.Bytes == 0 {
+		t.Fatalf("a folder that never shows up falls back to a copy: %v %+v", err, m)
+	}
+	if !strings.Contains(strings.Join(f.calls, "\n"), "zfs destroy tank/home@safeshell-") {
+		t.Errorf("the unreadable snapshot should be destroyed: %v", f.calls)
 	}
 }

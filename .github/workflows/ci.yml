@@ -127,6 +127,13 @@ jobs:
           sudo zfs create sspool/home
           sudo zfs allow "$USER" snapshot,destroy,mount,diff sspool/home
           sudo chown -R "$USER" /mnt/zfspool/home
+          # Wait until the dataset is mounted, then take and read back one snapshot as the runner
+          # user, so a setup problem fails here and not later as a silent fall back to copying.
+          for i in $(seq 30); do mountpoint -q /mnt/zfspool/home && break; sleep 1; done
+          mountpoint /mnt/zfspool/home
+          zfs snapshot sspool/home@warmup
+          ls /mnt/zfspool/home/.zfs/snapshot/warmup
+          zfs destroy sspool/home@warmup
           echo "SS_ZFS_DIR=/mnt/zfspool/home" >> "$GITHUB_ENV"
       - run: make build
       - name: Allow the sandbox

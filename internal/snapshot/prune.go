@@ -114,6 +114,7 @@ func prune(h Host, store string, olderThan time.Duration, maxBytes int64, keep s
 		r.Size += m.Bytes
 	}
 	cutoff := time.Now().Add(-olderThan)
+	var undeletable error               // the first filesystem snapshot that could not be deleted; the rest are still pruned
 	for i := len(ms) - 1; i >= 0; i-- { // oldest first
 		m := ms[i]
 		if m.ID == keep {
@@ -126,7 +127,10 @@ func prune(h Host, store string, olderThan time.Duration, maxBytes int64, keep s
 		}
 		if m.Native != nil { // the filesystem snapshot goes first: it is not an ordinary folder
 			if err := h.Delete(*m.Native); err != nil {
-				return r, err
+				if undeletable == nil {
+					undeletable = err
+				}
+				continue // keep its folder: it is how safeshell finds the snapshot again
 			}
 		}
 		if err := os.RemoveAll(dir(store, m.ID)); err != nil {
@@ -138,7 +142,7 @@ func prune(h Host, store string, olderThan time.Duration, maxBytes int64, keep s
 	}
 	r.Left = len(ms) - r.Removed
 	dropOrphanNotes(store)
-	return r, nil
+	return r, undeletable
 }
 
 // dropOrphanNotes removes .unsealed-<pid> notes that name a deleted snapshot.
