@@ -52,7 +52,8 @@ in a minor release if the CHANGELOG says so plainly under **Changed**.
       Note the scores for the CHANGELOG.
 - [ ] If the AI, the prompt or the default model changed: `safeshell ai bench --injection` (stop the
       local engine first with `safeshell ai stop`). It exits non-zero if any case changed the verdict
-      or swayed the model; note the swayed count.
+      or swayed the model. "Changed the verdict" must be 0; the swayed count must not grow
+      (local Qwen 3B: 6 of 17 at v1.7.0). Note both in the release notes.
 - [ ] Try the new features by hand once (for example `safeshell voice setup`, then `safeshell voice`).
 
 ### The release PR (release prep only, no features)

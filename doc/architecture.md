@@ -325,7 +325,7 @@ Rules for this step:
 | Sandbox diff equals real run in a VM | identical for filesystem effects |
 | Undo restores exact tree hash | 100 % of verified plans |
 | AI impact review: harmful changes it caught that rules/scorer missed, and false alarms it raised | reported (compared with rules-only on the same corpus) |
-| Prompt-injection cases (hostile file names) that changed the verdict | 0 of 17 by construction (a review can only raise a level). Measured with `safeshell ai bench --injection`: the model itself was swayed to rate below the rule level in 6 of 17 (local Qwen 3B, two cold runs, same cases); cloud not measured |
+| Prompt-injection cases (hostile file names) that changed the verdict | 0 of 17 by construction (a review can only raise a level). Measured with `safeshell ai bench --injection`: the model itself was swayed to rate below the rule level in 6 of 17 (local Qwen 3B, cold engine, same 6 every run; with the planted text replaced by plain file names it is 0 of 17, so all 6 are injection). A swayed review only loses the AI's extra raise, so the worst case is the verdict without AI. Cloud not measured |
 | NL -> command exact-match / ambiguity-flagged | reported |
 
 ---
