@@ -142,8 +142,22 @@ func TestShellHookStopsADangerousCommandAndLetsSafeOnesRun(t *testing.T) {
 // wait for health, chat) runs for real. It returns the environment to use.
 func fakeModel(t *testing.T, reply string) []string {
 	t.Helper()
+	return fakeModelWith(t, reply, false)
+}
+
+// fakeModelWith is fakeModel; with system true the engine is a llama-server on PATH (ai.local.engine "system")
+// and nothing is placed in SafeShell's own engine folder.
+func fakeModelWith(t *testing.T, reply string, system bool) []string {
+	t.Helper()
 	data, cfg, state := t.TempDir(), t.TempDir(), t.TempDir()
 	engine := filepath.Join(data, "safeshell", "engine", "b11429-cpu")
+	engineCfg := ""
+	var pathEnv []string
+	if system {
+		engine = t.TempDir()
+		engineCfg = `,"engine":"system"`
+		pathEnv = []string{"PATH=" + engine + string(os.PathListSeparator) + os.Getenv("PATH")}
+	}
 	_ = os.MkdirAll(engine, 0o755)
 	build := exec.Command("go", "build", "-o", filepath.Join(engine, "llama-server"), "./fakellama")
 	if out, err := build.CombinedOutput(); err != nil {
@@ -163,8 +177,9 @@ func fakeModel(t *testing.T, reply string) []string {
 	}
 	_ = os.MkdirAll(filepath.Join(cfg, "safeshell"), 0o755)
 	_ = os.WriteFile(filepath.Join(cfg, "safeshell", "config.json"),
-		[]byte(`{"ai":{"mode":"local","local":{"model":"qwen2.5-coder-1.5b","gpu":"off"}}}`), 0o600)
+		[]byte(`{"ai":{"mode":"local","local":{"model":"qwen2.5-coder-1.5b","gpu":"off"`+engineCfg+`}}}`), 0o600)
 	env := []string{"XDG_DATA_HOME=" + data, "XDG_CONFIG_HOME=" + cfg, "XDG_STATE_HOME=" + state, "FAKE_REPLY=" + reply}
+	env = append(env, pathEnv...)
 	t.Cleanup(func() {
 		c := exec.Command(ssBin, "ai", "stop")
 		c.Env = append(os.Environ(), env...)
@@ -191,6 +206,26 @@ func TestTypingEnglishInTheTerminalRunsTheTranslatedCommand(t *testing.T) {
 	sh.waitFor(t, "Nothing was run")
 	sh.send("echo plain-command\r")
 	sh.waitFor(t, "plain-command\r\n")
+}
+
+func TestTypingEnglishUsesTheSystemEngineWithoutDownloadingOne(t *testing.T) {
+	needSandbox(t)
+	env := fakeModelWith(t, `{"command":"echo translated-by-system-engine","note":"prints a word"}`, true)
+	sh := startBash(t, env...)
+	sh.waitFor(t, "READY>")
+	sh.send(`eval "$(safeshell hook bash)"` + "\r")
+	sh.send("please say something nice\r")
+	sh.waitFor(t, "Proposed: echo translated-by-system-engine")
+	sh.waitFor(t, "Run it? [Y/n]")
+	sh.send("\r")
+	sh.waitFor(t, "translated-by-system-engine\r\n")
+	for _, e := range env {
+		if dir, ok := strings.CutPrefix(e, "XDG_DATA_HOME="); ok {
+			if _, err := os.Stat(filepath.Join(dir, "safeshell", "engine")); err == nil {
+				t.Error("an engine folder was created in system mode")
+			}
+		}
+	}
 }
 
 func TestADangerousTranslationIsStillStopped(t *testing.T) {
