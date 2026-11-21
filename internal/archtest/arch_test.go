@@ -31,7 +31,7 @@ var scanned = []string{"internal", "cmd", "eval"}
 var pure = map[string]bool{
 	"internal/domain": true, "internal/classify": true, "internal/classify/rules": true,
 	"internal/policy": true, "internal/report": true, "internal/shellparse": true,
-	"internal/sandbox": true,
+	"internal/sandbox": true, "internal/undo": true,
 }
 
 // forbidden standard-library packages reach the machine. Pure string and
