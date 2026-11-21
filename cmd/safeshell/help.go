@@ -102,9 +102,18 @@ A command is shown exactly as it is, with no full stop added. NO_COLOR=1 already
 	{"pause", "Turn SafeShell off and on", `Once installed, SafeShell checks every terminal with nothing to start. To pause it:
      safeshell deactivate       every terminal, open ones and new ones, stops checking
      safeshell activate         every terminal checks again
-Nothing needs to be restarted. While paused, commands run without a check and without delay.
-For one terminal only:  SAFESHELL_OFF=1  (unset SAFESHELL_OFF to check again).
+Nothing needs to be restarted (strict mode refuses deactivate, see safeshell help strict). While paused, commands run without a check and without delay.
+For one terminal only:  SAFESHELL_OFF=1  (unset SAFESHELL_OFF to check again; strict mode refuses it, see safeshell help strict).
 Remove the hook for good:  safeshell uninstall.  safeshell doctor  says when checking is paused.`},
+	{"strict", "Strict mode: never run unchecked", `Normally the shell hook lets a line through, with a warning, when SafeShell itself breaks, so it never locks you out.
+Strict mode does the opposite. Turn it on with "strict": true in ~/.config/safeshell/config.json, then start a new terminal.
+When SafeShell is missing, crashes or fails:
+     plain read-only lines such as ls, pwd, cd, echo, cat, head, tail and wc still run, with a warning
+     every other line is cancelled, with a message saying why
+     the message tells you to run  safeshell doctor
+SAFESHELL_OFF=1 is refused in strict mode: it prints a note and every line is still checked.
+An administrator can turn strict mode on for everyone with "strict": true in /etc/safeshell/policy.json (it can never be turned off there).
+Strict mode also refuses safeshell deactivate, and a pause file left in the state folder is ignored with a note.`},
 	{"agents", "Check commands run by AI agents", `AI coding agents run commands outside your hooked shell. Connect them so SafeShell checks each one first:
      safeshell agent snippet claude     the hook to add to Claude Code's settings.json (PreToolUse, matcher Bash)
      safeshell agent snippet wrapper    a script that runs one command only when SafeShell allows it (needs jq)
@@ -151,6 +160,15 @@ A command that changes something on a prod host over ssh ("ssh prod1 'rm -rf /va
 level, at most R4, with "this is a production host". Reads and other hosts are unchanged.
 An interactive "ssh prod1" is not blocked, but prints a line saying commands typed there are only
 checked if SafeShell is installed on that host.`},
+	{"protect", "Keep folders safe", `List folders in ~/.config/safeshell/config.json (full paths, or starting with ~/):
+     "protect": ["~/thesis", "/srv/data"]
+Any command that changes or removes something inside one ("rm ~/thesis/a.tex") is raised to at least R3
+with "this folder is on your protected list". Reading ("cat", "ls") is unchanged.
+A project can add its own in a .safeshell.json at its top (the nearest one above where you are is used):
+     {"protect": ["deploy"], "rules": [{"match": "terraform apply", "block": "Use the pipeline."}]}
+Folders there are relative to the project and must stay inside it. Because a cloned project is not
+trusted, it can only make SafeShell stricter. Anything that would loosen is ignored, with a warning
+naming the file and the key.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
    safeshell check <cmd>             rate a command without running it
    safeshell check --script FILE...  rate every command in scripts, with line numbers; for CI:

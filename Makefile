@@ -37,13 +37,16 @@ clean:
 	rm -rf bin coverage.out
 
 # Release artefacts. CGO is off, so the binaries are static and run on any Linux.
+# The tarballs are reproducible: the same commit gives the same bytes (fixed time, sorted entries, no owner, gzip -n).
+SOURCE_DATE_EPOCH ?= $(shell git log -1 --format=%ct 2>/dev/null || echo 0)
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 dist: clean-dist
 	@for arch in amd64 arm64; do \
 	  d=dist/safeshell-$(VERSION)-linux-$$arch; mkdir -p $$d; \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $$d/safeshell ./cmd/safeshell || exit 1; \
 	  cp -r scripts packaging $$d/; \
-	  tar -czf dist/safeshell-$(VERSION)-linux-$$arch.tar.gz -C dist safeshell-$(VERSION)-linux-$$arch; \
+	  chmod -R u+rwX,go+rX,go-w $$d; \
+	  tar --sort=name --mtime=@$(SOURCE_DATE_EPOCH) --owner=0 --group=0 --numeric-owner -cf - -C dist safeshell-$(VERSION)-linux-$$arch | gzip -9n > dist/safeshell-$(VERSION)-linux-$$arch.tar.gz; \
 	done
 	@cd dist && sha256sum *.tar.gz > SHA256SUMS && ls -l *.tar.gz
 

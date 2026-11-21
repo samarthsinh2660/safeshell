@@ -14,6 +14,9 @@ import (
 // realLoadPolicy is the real loader, kept by TestMain before it installs a fake.
 var realLoadPolicy func() ([]policy.Rule, bool, error)
 
+// realTeamFile is the real whole-file loader, kept by TestMain the same way.
+var realTeamFile func() (policy.File, bool, error)
+
 // fakePolicy makes the team policy what a test says it is.
 func fakePolicy(t *testing.T, rules []policy.Rule, found bool, err error) {
 	t.Helper()
@@ -106,5 +109,12 @@ func TestDefaultLoaderReadsOnlyTheAdminsFile(t *testing.T) {
 	rules, _, err := realLoadPolicy()
 	if err != nil && rules != nil {
 		t.Errorf("a refused policy must give no rules: %v", rules)
+	}
+}
+
+func TestDefaultTeamFileReadsOnlyTheAdminsFile(t *testing.T) {
+	f, _, err := realTeamFile()
+	if err != nil && (f.Strict || f.Rules != nil) {
+		t.Errorf("a refused policy must ask for nothing: %+v", f)
 	}
 }

@@ -4,6 +4,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 # Each job is its own check on the pull request, so a failure shows exactly which part broke.
 # Branch protection requires only "check", which passes when every other job passed.
 jobs:
@@ -11,8 +14,8 @@ jobs:
     name: Format and vet (amd64, arm64, riscv64)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -28,8 +31,8 @@ jobs:
     name: Unit tests (race detector) and coverage
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - name: go test -race
@@ -39,7 +42,7 @@ jobs:
       - name: Classifier latency (p95 shown in the log)
         run: go test -count=1 -v -run P95 ./eval
       - name: Upload coverage
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -49,15 +52,15 @@ jobs:
     name: Installer script test
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - run: bash test/scripts/install_test.sh
 
   fuzz:
     name: Fuzz parser and classifier
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - run: make fuzz FUZZTIME=15s
@@ -66,8 +69,8 @@ jobs:
     name: Integration tests and sweep (real binary, real sandbox)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - name: Install zsh and fish, so the zsh and fish hook tests run too
@@ -87,7 +90,7 @@ jobs:
     name: SafeShell check action (passes a good script, fails a bad one)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Good script
         id: good
         uses: ./.github/actions/safeshell-check
@@ -109,10 +112,10 @@ jobs:
     name: Build tarballs and .debs
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
       - run: make dist deb VERSION=v0.0.0-ci
@@ -123,12 +126,34 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q lintian
           lintian --fail-on error dist/*.deb
 
+  reproducible:
+    name: Release tarballs are reproducible (two clean builds, same bytes)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+      # Same command the release workflow runs (make dist), from two separate clean copies of the commit.
+      - name: Build the tarballs twice from two clean copies
+        run: |
+          for n in 1 2; do
+            mkdir -p "$RUNNER_TEMP/build$n"
+            git archive HEAD | tar -x -C "$RUNNER_TEMP/build$n"
+            (cd "$RUNNER_TEMP/build$n" && make dist VERSION=v0.0.0-ci SOURCE_DATE_EPOCH=$(git -C "$GITHUB_WORKSPACE" log -1 --format=%ct) && cd dist && sha256sum *.tar.gz > "$RUNNER_TEMP/sums$n")
+            sleep 2
+          done
+      - name: The two builds must be byte for byte the same
+        run: diff "$RUNNER_TEMP/sums1" "$RUNNER_TEMP/sums2" && cat "$RUNNER_TEMP/sums1"
+
   debian:
     name: Debian package from debian/ (sid, lintian)
     runs-on: ubuntu-24.04
     container: debian:sid
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Build exactly as Debian would: build-deps from Debian's own archive, no network for Go.
       - name: Install the build dependencies from debian/control
         run: |
@@ -143,7 +168,7 @@ jobs:
   check:
     name: check
     if: always()
-    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, script-check-action, packages, debian]
+    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, script-check-action, packages, reproducible, debian]
     runs-on: ubuntu-24.04
     steps:
       - name: A job failed or was skipped

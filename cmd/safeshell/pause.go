@@ -28,6 +28,10 @@ func paused() bool {
 func runPause(off bool, stdout, stderr io.Writer) int {
 	p := pausedFile()
 	if off {
+		if strictOn(stderr) {
+			fmt.Fprintln(stderr, "safeshell deactivate: strict mode is on, so checking cannot be paused. Turn strict mode off first (\"strict\" in config.json, or ask your administrator if the team policy sets it).")
+			return 1
+		}
 		if paused() {
 			fmt.Fprintln(stdout, "SafeShell is already off in every terminal. Turn it back on with: safeshell activate")
 			return 0
