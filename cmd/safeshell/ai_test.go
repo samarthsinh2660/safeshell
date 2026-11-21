@@ -157,6 +157,22 @@ func TestAskTranslatesThenGuards(t *testing.T) {
 	}
 }
 
+func TestAskWarnsWhenTheRequestIsTooLong(t *testing.T) {
+	a := sampleAnalysis()
+	a.Level, a.Decision = domain.R0, domain.Allow
+	fakeAnalyze(t, a)
+	useAI(t, fakeAI{reply: `{"command":"ls -la"}`}, nil)
+	answer(t, "\n")
+	_, _, errOut := runSS("ask", strings.Repeat("हटाओ ", 500))
+	if !strings.Contains(errOut, "too long") {
+		t.Errorf("%q", errOut)
+	}
+	answer(t, "\n")
+	if _, _, errOut = runSS("ask", "show files"); strings.Contains(errOut, "too long") {
+		t.Errorf("%q", errOut)
+	}
+}
+
 func TestAskDangerousProposalIsStillBlocked(t *testing.T) {
 	fakeAnalyze(t, sampleAnalysis())
 	useAI(t, fakeAI{reply: `{"command":"rm -rf ~/projects"}`}, nil)

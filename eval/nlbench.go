@@ -27,6 +27,11 @@ var requestsTSV string
 //go:embed context.tsv
 var contextTSV string
 
+// hindiTSV holds Hindi requests, scored apart like the context set.
+//
+//go:embed requests-hi.tsv
+var hindiTSV string
+
 // Request is one plain-English task with what a good answer looks like.
 type Request struct {
 	Text     string
@@ -46,6 +51,9 @@ type Request struct {
 
 // LoadRequests parses the embedded request set (four fields per line).
 func LoadRequests() ([]Request, error) { return parse("requests.tsv", requestsTSV, 4) }
+
+// LoadHindiRequests parses the embedded Hindi set (same four fields as requests.tsv).
+func LoadHindiRequests() ([]Request, error) { return parse("requests-hi.tsv", hindiTSV, 4) }
 
 // LoadContextRequests parses the embedded context set: a category in front of
 // the four fields, and project facts, recent commands ("outcome: line") and

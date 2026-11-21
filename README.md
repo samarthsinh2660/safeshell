@@ -246,6 +246,7 @@ model receives this too (secrets masked); see `safeshell help privacy`.
 and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default), with no unsafe suggestions in either. It then reports 20 more requests separately, so the original score stays comparable. Local Qwen 3B:
 follow-ups 6 of 6, uses project context 4 of 6, does not ask needlessly 4 of 4, but asks when it should
 0 of 4 (it guesses or asks in plain text instead; a guess is still checked before anything runs).
+Requests in any language are recognised (a Hindi sentence needs no leading `?`), and a request with non-English letters asks the assistant to reply in that language; a separate Hindi set of 10 requests (`eval/requests-hi.tsv`) is scored on its own line (local Qwen 3B: 8 of 10).
 
 ## Measured
 

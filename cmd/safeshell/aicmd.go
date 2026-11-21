@@ -14,12 +14,13 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/runtime"
 )
 
-// benchBackend, loadRequests and loadContextRequests are test seams: tests replace them so a bench
+// benchBackend, loadRequests, loadContextRequests and loadHindiRequests are test seams: tests replace them so a bench
 // run needs neither a model nor the embedded request list.
 var (
 	benchBackend        = buildBackend
 	loadRequests        = eval.LoadRequests
 	loadContextRequests = eval.LoadContextRequests
+	loadHindiRequests   = eval.LoadHindiRequests
 )
 
 // runAI is `safeshell ai setup|status|stop`.
@@ -112,6 +113,11 @@ func runBench(c config.Config, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "safeshell ai bench:", err)
 		return 1
 	}
+	hiReqs, err := loadHindiRequests()
+	if err != nil {
+		fmt.Fprintln(stderr, "safeshell ai bench:", err)
+		return 1
+	}
 	fmt.Fprintf(stdout, "Testing %s on %d requests...\n", b.Name(), len(reqs))
 	show := func(o eval.Outcome) {
 		mark := "ok  "
@@ -145,7 +151,10 @@ func runBench(c config.Config, args []string, stdout, stderr io.Writer) int {
 		p, a := cres.Tally(c)
 		fmt.Fprintf(stdout, "  %-15s %d of %d\n", c, p, a)
 	}
-	skipped := n - asked + len(cres.Outcomes) - cres.Asked()
+	fmt.Fprintf(stdout, "\nIn Hindi (scored apart, not in the number above):\n")
+	hres := eval.RunBench(context.Background(), b, eval.BenchEnv(), hiReqs, pace, show)
+	fmt.Fprintf(stdout, "  hindi           %d of %d\n", hres.Passed(), hres.Asked())
+	skipped := n - asked + len(cres.Outcomes) - cres.Asked() + len(hres.Outcomes) - hres.Asked()
 	if skipped > 0 {
 		fmt.Fprintf(stdout, "%d request(s) never reached the model (network, key or rate limit) and are not counted; try --pace 3s.\n", skipped)
 		return 1

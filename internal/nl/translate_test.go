@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 type fake struct {
@@ -30,6 +31,35 @@ func TestTranslateReturnsTheProposalWithEnvironment(t *testing.T) {
 		if !strings.Contains(f.got, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, f.got)
 		}
+	}
+}
+
+func TestLongRequestIsCutOnACharacterBoundary(t *testing.T) {
+	f := &fake{reply: `{"command":"ls"}`}
+	if _, err := Translate(context.Background(), f, strings.Repeat("हटाओ ", 1000), env); err != nil {
+		t.Fatal(err)
+	}
+	sent := strings.TrimSuffix(strings.TrimPrefix(f.got[strings.Index(f.got, "<request>"):], "<request>"), "</request>")
+	if len(sent) > MaxRequest || !utf8.ValidString(sent) || !strings.HasSuffix(sent, "...") {
+		t.Errorf("%d bytes, valid %v", len(sent), utf8.ValidString(sent))
+	}
+}
+
+func TestOnlyANonEnglishRequestIsAskedForItsLanguage(t *testing.T) {
+	for _, c := range []struct {
+		request string
+		note    bool
+	}{{"list the files", false}, {"सभी फ़ाइलें दिखाओ", true}, {"borra los archivos de caché", true}} {
+		f := &fake{reply: `{"command":"ls","note":"","answer":""}`}
+		if _, err := Translate(context.Background(), f, c.request, env); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(f.got, "in the language of the request"); got != c.note {
+			t.Errorf("%q: language note %v, want %v", c.request, got, c.note)
+		}
+	}
+	if strings.Contains(system, "language") {
+		t.Error("the system prompt changed; English requests must keep the prompt the bench measures")
 	}
 }
 
@@ -91,6 +121,18 @@ func TestLooksLikeRequest(t *testing.T) {
 		{"./run it now", false, "", false},
 		{"echo $HOME now", false, "", false},
 		{"", false, "", false},
+		{"सभी लॉग फ़ाइलें हटाओ", false, "सभी लॉग फ़ाइलें हटाओ", true},
+		{"borra los archivos temporales", false, "borra los archivos temporales", true},
+		{"éfface les fichiers temporaires", false, "éfface les fichiers temporaires", true},
+		{"çà et là", false, "çà et là", true},
+		{"é=1 ls", false, "", false},
+		{"éfface x | tee y", false, "", false},
+		{"éfface $HOME maintenant", false, "", false},
+		{"/home/é/run now", false, "", false},
+		{"~/é run now", false, "", false},
+		{"é", false, "", false},
+		{"1é run now", false, "", false},
+		{"सभी लॉग हटाओ", true, "", false},
 	} {
 		got, ok := LooksLikeRequest(tc.line, tc.isCmd)
 		if got != tc.want || ok != tc.wantOK {

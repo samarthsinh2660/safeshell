@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/report"
@@ -58,6 +59,9 @@ request: run the tests
 {"command":"make test","note":"Runs the project's test target.","answer":""}
 request: what does chmod 755 mean
 {"command":"","note":"","answer":"The owner can read, write and run the file; everyone else can read and run it."}`
+
+// MaxRequest is how many bytes of a request the model is shown; the rest is cut at a character boundary.
+const MaxRequest = 2000
 
 // Env is what the model is told about the machine. All of it is data, not instructions.
 type Env struct {
@@ -165,14 +169,14 @@ func Translate(ctx context.Context, b ai.Backend, request string, env Env) (Resu
 // TranslateWith is Translate plus the person's replies to earlier questions.
 // They sit inside the request block, so they are untrusted data like the request.
 func TranslateWith(ctx context.Context, b ai.Backend, request string, clarifications []string, env Env) (Result, error) {
-	request = strings.TrimSpace(clean(request, 2000))
+	request = strings.TrimSpace(clean(request, MaxRequest))
 	if request == "" {
 		return Result{}, errors.New("nothing to translate")
 	}
 	for i, c := range clarifications {
 		request += fmt.Sprintf("\nclarification %d: %s", i+1, strings.TrimSpace(clean(c, 300)))
 	}
-	prompt := env.render() + env.renderConversation() + "<request>" + request + "</request>"
+	prompt := env.render() + env.renderConversation() + languageNote(request) + "<request>" + request + "</request>"
 	raw, err := ask(ctx, b, prompt)
 	if errors.Is(err, ai.ErrNotJSON) { // small models sometimes ramble; one firm reminder usually fixes it
 		raw, err = ask(ctx, b, prompt+"\nReply with the JSON object only.")
@@ -204,12 +208,25 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 	return r, nil
 }
 
-var word = regexp.MustCompile(`^[A-Za-z][A-Za-z'-]*$`)
+// languageNote asks for replies in the request's language when the request is
+// not plain ASCII. English requests get no note, so their prompt stays exactly
+// the one the bench measures.
+func languageNote(request string) string {
+	for _, r := range request {
+		if r >= utf8.RuneSelf {
+			return "Write \"note\", \"answer\" and \"question\" in the language of the request; \"command\" is always a normal shell command.\n"
+		}
+	}
+	return ""
+}
+
+var word = regexp.MustCompile(`^\pL[\pL\pM'-]*$`)
 
 // LooksLikeRequest decides whether a line the shell cannot run is plain
 // English. A leading "?" always counts. Otherwise the first word must not be a
 // command (the caller checks that), the line must have at least two words, and
-// it must not contain shell syntax. The returned text has any "?" removed.
+// it must not contain shell syntax. Any language counts: the first word may
+// start with any letter. The returned text has any "?" removed.
 func LooksLikeRequest(line string, firstWordIsCommand bool) (text string, ok bool) {
 	line = strings.TrimSpace(line)
 	if t, found := strings.CutPrefix(line, "?"); found {

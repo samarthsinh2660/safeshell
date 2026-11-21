@@ -137,3 +137,20 @@ func TestBenchCountsUnreachableContextRequestsAndReportsABadContextFile(t *testi
 		t.Errorf("%d %q", code, e)
 	}
 }
+
+func TestBenchScoresHindiApartAndReportsABadHindiFile(t *testing.T) {
+	aiDirs(t)
+	oldB, oldL, oldC, oldH := benchBackend, loadRequests, loadContextRequests, loadHindiRequests
+	t.Cleanup(func() { benchBackend, loadRequests, loadContextRequests, loadHindiRequests = oldB, oldL, oldC, oldH })
+	benchBackend = func(config.Config, runtime.Dirs) (ai.Backend, error) { return fakeAI{reply: `{"command":"ls"}`}, nil }
+	loadRequests = func() ([]eval.Request, error) { return nil, nil }
+	loadContextRequests = func() ([]eval.Request, error) { return nil, nil }
+	_, out, _ := runSS("ai", "bench")
+	if !strings.Contains(out, "In Hindi") || !strings.Contains(out, "hindi           ") || !strings.Contains(out, " of 10") {
+		t.Errorf("%q", out)
+	}
+	loadHindiRequests = func() ([]eval.Request, error) { return nil, errors.New("broken hindi list") }
+	if code, _, e := runSS("ai", "bench"); code != 1 || !strings.Contains(e, "broken hindi list") {
+		t.Errorf("%d %q", code, e)
+	}
+}

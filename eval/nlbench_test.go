@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/samarthsinh2660/safeshell/internal/nl"
 )
@@ -123,5 +124,20 @@ func TestBenchEnvCountsItsListedToolsAsInstalled(t *testing.T) {
 	}
 	if !e.Has("sh") || e.Has("definitely-not-a-program") {
 		t.Error("other programs should follow this machine's PATH")
+	}
+}
+
+func TestHindiSetLoadsAndIsHindi(t *testing.T) {
+	reqs, err := LoadHindiRequests()
+	if err != nil || len(reqs) < 8 {
+		t.Fatalf("%d %v", len(reqs), err)
+	}
+	for _, r := range reqs {
+		if !strings.ContainsFunc(r.Text, func(c rune) bool { return unicode.Is(unicode.Devanagari, c) }) {
+			t.Errorf("%q has no Hindi", r.Text)
+		}
+		if r.Must == nil && !r.Question && r.MustNot == nil {
+			t.Errorf("%q checks nothing", r.Text)
+		}
 	}
 }
