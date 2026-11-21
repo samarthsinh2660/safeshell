@@ -92,6 +92,64 @@ jobs:
       - name: Sweep every labelled command through the real binary
         run: SS_NEED_SANDBOX=1 SS_SWEEP=1 go test -count=1 -timeout 20m ./test/integration -run Sweep
 
+  native-snapshots:
+    name: Native snapshots on real btrfs and ZFS
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      - name: Install the btrfs and ZFS tools
+        run: sudo apt-get update -q && sudo apt-get install -y -q btrfs-progs zfsutils-linux
+      # Like Fedora and openSUSE: the subvolume is its own mount ("subvol=home"), not a folder
+      # inside a bigger btrfs mount.
+      - name: A btrfs subvolume the runner user owns, mounted on its own
+        run: |
+          truncate -s 1G "$RUNNER_TEMP/btrfs.img"
+          mkfs.btrfs -q "$RUNNER_TEMP/btrfs.img"
+          sudo mkdir -p /mnt/btrfs-top /mnt/btrfs
+          sudo mount -o loop "$RUNNER_TEMP/btrfs.img" /mnt/btrfs-top
+          sudo btrfs subvolume create /mnt/btrfs-top/home
+          sudo umount /mnt/btrfs-top
+          sudo mount -o loop,subvol=home,user_subvol_rm_allowed "$RUNNER_TEMP/btrfs.img" /mnt/btrfs
+          sudo chown "$USER" /mnt/btrfs
+          echo "SS_BTRFS_DIR=/mnt/btrfs" >> "$GITHUB_ENV"
+      # The runner kernel may have no ZFS module. Then only the ZFS part is skipped, and says so.
+      - name: A ZFS dataset the runner user may snapshot
+        run: |
+          if ! sudo modprobe zfs; then
+            echo "::warning::ZFS module not available on this runner, so the ZFS part of this job is skipped"
+            exit 0
+          fi
+          truncate -s 1G "$RUNNER_TEMP/zfs.img"
+          sudo zpool create -m /mnt/zfspool sspool "$RUNNER_TEMP/zfs.img"
+          sudo zfs create sspool/home
+          sudo zfs allow "$USER" snapshot,destroy,mount,diff sspool/home
+          sudo chown -R "$USER" /mnt/zfspool/home
+          echo "SS_ZFS_DIR=/mnt/zfspool/home" >> "$GITHUB_ENV"
+      - run: make build
+      - name: Allow the sandbox
+        run: scripts/install-apparmor.sh --yes bin/safeshell && bin/safeshell doctor
+      # Facts for reading a failure; none of these can fail the job.
+      - name: Diagnostics
+        run: |
+          findmnt /mnt/btrfs || true
+          stat -f -c %T /mnt/btrfs || true
+          stat -c %i /mnt/btrfs || true
+          btrfs subvolume show /mnt/btrfs || true
+          echo "--- snapshot as the runner user, no sudo"
+          btrfs subvolume snapshot -r /mnt/btrfs /mnt/btrfs/.probe && btrfs property set -ts /mnt/btrfs/.probe ro false && btrfs subvolume delete /mnt/btrfs/.probe || true
+          echo "--- doctor with HOME on btrfs"
+          mkdir -p /mnt/btrfs/diag-data
+          HOME=/mnt/btrfs XDG_DATA_HOME=/mnt/btrfs/diag-data bin/safeshell doctor | grep -i snapshot || true
+          echo "--- simulate rm -rf on btrfs"
+          mkdir -p /mnt/btrfs/diag/proj && echo x > /mnt/btrfs/diag/proj/a.txt
+          bin/safeshell simulate --json --cwd /mnt/btrfs/diag "rm -rf proj" || true
+      # With SS_BTRFS_DIR or SS_ZFS_DIR set, the test fails unless the native snapshot was really used.
+      - name: Undo from a native snapshot
+        run: SS_NEED_SANDBOX=1 go test -count=1 -v -run TestUndoFromNativeSnapshot ./test/integration
+
   script-check-action:
     name: SafeShell check action (passes a good script, fails a bad one)
     runs-on: ubuntu-24.04
@@ -174,7 +232,7 @@ jobs:
   check:
     name: check
     if: always()
-    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, script-check-action, packages, reproducible, debian]
+    needs: [format-and-vet, unit-tests, install-script, fuzz, integration, native-snapshots, script-check-action, packages, reproducible, debian]
     runs-on: ubuntu-24.04
     steps:
       - name: A job failed or was skipped

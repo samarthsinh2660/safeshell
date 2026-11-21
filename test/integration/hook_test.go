@@ -22,6 +22,7 @@ type term struct {
 	master *os.File
 	mu     sync.Mutex
 	buf    strings.Builder
+	all    strings.Builder // everything since the shell started, for failure messages
 }
 
 func startBash(t *testing.T, extraEnv ...string) *term {
@@ -57,6 +58,7 @@ func startShell(t *testing.T, argv []string, extraEnv ...string) *term {
 			if n > 0 {
 				tm.mu.Lock()
 				tm.buf.Write(b[:n])
+				tm.all.Write(b[:n])
 				tm.mu.Unlock()
 			}
 			if err != nil {
@@ -88,7 +90,7 @@ func (tm *term) waitFor(t *testing.T, want string) {
 	}
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
-	t.Fatalf("never saw %q; terminal showed:\n%s", want, tm.buf.String())
+	t.Fatalf("never saw %q; terminal showed:\n%s\nfull transcript:\n%s", want, tm.buf.String(), tm.all.String())
 }
 
 func TestShellHookStopsADangerousCommandAndLetsSafeOnesRun(t *testing.T) {

@@ -244,3 +244,27 @@ func TestDoctorFindsTheFishHook(t *testing.T) {
 	os.Remove(bin)
 	wantAll(t, doctorOut(t), "MISSING  hook installed", "which is gone")
 }
+
+func TestDoctorShowsTheSnapshotBackendForTheHomeFolder(t *testing.T) {
+	home := doctorHome(t)
+	wantAll(t, doctorOut(t), "snapshot backend", "copying the files a command will change")
+
+	old := snapshotHost
+	t.Cleanup(func() { snapshotHost = old })
+	for _, kind := range []string{"btrfs", "zfs"} {
+		if got := snapshotBackendText(kind); !strings.Contains(got, kind+" snapshots for your home folder") {
+			t.Errorf("%s: %s", kind, got)
+		}
+	}
+	h := snapshot.OS()
+	h.Statfs = func(string) (snapshot.Fs, error) { return snapshot.Fs{Type: 0x9123683E}, nil }
+	ino := h.Ino
+	h.Ino = func(p string) (uint64, error) {
+		if p == home {
+			return 256, nil
+		}
+		return ino(p)
+	}
+	snapshotHost = func() snapshot.Host { return h }
+	wantAll(t, doctorOut(t), "snapshot backend", "btrfs snapshots for your home folder")
+}

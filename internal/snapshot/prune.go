@@ -101,6 +101,10 @@ type Pruned struct {
 // not applied. It also removes the notes left for terminals whose snapshot no
 // longer exists.
 func Prune(store string, olderThan time.Duration, maxBytes int64, keep string) (Pruned, error) {
+	return prune(OS(), store, olderThan, maxBytes, keep)
+}
+
+func prune(h Host, store string, olderThan time.Duration, maxBytes int64, keep string) (Pruned, error) {
 	var r Pruned
 	ms, err := List(store)
 	if err != nil {
@@ -119,6 +123,11 @@ func Prune(store string, olderThan time.Duration, maxBytes int64, keep string) (
 		big := maxBytes > 0 && r.Size > maxBytes
 		if !old && !big {
 			break // every later one is newer, and the total no longer shrinks
+		}
+		if m.Native != nil { // the filesystem snapshot goes first: it is not an ordinary folder
+			if err := h.Delete(*m.Native); err != nil {
+				return r, err
+			}
 		}
 		if err := os.RemoveAll(dir(store, m.ID)); err != nil {
 			return r, err

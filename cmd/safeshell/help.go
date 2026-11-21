@@ -144,6 +144,10 @@ removes files the command created. If anything cannot be restored exactly, it te
 claiming success: a file that had other hard links, a socket or device, a new file added to a saved
 folder (it is left alone), or a changed time or owner. Paths SafeShell could not read are left out of
 the snapshot, and both the note when it is saved and undo name them.
+On btrfs and ZFS, when one subvolume or dataset holds all the files and you may take snapshots
+(btrfs subvolume snapshot, or zfs allow snapshot), SafeShell takes a read-only filesystem snapshot
+instead of copying, and undo restores only the files the command touched from it. If you may not,
+or the files span several, or the snapshots folder is on a different filesystem, it copies as usual. "safeshell doctor" shows which applies to your home.
 Two system changes cannot be saved as files, so undo proposes the reverse command instead:
   apt install      undo reads /var/log/apt/history.log and proposes  sudo apt remove  with exactly the
                    packages that run installed, including the ones pulled in as dependencies. Packages it

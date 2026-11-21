@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -211,5 +213,43 @@ func TestProtectSavesOnlyTheFileMovedIntoAFolder(t *testing.T) {
 	a.Targets = []rules.Written{{Path: filepath.Join(dir, "big"), Into: filepath.Join(dir, "big", "a")}}
 	if got := protect(a, ""); !strings.Contains(got, "Snapshot saved (4.0 KiB)") {
 		t.Errorf("a file destination is saved itself: %s", got)
+	}
+}
+
+// With a btrfs subvolume under the files, protect takes a native snapshot and
+// says nothing was copied; undo restores from it.
+func TestProtectUsesNativeSnapshotWhenItCoversTheFiles(t *testing.T) {
+	useStore(t)
+	root := t.TempDir()
+	f := filepath.Join(root, "a.txt")
+	os.WriteFile(f, []byte("hello"), 0o644)
+	h := snapshot.OS()
+	h.Statfs = func(string) (snapshot.Fs, error) { return snapshot.Fs{Type: 0x9123683E}, nil }
+	ino := h.Ino
+	h.Ino = func(p string) (uint64, error) {
+		if p == root {
+			return 256, nil
+		}
+		return ino(p)
+	}
+	h.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		return exec.Command("cp", "-a", root, args[len(args)-1]).CombinedOutput()
+	}
+	old := snapshotHost
+	t.Cleanup(func() { snapshotHost = old })
+	snapshotHost = func() snapshot.Host { return h }
+
+	a := sampleAnalysis()
+	a.Targets = []rules.Written{{Path: f}}
+	if got := protect(a, ""); !strings.Contains(got, "Snapshot saved (btrfs, nothing copied)") {
+		t.Fatalf("note: %s", got)
+	}
+	os.Remove(f)
+	var out, errOut strings.Builder
+	if code := runUndo([]string{"--yes"}, &out, &errOut, false); code != 0 {
+		t.Fatalf("undo: %d %s", code, errOut.String())
+	}
+	if b, _ := os.ReadFile(f); string(b) != "hello" {
+		t.Errorf("not restored: %q", b)
 	}
 }

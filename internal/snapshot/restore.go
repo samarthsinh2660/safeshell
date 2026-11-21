@@ -150,7 +150,7 @@ func restoreEntry(store, id string, e Entry) (changed bool, err error) {
 			}
 			if e.Links > 1 && inode(cur) == e.Inode {
 				// Other names share this file: write the content back into it, so they see it too.
-				if err := rewriteInPlace(filepath.Join(dir(store, id), "blobs", e.SHA), e.Path); err != nil {
+				if err := rewriteInPlace(blobPath(store, id, e), e.Path); err != nil {
 					return false, err
 				}
 				_, err := fixMeta(e)
@@ -163,9 +163,17 @@ func restoreEntry(store, id string, e Entry) (changed bool, err error) {
 			}
 		}
 		_ = os.MkdirAll(filepath.Dir(e.Path), 0o755)
-		return true, writeBlob(filepath.Join(dir(store, id), "blobs", e.SHA), e)
+		return true, writeBlob(blobPath(store, id, e), e)
 	}
 	return false, fmt.Errorf("unknown entry kind %q", e.Kind)
+}
+
+// blobPath is where the saved content of file e is read from.
+func blobPath(store, id string, e Entry) string {
+	if e.Src != "" {
+		return e.Src
+	}
+	return filepath.Join(dir(store, id), "blobs", e.SHA)
 }
 
 func inode(fi os.FileInfo) uint64 { return fi.Sys().(*syscall.Stat_t).Ino }
