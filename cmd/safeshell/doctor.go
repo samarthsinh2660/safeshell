@@ -30,6 +30,7 @@ func runDoctor(stdout io.Writer) int {
 	code := doctor(stdout, probe())
 	doctorSetup(stdout)
 	doctorPolicy(stdout)
+	doctorConfig(stdout)
 	doctorAI(stdout)
 	doctorCloud(stdout)
 	cards, _ := os.ReadFile("/proc/asound/cards")
@@ -124,6 +125,15 @@ func hookBinaryGone(sh install.Shell) bool {
 	}
 	_, err := os.Stat(bin)
 	return err != nil
+}
+
+// doctorConfig names settings in config.json that SafeShell does not know,
+// such as a misspelled key. Only doctor and ai status show this, so the hook
+// never prints it on every command.
+func doctorConfig(w io.Writer) {
+	for _, u := range config.Unknown(config.Path()) {
+		doctorRow(w, "MISSING", "settings", report.Printable(u))
+	}
 }
 
 // doctorPolicy says which team policy is active, or that none is set.
