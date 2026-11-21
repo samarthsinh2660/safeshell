@@ -122,6 +122,21 @@ jobs:
       - run: make build
       - name: Allow the sandbox
         run: scripts/install-apparmor.sh --yes bin/safeshell && bin/safeshell doctor
+      # Facts for reading a failure; none of these can fail the job.
+      - name: Diagnostics
+        run: |
+          findmnt /mnt/btrfs || true
+          stat -f -c %T /mnt/btrfs/home || true
+          stat -c %i /mnt/btrfs/home || true
+          btrfs subvolume show /mnt/btrfs/home || true
+          echo "--- snapshot as the runner user, no sudo"
+          btrfs subvolume snapshot -r /mnt/btrfs/home /mnt/btrfs/home/.probe && btrfs subvolume delete /mnt/btrfs/home/.probe || true
+          echo "--- doctor with HOME on btrfs"
+          mkdir -p /mnt/btrfs/home/diag-data
+          HOME=/mnt/btrfs/home XDG_DATA_HOME=/mnt/btrfs/home/diag-data bin/safeshell doctor | grep -i snapshot || true
+          echo "--- simulate rm -rf on btrfs"
+          mkdir -p /mnt/btrfs/home/diag/proj && echo x > /mnt/btrfs/home/diag/proj/a.txt
+          bin/safeshell simulate --json --cwd /mnt/btrfs/home/diag "rm -rf proj" || true
       # With SS_BTRFS_DIR or SS_ZFS_DIR set, the test fails unless the native snapshot was really used.
       - name: Undo from a native snapshot
         run: SS_NEED_SANDBOX=1 go test -count=1 -v -run TestUndoFromNativeSnapshot ./test/integration
