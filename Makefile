@@ -28,6 +28,7 @@ fmt:
 # Everything that must pass before a commit.
 check: vet
 	bash test/scripts/install_test.sh
+	bash test/scripts/apparmor_test.sh
 	@test -z "$$(gofmt -l .)" || (echo "gofmt needed:"; gofmt -l .; exit 1)
 	go test -race -covermode=atomic -coverprofile=coverage.out ./...
 	GOOS=linux GOARCH=arm64 go vet ./...
@@ -63,7 +64,7 @@ deb:
 	@for arch in amd64 arm64; do \
 	  root=dist/deb/$$arch; mkdir -p $$root/DEBIAN $$root/usr/bin $$root/etc/apparmor.d; \
 	  CGO_ENABLED=0 GOOS=linux GOARCH=$$arch go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o $$root/usr/bin/safeshell ./cmd/safeshell || exit 1; \
-	  sed 's#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl > $$root/etc/apparmor.d/safeshell-ss; \
+	  sed 's#@NAME@#safeshell-ss#; s#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl > $$root/etc/apparmor.d/safeshell-ss; \
 	  mkdir -p $$root/usr/share/man/man1 $$root/usr/share/doc/safeshell; \
 	  gzip -9n -c debian/safeshell.1 > $$root/usr/share/man/man1/safeshell.1.gz; \
 	  cp debian/copyright $$root/usr/share/doc/safeshell/copyright; \

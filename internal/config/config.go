@@ -60,7 +60,7 @@ type Config struct {
 		Mode  ai.Mode `json:"mode"`
 		Local struct {
 			Model string `json:"model"` // a models.Catalog id
-			GPU   string `json:"gpu"`   // auto, cuda, vulkan, cpu
+			GPU   string `json:"gpu"`   // auto, cuda, vulkan, cpu (on and off also work)
 			// Engine: bundled (download the pinned llama-server, default) or system (use llama-server found on PATH).
 			Engine string `json:"engine"`
 		} `json:"local"`
@@ -125,7 +125,7 @@ func Load(path string) (Config, error) {
 		c.AI.Local.GPU = "auto"
 	case "auto", "cuda", "vulkan", "cpu", "on", "off":
 	default:
-		return Config{}, errors.New("ai.local.gpu must be auto, cuda, vulkan or cpu, not " + c.AI.Local.GPU)
+		return Config{}, errors.New("ai.local.gpu must be auto, cuda, vulkan, cpu, on or off, not " + c.AI.Local.GPU)
 	}
 	switch c.AI.Local.Engine {
 	case "":

@@ -8,6 +8,7 @@ import (
 
 	"github.com/samarthsinh2660/safeshell/eval"
 	"github.com/samarthsinh2660/safeshell/internal/ai"
+	"github.com/samarthsinh2660/safeshell/internal/ai/local"
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/models"
 	"github.com/samarthsinh2660/safeshell/internal/report"
@@ -49,9 +50,13 @@ func runAI(args []string, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case len(args) == 1 && args[0] == "status":
-		b, _ := backend()
-		if b == nil {
-			fmt.Fprintf(stdout, "AI: off (mode %s). %s\n", c.AI.Mode, aiOffHint)
+		for _, u := range config.Unknown(config.Path()) {
+			fmt.Fprintln(stdout, "Warning:", report.Printable(u))
+		}
+		b, berr := backend()
+		localReady := local.Llama{Dirs: d, Model: md, GPU: c.AI.Local.GPU}.Ready()
+		if why := aiOffReason(c.AI.Mode, b, berr, localReady); why != "" {
+			fmt.Fprintf(stdout, "AI: off (mode %s). %s\n", c.AI.Mode, why)
 		} else {
 			fmt.Fprintf(stdout, "AI: %s (mode %s)\n", b.Name(), c.AI.Mode)
 		}
@@ -73,6 +78,23 @@ func runAI(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprint(stderr, usage)
 	return 2
+}
+
+// aiOffReason says why no AI answers, or "" when one does: the mode is off,
+// the cloud provider or key is missing, or the local model or engine is not
+// installed. It ends with the next step.
+func aiOffReason(mode ai.Mode, b ai.Backend, err error, localReady bool) string {
+	switch {
+	case err != nil:
+		return report.Printable(err.Error())
+	case mode == ai.Off:
+		return "AI is turned off in your settings. To turn it on, set ai.mode to auto in config.json"
+	case mode == ai.Local && !localReady:
+		return "The local model or engine is not installed. Run: safeshell ai setup"
+	case b == nil: // mode auto with nothing installed
+		return "The local model or engine is not installed. " + aiOffHint
+	}
+	return ""
 }
 
 // runBench measures how well the active model (or --model ID) turns English

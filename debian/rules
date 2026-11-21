@@ -21,5 +21,5 @@ override_dh_auto_test:
 override_dh_auto_install:
 	dh_auto_install -- --no-source
 	install -d debian/safeshell/etc/apparmor.d
-	sed 's#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl \
+	sed 's#@NAME@#safeshell-ss#; s#@BIN@#/usr/bin/safeshell#' packaging/apparmor/safeshell-ss.tmpl \
 		> debian/safeshell/etc/apparmor.d/safeshell-ss
