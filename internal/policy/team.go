@@ -54,30 +54,38 @@ func Parse(data []byte) ([]Rule, error) {
 	}
 	var rules []Rule
 	for i, w := range f.Rules {
-		n := i + 1
-		r := Rule{Match: strings.Fields(w.Match), Snapshot: w.Snapshot}
-		if len(r.Match) == 0 {
-			return nil, fmt.Errorf("rule %d: match is empty. Say which command it covers, such as \"docker system prune\"", n)
-		}
-		if w.Block != nil {
-			if strings.TrimSpace(*w.Block) == "" {
-				return nil, fmt.Errorf("rule %d: block needs a reason to show people", n)
-			}
-			r.Block = *w.Block
-		}
-		if w.MinLevel != "" {
-			l, ok := domain.ParseLevel(w.MinLevel)
-			if !ok || l == domain.R0 {
-				return nil, fmt.Errorf("rule %d: min_level must be R1, R2, R3 or R4, not %q. A policy can raise a level, never lower one", n, w.MinLevel)
-			}
-			r.MinLevel = l
-		}
-		if r.Block == "" && !r.Snapshot && r.MinLevel == domain.R0 {
-			return nil, fmt.Errorf("rule %d does nothing: add block, snapshot or min_level", n)
+		r, err := w.rule(i + 1)
+		if err != nil {
+			return nil, err
 		}
 		rules = append(rules, r)
 	}
 	return rules, nil
+}
+
+// rule checks one rule as written; n is its place in the file, for the message.
+func (w wire) rule(n int) (Rule, error) {
+	r := Rule{Match: strings.Fields(w.Match), Snapshot: w.Snapshot}
+	if len(r.Match) == 0 {
+		return Rule{}, fmt.Errorf("rule %d: match is empty. Say which command it covers, such as \"docker system prune\"", n)
+	}
+	if w.Block != nil {
+		if strings.TrimSpace(*w.Block) == "" {
+			return Rule{}, fmt.Errorf("rule %d: block needs a reason to show people", n)
+		}
+		r.Block = *w.Block
+	}
+	if w.MinLevel != "" {
+		l, ok := domain.ParseLevel(w.MinLevel)
+		if !ok || l == domain.R0 {
+			return Rule{}, fmt.Errorf("rule %d: min_level must be R1, R2, R3 or R4, not %q. A policy can raise a level, never lower one", n, w.MinLevel)
+		}
+		r.MinLevel = l
+	}
+	if r.Block == "" && !r.Snapshot && r.MinLevel == domain.R0 {
+		return Rule{}, fmt.Errorf("rule %d does nothing: add block, snapshot or min_level", n)
+	}
+	return r, nil
 }
 
 // Evaluate combines every rule that matches any command of the line.

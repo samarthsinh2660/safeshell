@@ -70,6 +70,26 @@ func hostLabels() (hosts map[string]string, warning string) {
 	return hosts, ""
 }
 
+// loadProtected reads the folders the user protects (config.json, ~ expanded)
+// and the nearest project file's folders and rules, which can only tighten. It
+// is a test seam: tests replace it. Whatever could not be used is a warning,
+// never silence.
+var loadProtected = func(cwd string) (folders []string, rules []policy.Rule, warnings []string) {
+	home := userHome()
+	c, err := config.Load(config.Path())
+	if err != nil {
+		warnings = append(warnings, "protected folders from the settings file were ignored because it could not be used: "+err.Error())
+	}
+	for _, f := range c.Protect {
+		if f == "~" || strings.HasPrefix(f, "~/") {
+			f = home + f[1:]
+		}
+		folders = append(folders, f)
+	}
+	p, ws := config.LoadProject(cwd, home)
+	return append(folders, p.Protect...), p.Rules, append(warnings, ws...)
+}
+
 // analyze is replaced in tests.
 var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	env := callerEnv(ctx)
@@ -93,10 +113,11 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	procs := func(cmds []shellparse.Command) []domain.Effect { return inspectProcesses(callerPid(ctx), cmds) }
 	rules, warning := teamPolicy()
 	hosts, hostWarning := hostLabels()
-	e := &engine.Engine{Rules: rules, Hosts: hosts, Home: userHome(), Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	protected, projectRules, protectWarnings := loadProtected(cwd)
+	e := &engine.Engine{Rules: append(rules, projectRules...), Hosts: hosts, Protect: protected, Home: userHome(), Sim: realSandbox{}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	a := e.Analyze(ctx, line, cwd)
-	a.PolicyWarning = strings.TrimSpace(warning + " " + hostWarning)
+	a.PolicyWarning = strings.TrimSpace(strings.Join(append([]string{warning, hostWarning}, protectWarnings...), " "))
 	return a
 }
 
@@ -403,7 +424,10 @@ func printAnalysis(w io.Writer, a engine.Analysis, cwd string, color, verbose bo
 	if a.Host.Reason != "" {
 		fmt.Fprintf(w, "%sRaised because %s.%s\n", c.dim, report.Printable(a.Host.Reason), c.reset)
 	}
-	if a.Level > a.Verdict.Level && a.Level > a.Host.MinLevel { // a raise by the host label alone is explained above
+	if a.Protected.Reason != "" {
+		fmt.Fprintf(w, "%sRaised because %s.%s\n", c.dim, report.Printable(a.Protected.Reason), c.reset)
+	}
+	if a.Level > a.Verdict.Level && a.Level > max(a.Host.MinLevel, a.Protected.MinLevel) { // a raise by the host label or a protected folder alone is explained above
 		fmt.Fprintf(w, "%sThe command text alone looked like %s; what it would really do raised it to %s.%s\n", c.dim, a.Verdict.Level, a.Level, c.reset)
 	}
 
