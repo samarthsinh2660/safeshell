@@ -56,8 +56,12 @@ func (c ServiceCmd) Restore(unit string, st UnitState) (Plan, bool) {
 	if c.Verb == "mask" && !strings.HasPrefix(st.Enabled, "masked") {
 		add("unmask", "unmasks it")
 	}
-	if c.Verb == "disable" && strings.HasPrefix(st.Enabled, "enabled") {
+	switch {
+	case c.Verb != "disable":
+	case st.Enabled == "enabled":
 		add("enable", "enables it again")
+	case st.Enabled == "enabled-runtime": // enabled only until the next boot, so put it back that way
+		add("enable --runtime", "enables it again until the next boot")
 	}
 	if (c.Verb == "stop" || c.Now) && st.Active == "active" {
 		add("start", "starts it again")
