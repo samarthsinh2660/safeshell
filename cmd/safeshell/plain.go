@@ -88,7 +88,10 @@ func printPlainAnalysis(w io.Writer, a engine.Analysis, cwd string, verbose bool
 	if a.Host.Reason != "" {
 		fmt.Fprintln(w, "Raised because", sentence(a.Host.Reason))
 	}
-	if a.Level > a.Verdict.Level && a.Level > a.Host.MinLevel {
+	if a.Protected.Reason != "" {
+		fmt.Fprintln(w, "Raised because", sentence(a.Protected.Reason))
+	}
+	if a.Level > a.Verdict.Level && a.Level > max(a.Host.MinLevel, a.Protected.MinLevel) {
 		fmt.Fprintf(w, "The command text alone looked like risk level %d of 4; what it would really do raised it to level %d of 4.\n", int(a.Verdict.Level), int(a.Level))
 	}
 	for _, f := range a.Verdict.Findings {

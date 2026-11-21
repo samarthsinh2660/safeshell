@@ -111,11 +111,13 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	realLoadPolicy = loadPolicy
 	loadPolicy = func() ([]policy.Rule, bool, error) { return nil, false, nil } // nor a policy on this machine
 	realLoadHosts = loadHosts
-	loadHosts = func() (map[string]string, error) { return nil, nil }     // nor the developer's own host labels
-	learning = func() bool { return false }                               // nor the developer's own settings
-	plainSetting = func() bool { return false }                           // nor whether they asked for plain output
-	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") } // nor the real state folder
-	os.Setenv("XDG_CONFIG_HOME", d)                                       // nor the developer's own config
+	loadHosts = func() (map[string]string, error) { return nil, nil } // nor the developer's own host labels
+	realLoadProtected = loadProtected
+	loadProtected = func(string) ([]string, []policy.Rule, []string) { return nil, nil, nil } // nor their protected folders or a project file
+	learning = func() bool { return false }                                                   // nor the developer's own settings
+	plainSetting = func() bool { return false }                                               // nor whether they asked for plain output
+	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") }                     // nor the real state folder
+	os.Setenv("XDG_CONFIG_HOME", d)                                                           // nor the developer's own config
 	code := m.Run()
 	os.RemoveAll(d)
 	os.Exit(code)

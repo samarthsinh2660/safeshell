@@ -80,6 +80,9 @@ func answerFor(a engine.Analysis) agenthook.Answer {
 	if a.Team.Block != "" {
 		why = append(why, "blocked by your team's policy: "+a.Team.Block)
 	}
+	if a.Protected.Reason != "" {
+		why = append(why, a.Protected.Reason)
+	}
 	for _, f := range a.Verdict.Findings {
 		if f.Level > domain.R0 {
 			why = append(why, f.Reason)

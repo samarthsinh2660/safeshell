@@ -224,6 +224,24 @@ Tell SafeShell which machines matter in `~/.config/safeshell/config.json`. Patte
 
 With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with "this is a production host (prod1)". It works with `user@host`, `-p`, `-l` and the like. Only commands that change something (R2 or more) are raised; reads and unlabelled hosts are unchanged, and when both labels match a host, `prod` wins. An interactive `ssh prod1` (no command) is not blocked, but prints one line saying commands typed there are only checked if SafeShell is installed on that host. A `staging` label only gets that line. An invalid label or pattern makes the settings file unusable until fixed.
 
+## Protected folders and project files (optional)
+
+List folders you never want changed by accident in `~/.config/safeshell/config.json` (full paths, or starting with `~/`):
+
+```json
+{"protect": ["~/thesis", "/srv/data"]}
+```
+
+Any command that changes or removes something inside one, or removes a folder that holds one, is raised to at least R3 with "this folder is on your protected list: /home/you/thesis". `rm ~/thesis/a.tex` is blocked; `rm ~/thesis2/a.tex` and `cat ~/thesis/a.tex` are not. Paths are compared as written (symlinks are not followed), and a glob or variable is cut back to the folder before it, so `rm ~/thesis/*.tex` is caught too.
+
+A project can ship a `.safeshell.json` at its top. SafeShell reads the nearest one in the working directory or above it (it stops at your home folder and `/`). A cloned project is not trusted, so the file can only make SafeShell stricter. It uses the same `rules` format as the team policy, plus a `protect` list of folders relative to the project:
+
+```json
+{"protect": ["deploy"], "rules": [{"match": "rm -rf", "min_level": "R4"}, {"match": "terraform apply", "block": "Use the pipeline."}]}
+```
+
+Anything that would loosen (a level below R1, an `allow`, a folder outside the project, an unknown key) is ignored and a one-line warning names the file and the key. A file that is not valid JSON is ignored whole with a warning; the command is still checked as usual.
+
 ## AI (optional, off until you choose)
 
 - **Local, default Qwen2.5-Coder 3B.** SafeShell downloads and manages a pinned, checksum-verified `llama.cpp`
