@@ -342,3 +342,32 @@ func TestSetupWithTheSystemEngineDownloadsNoEngine(t *testing.T) {
 		t.Errorf("%d %q %q", code, out, e)
 	}
 }
+
+func TestTheSystemEngineWithADownloadedModelIsReady(t *testing.T) {
+	systemEngineConfig(t, true)
+	cfg, _ := config.Load(config.Path())
+	cfg.AI.Mode = ai.Local
+	if err := config.Save(config.Path(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	d := runtime.DefaultDirs()
+	m, _ := models.Find(models.Default)
+	p := d.ModelPath(m.File)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := os.Create(p)
+	_ = f.Truncate(m.Size)
+	f.Close()
+	_ = runtime.MarkVerified(p, m.SHA)
+	useAI(t, fakeAI{}, nil) // tests never start a real engine; readiness is what is checked
+
+	if _, out, _ := runSS("ai", "status"); strings.Contains(out, "AI: off") {
+		t.Errorf("no bundled engine is needed with engine system: %q", out)
+	}
+	var b strings.Builder
+	doctorAI(&b)
+	if strings.Contains(b.String(), "not installed") {
+		t.Errorf("%q", b.String())
+	}
+}
