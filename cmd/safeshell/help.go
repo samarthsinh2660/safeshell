@@ -141,6 +141,14 @@ removes files the command created. If anything cannot be restored exactly, it te
 claiming success: a file that had other hard links, a socket or device, a new file added to a saved
 folder (it is left alone), or a changed time or owner. Paths SafeShell could not read are left out of
 the snapshot, and both the note when it is saved and undo name them.
+Two system changes cannot be saved as files, so undo proposes the reverse command instead:
+  apt install      undo reads /var/log/apt/history.log and proposes  sudo apt remove  with exactly the
+                   packages that run installed, including the ones pulled in as dependencies. Packages it
+                   upgraded or removed in the same run are not reversed, and undo says so.
+  systemctl stop, disable or mask   SafeShell notes how the service was before it runs, and undo proposes
+                   the start, enable or unmask that puts it back.
+Undo shows the command and asks. If you say yes it goes through SafeShell's normal check, like a command
+you typed, and asks again; it never runs by itself. With --yes it only shows the command.
 Nothing is saved when the files are over 2 GiB or the disk has too little room; it says so before
 copying anything. After each snapshot the oldest are deleted once they are older than 30 days or
 together over 5 GiB. Change that in ~/.config/safeshell/config.json:
