@@ -63,6 +63,12 @@ func Diff(upper, lower string, opt Options) (sandbox.FileDiff, error) {
 		if err != nil {
 			return err
 		}
+		if e.IsDir() {
+			// The command may have taken the search permission off a folder
+			// (chmod -R 600 .); its copy in the scratch area must stay readable.
+			// Only the scratch copy changes, never a real file.
+			_ = os.Chmod(p, 0o700)
+		}
 		rel, _ := filepath.Rel(upper, p)
 		if rel == "." {
 			return nil

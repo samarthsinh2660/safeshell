@@ -17,6 +17,8 @@ import (
 	"sort"
 	"syscall"
 	"time"
+
+	"github.com/samarthsinh2660/safeshell/internal/undo"
 )
 
 // Kinds of entry in a manifest.
@@ -68,17 +70,18 @@ type LeftOut struct {
 
 // Manifest describes a snapshot.
 type Manifest struct {
-	ID      string     `json:"id"`
-	Created time.Time  `json:"created"`
-	Line    string     `json:"line"`
-	Dir     string     `json:"dir,omitempty"`     // folder the command ran in; empty when unknown (older snapshots)
-	Session string     `json:"session,omitempty"` // terminal that ran it (the hook's shell pid); empty when unknown
-	Sealed  bool       `json:"sealed,omitempty"`  // every entry's After is recorded
-	Undone  *time.Time `json:"undone,omitempty"`  // when this snapshot was last restored
-	Bytes   int64      `json:"bytes"`
-	Native  *NativeRef `json:"native,omitempty"` // set when a btrfs or zfs snapshot holds the files instead of copies
-	Entries []Entry    `json:"entries"`
-	LeftOut []LeftOut  `json:"left_out,omitempty"` // paths that could not be read, so they are not saved
+	ID      string      `json:"id"`
+	Created time.Time   `json:"created"`
+	Line    string      `json:"line"`
+	Dir     string      `json:"dir,omitempty"`     // folder the command ran in; empty when unknown (older snapshots)
+	Session string      `json:"session,omitempty"` // terminal that ran it (the hook's shell pid); empty when unknown
+	Sealed  bool        `json:"sealed,omitempty"`  // every entry's After is recorded
+	Undone  *time.Time  `json:"undone,omitempty"`  // when this snapshot was last restored
+	Bytes   int64       `json:"bytes"`
+	Native  *NativeRef  `json:"native,omitempty"` // set when a btrfs or zfs snapshot holds the files instead of copies
+	Entries []Entry     `json:"entries"`
+	LeftOut []LeftOut   `json:"left_out,omitempty"` // paths that could not be read, so they are not saved
+	Plans   []undo.Plan `json:"plans,omitempty"`    // inverse commands for what files cannot hold (service state), recorded before the command ran
 }
 
 func dir(store, id string) string { return filepath.Join(store, id) }
@@ -189,6 +192,16 @@ func createAt(h *Host, store string, o Origin, line string, targets []Target, li
 		_ = os.WriteFile(p, []byte(id), 0o600) // without it the snapshot is never sealed, so undo cannot warn about later edits
 	}
 	return m, err
+}
+
+// AddPlans records inverse plans in a snapshot that was just created.
+func AddPlans(store, id string, plans []undo.Plan) error {
+	m, err := Load(store, id)
+	if err != nil {
+		return err
+	}
+	m.Plans = plans
+	return writeManifest(store, m)
 }
 
 func writeManifest(store string, m Manifest) error {

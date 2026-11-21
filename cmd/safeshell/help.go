@@ -58,6 +58,9 @@ Needs an AI model: see  safeshell help models. What it is told: see  safeshell h
 Graphics: the engine uses CUDA on a recent NVIDIA driver, otherwise Vulkan, otherwise the CPU, and
    falls back automatically if the graphics card fails. See what is used with  safeshell doctor.
    Force one with "gpu": "cuda" | "vulkan" | "cpu" under ai.local in ~/.config/safeshell/config.json.
+Offline lab or distro package: set "engine": "system" under ai.local (default "bundled") to use the
+   llama-server found on your PATH. No engine is downloaded. Copy the model file into
+   ~/.local/share/safeshell/models/ by hand; it is used once its checksum matches. doctor and ai status say which engine is used.
 The AI can only make SafeShell MORE careful. It can never let a blocked command through.
 Commands:  safeshell ai setup | safeshell ai status | safeshell ai stop
 Test a model: safeshell ai bench scores it on English requests. safeshell ai bench --injection shows it commands
@@ -145,6 +148,14 @@ On btrfs and ZFS, when one subvolume or dataset holds all the files and you may 
 (btrfs subvolume snapshot, or zfs allow snapshot), SafeShell takes a read-only filesystem snapshot
 instead of copying, and undo restores only the files the command touched from it. If you may not,
 or the files span several, or the snapshots folder is on a different filesystem, it copies as usual. "safeshell doctor" shows which applies to your home.
+Two system changes cannot be saved as files, so undo proposes the reverse command instead:
+  apt install      undo reads /var/log/apt/history.log and proposes  sudo apt remove  with exactly the
+                   packages that run installed, including the ones pulled in as dependencies. Packages it
+                   upgraded or removed in the same run are not reversed, and undo says so.
+  systemctl stop, disable or mask   SafeShell notes how the service was before it runs, and undo proposes
+                   the start, enable or unmask that puts it back.
+Undo shows the command and asks. If you say yes it goes through SafeShell's normal check, like a command
+you typed, and asks again; it never runs by itself. With --yes it only shows the command.
 Nothing is saved when the files are over 2 GiB or the disk has too little room; it says so before
 copying anything. After each snapshot the oldest are deleted once they are older than 30 days or
 together over 5 GiB. Change that in ~/.config/safeshell/config.json:
@@ -233,6 +244,8 @@ replaced by *** there and in undo snapshots, and lines you start with a space ar
 The log keeps one old copy once it passes 5 MB.`},
 	{"trouble", "Something is wrong", `safeshell doctor                     checks every part and says what to do about each problem
 "sandbox unavailable"         Ubuntu 24.04+ needs a one-time rule: scripts/install-apparmor.sh
+"not simulated: ... files"    the command works on more data than fits in memory or free disk;
+                              free some space in ~/.cache, or check the command yourself
 "model is not downloaded"     type /models and pick one, or run  safeshell ai setup
 English is not recognised     start the line with ?   or run  safeshell ask "..."
 Turn SafeShell off or on      safeshell deactivate   /   safeshell activate   (every terminal)

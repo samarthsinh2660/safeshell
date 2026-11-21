@@ -10,6 +10,9 @@ type Spec struct {
 	Shell     string        // "" means /bin/bash, falling back to /bin/sh
 	Timeout   time.Duration // wall-clock limit; 0 means 30s
 	MaxOutput int           // bytes kept of each of stdout and stderr; 0 means 64 KiB
+	// UpperOnDisk keeps what the command writes in a private folder under the
+	// user's cache instead of in memory, for runs too big for memory.
+	UpperOnDisk bool
 }
 
 // Result is what the simulation observed.

@@ -261,3 +261,84 @@ func TestDoctorAIDescribesOtherMachines(t *testing.T) {
 		t.Errorf("%q", b.String())
 	}
 }
+
+// systemEngineConfig saves a config that uses the llama-server on PATH and puts one there (a script that prints a version).
+func systemEngineConfig(t *testing.T, withEngine bool) string {
+	t.Helper()
+	aiDirs(t)
+	cfg := config.Config{}
+	cfg.AI.Local.Engine = "system"
+	if err := config.Save(config.Path(), cfg); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "llama-server")
+	if withEngine {
+		if err := os.WriteFile(bin, []byte("#!/bin/sh\necho 'version: 42 (abc)' >&2\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	return bin
+}
+
+func TestDoctorAndStatusShowTheSystemEngine(t *testing.T) {
+	bin := systemEngineConfig(t, true)
+	var b strings.Builder
+	doctorAI(&b)
+	if !strings.Contains(b.String(), "system "+bin+" (version: 42 (abc))") || strings.Contains(b.String(), "engines it would try") {
+		t.Errorf("%q", b.String())
+	}
+	_, out, _ := runSS("ai", "status")
+	if !strings.Contains(out, "Local engine program: system "+bin+" (version: 42 (abc))") {
+		t.Errorf("%q", out)
+	}
+}
+
+func TestSystemEngineWithoutAVersionOrABinaryIsStillDescribed(t *testing.T) {
+	bin := systemEngineConfig(t, true)
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := engineLine("system"); got != "Local engine program: system "+bin {
+		t.Errorf("%q", got)
+	}
+	if err := os.Remove(bin); err != nil {
+		t.Fatal(err)
+	}
+	if got := engineLine("system"); !strings.Contains(got, "NOT FOUND") || !strings.Contains(got, "bundled") {
+		t.Errorf("%q", got)
+	}
+}
+
+func TestDoctorAndStatusShowTheBundledEngine(t *testing.T) {
+	aiDirs(t)
+	var b strings.Builder
+	doctorAI(&b)
+	if !strings.Contains(b.String(), "bundled llama.cpp "+runtime.Tag) {
+		t.Errorf("%q", b.String())
+	}
+	if _, out, _ := runSS("ai", "status"); !strings.Contains(out, "Local engine program: bundled llama.cpp "+runtime.Tag) {
+		t.Errorf("%q", out)
+	}
+}
+
+func TestSetupWithTheSystemEngineDownloadsNoEngine(t *testing.T) {
+	systemEngineConfig(t, false)
+	if code, _, e := runSS("ai", "setup"); code != 1 || !strings.Contains(e, "install llama.cpp") {
+		t.Errorf("a missing llama-server must stop setup and name what to install: %d %q", code, e)
+	}
+	systemEngineConfig(t, true)
+	m, _ := models.Find(models.Default)
+	p := runtime.DefaultDirs().ModelPath(m.File)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, _ := os.Create(p)
+	_ = f.Truncate(m.Size)
+	f.Close()
+	_ = runtime.MarkVerified(p, m.SHA)
+	if code, out, e := runSS("ai", "setup"); code != 0 || strings.Contains(out, "Downloading") {
+		t.Errorf("%d %q %q", code, out, e)
+	}
+}

@@ -2,11 +2,15 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/models"
 )
@@ -74,6 +78,27 @@ func (d Dirs) InstallEngine(ctx context.Context, client *http.Client, b Build, w
 	}
 	_ = os.RemoveAll(dest)
 	return os.Rename(tmp, dest)
+}
+
+// SystemServer finds the llama-server the system provides, for ai.local.engine "system".
+func SystemServer() (string, error) {
+	p, err := exec.LookPath("llama-server")
+	if err == nil {
+		p, err = filepath.Abs(p)
+	}
+	if err != nil {
+		return "", errors.New("llama-server was not found on your PATH; install llama.cpp (it provides llama-server) or set ai.local.engine to \"bundled\" in the config")
+	}
+	return p, nil
+}
+
+// SystemVersion is the first line of `llama-server --version` (it prints to stderr), or "" if it cannot be read.
+func SystemVersion(ctx context.Context, bin string) string {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, _ := exec.CommandContext(ctx, bin, "--version").CombinedOutput()
+	line, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
+	return line
 }
 
 // InstallPreferred installs the best engine for this machine and, when that

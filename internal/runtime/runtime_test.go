@@ -874,3 +874,49 @@ func TestAnOlderInstallWithoutAMarkerIsCheckedOnceAndThenTrusted(t *testing.T) {
 		t.Error("a file of another size is never installed")
 	}
 }
+
+// onPath puts an executable script named llama-server on PATH and returns its path.
+func onPath(t *testing.T, script string) string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "llama-server")
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	return bin
+}
+
+func TestSystemServerIsFoundOnPathOrNamesWhatToInstall(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if _, err := SystemServer(); err == nil || !strings.Contains(err.Error(), "install llama.cpp") || !strings.Contains(err.Error(), "bundled") {
+		t.Errorf("a missing llama-server must say what to install: %v", err)
+	}
+	want := onPath(t, "#!/bin/sh\n")
+	if got, err := SystemServer(); err != nil || got != want {
+		t.Errorf("%q %v, want %q", got, err, want)
+	}
+}
+
+func TestSystemVersionIsTheFirstLineOrEmpty(t *testing.T) {
+	bin := onPath(t, "#!/bin/sh\necho 'version: 1234 (abc)' >&2\necho 'built with gcc' >&2\n")
+	if got := SystemVersion(context.Background(), bin); got != "version: 1234 (abc)" {
+		t.Errorf("%q", got)
+	}
+	if got := SystemVersion(context.Background(), filepath.Join(t.TempDir(), "none")); got != "" {
+		t.Errorf("an engine that cannot run has no version: %q", got)
+	}
+}
+
+func TestEnsureStartsASystemEngineAndRecognisesItsProcess(t *testing.T) {
+	t.Setenv("SS_FAKE_LLAMA", "1")
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	t.Cleanup(func() { d.Stop() })
+	ep, err := d.Ensure(context.Background(), Spec{Bin: os.Args[0], Model: "/m/a.gguf", System: true}, nil)
+	if err != nil || ep.Port == 0 {
+		t.Fatalf("%v %v", ep, err)
+	}
+	if s, ok := d.readState(); !ok || !s.running() {
+		t.Error("the system engine must be recognised by its PID and executable (the port-owner check relies on it)")
+	}
+}

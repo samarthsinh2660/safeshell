@@ -25,6 +25,12 @@ type Simulator interface {
 	Simulate(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error)
 }
 
+// Sizer looks, read-only, at how much data a command could put in the sandbox's
+// scratch layer and what the machine can hold. nil means no look is taken.
+type Sizer interface {
+	Size(ctx context.Context, paths []string) sandbox.Size
+}
+
 // Inspector reads the real system, never changing it, to find the effects a
 // file sandbox cannot see (which processes a kill hits, which disk a dd erases).
 type Inspector func(cmds []shellparse.Command) []domain.Effect
@@ -60,6 +66,7 @@ func CallerFrom(ctx context.Context) int {
 // Engine analyses commands. A nil Sim means no sandbox is available here.
 type Engine struct {
 	Sim        Simulator
+	Sizer      Sizer // checks a run is not too big for the sandbox; nil to skip the check
 	Inspectors []Inspector
 	Rules      []policy.Rule     // the admin's team policy; nil when there is none
 	Hosts      map[string]string // the user's host patterns and labels (prod, staging); nil when none
@@ -122,7 +129,7 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 	if len(e.Protect) > 0 {
 		a.Protected = policy.EvaluateProtected(e.Protect, changedPaths(cmds, cwd, e.Home))
 	}
-	a.simulate(ctx, e.Sim, cwd)
+	a.simulate(ctx, e.Sim, e.Sizer, cmds, cwd)
 	if a.Sim == nil {
 		paths, complete := rules.WritePaths(cmds, cwd)
 		a.Targets, a.TargetsGap = paths, !complete
@@ -138,7 +145,7 @@ func needsSimulation(v domain.Verdict) bool {
 	return (v.Level >= domain.R2 && v.Level < domain.R4) || len(v.Unclassified) > 0
 }
 
-func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
+func (a *Analysis) simulate(ctx context.Context, sim Simulator, sizer Sizer, cmds []shellparse.Command, cwd string) {
 	switch {
 	case !needsSimulation(a.Verdict) && !a.Team.Snapshot: // a snapshot needs the list of files the run changes
 		if a.Verdict.Level >= domain.R4 {
@@ -150,7 +157,19 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 		a.Effects = append(a.Effects, a.estimated("file changes could not be observed"))
 		return
 	}
-	res, err := sim.Simulate(ctx, sandbox.Spec{Line: a.Line, Cwd: cwd, Env: EnvFrom(ctx)})
+	spec := sandbox.Spec{Line: a.Line, Cwd: cwd, Env: EnvFrom(ctx)}
+	if sizer != nil {
+		size := sizer.Size(ctx, rules.SizingPaths(cmds, cwd, a.Verdict.Unclassified))
+		switch sandbox.Place(size) {
+		case sandbox.OnDisk:
+			spec.UpperOnDisk = true
+		case sandbox.Skip:
+			a.SimNote = tooBigNote(size)
+			a.Effects = append(a.Effects, a.estimated("the files are too large to simulate, so file changes could not be observed"))
+			return
+		}
+	}
+	res, err := sim.Simulate(ctx, spec)
 	if err != nil {
 		a.SimNote = "simulation failed: " + err.Error()
 		a.Effects = append(a.Effects, a.estimated("the sandbox run failed, so file changes could not be observed"))
@@ -171,6 +190,16 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, cwd string) {
 		a.SimNote = "the sandbox run timed out; changes made before then are shown"
 		a.Effects = append(a.Effects, a.estimated(fmt.Sprintf("the run did not finish within %s, so its full effect is unknown", res.Duration.Round(1e8))))
 	}
+}
+
+// tooBigNote says why a run was not simulated, and what to do about it.
+func tooBigNote(s sandbox.Size) string {
+	more := ""
+	if s.Cut {
+		more = "at least "
+	}
+	return fmt.Sprintf("not simulated: it works on %s%s of files, more than the sandbox can hold in memory (%s), and there is not enough free disk space to hold it there instead. Free some disk space, or check the command yourself before you run it",
+		more, report.HumanBytes(s.Bytes), report.HumanBytes(s.RAMLimit))
 }
 
 // mirrorGap explains why an empty diff cannot be trusted for a command the

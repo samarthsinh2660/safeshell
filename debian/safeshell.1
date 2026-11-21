@@ -30,7 +30,7 @@ Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 m
 Rate every command in one or more shell scripts without running them; only the built-in rules are used, never the sandbox, the AI or the daemon. Each command that is not R0 is listed with the line it starts on, the level and the reason; the result is the highest level over all files. A script that is not valid shell or cannot be read is reported and the other files are still checked (exit status 2 if nothing worse). \fB\-\-format\fR chooses text (default), json (one object per file with path, level and lines), sarif (SARIF 2.1.0) or github (workflow annotations, ::error for R3 and R4 and ::warning for R2). The exit status is that of the highest level when it is at least \fB\-\-fail-on\fR (default R3: 3 for R3, 4 for R4; 1 for R2), otherwise 0.
 .TP
 .BI "analyze [--json] [--verbose] [--plain] [--cwd " DIR "] " command
-Rate a command, run it in the sandbox, and report the real files, processes and disks it would touch.
+Rate a command, run it in the sandbox, and report the real files, processes and disks it would touch. A command that works on more data than fits in memory is run with its scratch files on disk under $XDG_CACHE_HOME/safeshell/sandbox (removed afterwards); if the disk is too full too, it is not run in the sandbox and is never allowed without asking.
 .TP
 .BI "analyze [--verbose] [--cwd " DIR "] --script " FILE
 The line-by-line rating of a script, then the whole script run in the sandbox. The result is the highest of the line levels and what the run showed. Without a sandbox the run is estimated only. Exit status as for a command.
@@ -60,6 +60,19 @@ Choose the AI model from a menu, or list the models your cloud key offers.
 .B ai setup|status|stop|bench [\-\-injection]
 Manage the optional built-in AI. Nothing is downloaded until you run
 .BR "ai setup" .
+With
+.B ai.local.engine
+set to
+.B system
+in the config file (default
+.BR bundled )
+the local AI uses the
+.B llama-server
+found on PATH and downloads no engine; a model file copied by hand into the models folder is used once its SHA-256 matches.
+.B doctor
+and
+.B ai status
+show which engine is used.
 .B ai bench
 scores the model on English requests;
 .B ai bench \-\-injection
@@ -81,7 +94,7 @@ is a two or three letter code such as hi or es, or auto. The choice is saved in 
 shows it. The earlier model file is kept until the new one is downloaded and verified.
 .TP
 .RB "undo [--yes] [" ID ]
-Put back what an approved command changed, and verify it. With no ID it offers the newest snapshot from this terminal, else this folder, else any, shows the command, time, folder and file count, and asks before restoring. Files changed since the command ran are listed and need a full "yes". A snapshot already undone is skipped unless its ID is given. Undo restores contents, permissions and times, recreates pipes, and writes a hard-linked file back in place; it then checks every path and lists anything that differs: a socket or device it cannot recreate, other hard links it could not restore, new files added to a saved folder (left alone). Paths that could not be read are left out of the snapshot and named. On btrfs and ZFS, when one subvolume or dataset holds every file and the user may take snapshots, a read-only filesystem snapshot is used instead of copying; undo still restores only the touched paths. Otherwise files are copied. With no terminal to ask, nothing is restored and the command to confirm is printed.
+Put back what an approved command changed, and verify it. With no ID it offers the newest snapshot from this terminal, else this folder, else any, shows the command, time, folder and file count, and asks before restoring. Files changed since the command ran are listed and need a full "yes". A snapshot already undone is skipped unless its ID is given. Undo restores contents, permissions and times, recreates pipes, and writes a hard-linked file back in place; it then checks every path and lists anything that differs: a socket or device it cannot recreate, other hard links it could not restore, new files added to a saved folder (left alone). Paths that could not be read are left out of the snapshot and named. On btrfs and ZFS, when one subvolume or dataset holds every file and the user may take snapshots, a read-only filesystem snapshot is used instead of copying; undo still restores only the touched paths. Otherwise files are copied. With no terminal to ask, nothing is restored and the command to confirm is printed. For a plain apt install, undo also reads /var/log/apt/history.log and proposes \fBsudo apt remove\fR with exactly the packages that run installed, automatic dependencies included (upgrades and removals in the same run are not reversed); for systemctl stop, disable or mask, SafeShell notes the unit's state first and undo proposes the start, enable or unmask that restores it. A proposed command runs only after you type yes, and then through the normal check like a command you typed; never by itself, and with --yes it is only shown.
 .B \-\-yes
 answers the question.
 .TP

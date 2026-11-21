@@ -246,7 +246,7 @@ func TestProtectUsesNativeSnapshotWhenItCoversTheFiles(t *testing.T) {
 	}
 	os.Remove(f)
 	var out, errOut strings.Builder
-	if code := runUndo([]string{"--yes"}, &out, &errOut); code != 0 {
+	if code := runUndo([]string{"--yes"}, &out, &errOut, false); code != 0 {
 		t.Fatalf("undo: %d %s", code, errOut.String())
 	}
 	if b, _ := os.ReadFile(f); string(b) != "hello" {

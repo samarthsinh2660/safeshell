@@ -13,6 +13,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 	"github.com/samarthsinh2660/safeshell/internal/snapshot"
+	"github.com/samarthsinh2660/safeshell/internal/undo"
 	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
@@ -44,6 +45,8 @@ const teamNoSnapshot = "Your team's policy asks for a snapshot first, but SafeSh
 // files its arguments name. It returns a one-line note for the person; "" when
 // nothing needed saving.
 func protect(a engine.Analysis, cwd string) string {
+	plans := servicePlans(a.Line)
+	track := len(plans) > 0 || undo.AptInstall(a.Line) // files cannot hold what these change, but a record lets undo propose the reverse
 	var ts []snapshot.Target
 	switch {
 	case a.Sim != nil:
@@ -56,21 +59,29 @@ func protect(a engine.Analysis, cwd string) string {
 			}
 			ts = append(ts, snapshot.Target{Path: p, Create: true})
 		}
-		if len(ts) == 0 && a.Team.Snapshot {
+		if len(ts) == 0 && a.Team.Snapshot && !track {
 			return teamNoSnapshot
 		}
-		if len(ts) == 0 {
+		if len(ts) == 0 && !track {
 			return "No snapshot was taken: SafeShell could not tell which files this will change, so it cannot be undone."
 		}
 	}
-	if len(ts) == 0 {
+	if len(ts) == 0 && !track {
 		return ""
 	}
 	m, err := snapshot.CreateWith(snapshotHost(), snapshotDir(), snapshot.Origin{Dir: cwd, Session: os.Getenv("SAFESHELL_HOOK")}, report.MaskSecrets(a.Line), ts, snapshotLimit)
 	if err != nil {
 		return "No snapshot taken (" + err.Error() + "): this cannot be undone."
 	}
+	if len(plans) > 0 {
+		if err := snapshot.AddPlans(snapshotDir(), m.ID, plans); err != nil {
+			return "SafeShell could not record how to undo this (" + err.Error() + ")."
+		}
+	}
 	autoPrune(snapshotDir(), m.ID)
+	if len(ts) == 0 {
+		return "SafeShell noted how to undo this. Undo with: safeshell undo"
+	}
 	size := report.HumanBytes(m.Bytes)
 	if m.Native != nil {
 		size = m.Native.Kind + ", nothing copied"
@@ -107,7 +118,7 @@ func runSnapshots(stdout, stderr io.Writer) int {
 
 // runUndo restores a snapshot after showing which one and asking. With no id
 // it offers the newest from this terminal, else this folder, else any.
-func runUndo(args []string, stdout, stderr io.Writer) int {
+func runUndo(args []string, stdout, stderr io.Writer, color bool) int {
 	store := snapshotDir()
 	var id string
 	yes := false
@@ -147,6 +158,47 @@ func runUndo(args []string, stdout, stderr io.Writer) int {
 	}
 	newer := snapshot.Changed(m)
 	describeUndo(stdout, m, newer)
+	plans, note := planFor(m)
+	describePlans(stdout, plans, note)
+	if len(m.Entries) == 0 && len(m.LeftOut) == 0 { // nothing in files: only the plans can undo it
+		if len(plans) == 0 {
+			return 1
+		}
+		if !offerPlans(store, m.ID, plans, yes, color, stdout, stderr) {
+			return 1
+		}
+		return 0
+	}
+	if code := restoreFiles(store, m, newer, yes, stdout, stderr); code != 0 || len(plans) == 0 {
+		return code
+	}
+	offerPlans(store, "", plans, yes, color, stdout, stderr)
+	return 0
+}
+
+// offerPlans asks whether to run the plans and runs them through the guard.
+// With --yes or no terminal it only says how; a plan never runs by itself. A
+// snapshot with an id is marked undone once its plans ran. It reports whether they ran.
+func offerPlans(store, id string, plans []undo.Plan, yes, color bool, stdout, stderr io.Writer) bool {
+	in := guardInput()
+	if yes || !isTerminal(in) {
+		fmt.Fprintln(stdout, "SafeShell does not run this by itself. Type the command yourself, and SafeShell checks it first.")
+		return false
+	}
+	if !runPlans(plans, cwdOr(""), in, stdout, stderr, color) {
+		return false
+	}
+	if id != "" {
+		if err := snapshot.MarkUndone(store, id); err != nil {
+			fmt.Fprintln(stdout, "Note: could not mark this snapshot as undone:", err)
+		}
+	}
+	return true
+}
+
+// restoreFiles asks, then puts the saved files back and verifies them.
+func restoreFiles(store string, m snapshot.Manifest, newer []string, yes bool, stdout, stderr io.Writer) int {
+	id := m.ID
 	if !yes {
 		in := guardInput()
 		if !isTerminal(in) {

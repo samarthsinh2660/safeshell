@@ -61,6 +61,8 @@ type Config struct {
 		Local struct {
 			Model string `json:"model"` // a models.Catalog id
 			GPU   string `json:"gpu"`   // auto, cuda, vulkan, cpu (on and off also work)
+			// Engine: bundled (download the pinned llama-server, default) or system (use llama-server found on PATH).
+			Engine string `json:"engine"`
 		} `json:"local"`
 		Cloud struct {
 			Provider string `json:"provider"` // anthropic, openai, gemini
@@ -124,6 +126,13 @@ func Load(path string) (Config, error) {
 	case "auto", "cuda", "vulkan", "cpu", "on", "off":
 	default:
 		return Config{}, errors.New("ai.local.gpu must be auto, cuda, vulkan, cpu, on or off, not " + c.AI.Local.GPU)
+	}
+	switch c.AI.Local.Engine {
+	case "":
+		c.AI.Local.Engine = "bundled"
+	case "bundled", "system":
+	default:
+		return Config{}, errors.New("ai.local.engine must be bundled or system, not " + c.AI.Local.Engine)
 	}
 	if _, err := voice.FindModel(c.Voice.Model); err != nil {
 		return Config{}, errors.New("voice.model: " + err.Error())
