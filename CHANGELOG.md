@@ -2,6 +2,26 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.9.0 - 2026-11-21
+
+More filesystems, big folders and offline machines.
+
+### Added
+- Native btrfs and ZFS snapshots: when every file a command changes is in one btrfs subvolume (with the snapshots folder on the same filesystem) or one ZFS dataset, undo takes a read-only filesystem snapshot instead of copying, so nothing is copied. Anything else, or a snapshot that is not allowed, copies as before. `safeshell doctor` shows which is used for your home folder. (#29, #30)
+- Undo for packages and services: after `apt install`, `safeshell undo` offers `sudo apt remove` with exactly the packages that run installed (from apt's own log); after `systemctl stop`, `disable` or `mask`, it offers the command that puts the service back as it was. A plan runs only after you type yes, and goes through the normal check. (#119)
+- Big folders: the files a command could touch are sized first. Too big for memory, but room on disk: the simulation runs with its scratch area on disk. Otherwise it is not simulated, says why, and is never run unattended. (#120)
+- `"ai": {"local": {"engine": "system"}}` uses the `llama-server` already installed on the machine, for labs without internet; a model copied in by hand is checked against its pinned checksum. (#121)
+- A misspelled setting in config.json is reported by `safeshell doctor` and `safeshell ai status`, with "did you mean"; `ai status` says why AI is off. (#122)
+
+### Changed
+- Changes to small files sitting directly in a folder that holds a mount point (up to 256 KiB each, 2 MiB in all) are now seen by the sandbox; bigger ones stay flagged as before. (#70)
+- `scripts/install-apparmor.sh` gives each binary its own AppArmor profile and refuses files owned by a package; an old single profile is replaced. (#66)
+
+### Fixed
+- A command that removes the search bit from a folder (`chmod -R 600 .`) made the simulation fail. (#225)
+- Deleting old btrfs snapshots failed because they are read-only. (#224)
+- `safeshell doctor` showed the snapshot backend twice, once as a guess from the root filesystem. (#228)
+
 ## 1.8.0 - 2026-11-21
 
 Servers, shared machines and verifiable releases.
