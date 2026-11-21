@@ -104,6 +104,8 @@ func doctorSetup(w io.Writer) {
 		doctorRow(w, "MISSING", "hook active here", "not active in this terminal. Run  safeshell install  and open a new terminal")
 	}
 	doctorDaemon(w)
+	home, _ := os.UserHomeDir()
+	doctorRow(w, "info", "snapshot backend", snapshotBackendText(snapshotHost().Backend(snapshotDir(), home)))
 	ms, err := snapshot.List(snapshotDir())
 	if err != nil {
 		doctorRow(w, "MISSING", "snapshots", "cannot read "+snapshotDir()+": "+err.Error()+". Check that folder's permissions")
@@ -114,6 +116,15 @@ func doctorSetup(w io.Writer) {
 		size += m.Bytes
 	}
 	doctorRow(w, "info", "snapshots", fmt.Sprintf("%d saved, %s (list them: safeshell snapshots)", len(ms), report.HumanBytes(size)))
+}
+
+// snapshotBackendText says in plain words how undo saves files in the home folder.
+func snapshotBackendText(kind string) string {
+	switch kind {
+	case "btrfs", "zfs":
+		return kind + " snapshots for your home folder (SafeShell copies files instead if you may not take one)"
+	}
+	return "copying the files a command will change (home folder)"
 }
 
 // hookBinaryGone is true when the hook block names a safeshell that no longer exists.

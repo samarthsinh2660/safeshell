@@ -24,6 +24,9 @@ var snapshotDir = func() string {
 	return filepath.Join(xdg.Dir("XDG_DATA_HOME", ".local", "share"), "snapshots")
 }
 
+// snapshotHost is the machine the btrfs and zfs snapshot backends ask about; tests replace it.
+var snapshotHost = snapshot.OS
+
 // targets lists the paths a simulated run changed: files to save, and files it
 // created, which undo removes.
 func targets(changes []sandbox.Change) []snapshot.Target {
@@ -63,14 +66,18 @@ func protect(a engine.Analysis, cwd string) string {
 	if len(ts) == 0 {
 		return ""
 	}
-	m, err := snapshot.CreateAt(snapshotDir(), snapshot.Origin{Dir: cwd, Session: os.Getenv("SAFESHELL_HOOK")}, report.MaskSecrets(a.Line), ts, snapshotLimit)
+	m, err := snapshot.CreateWith(snapshotHost(), snapshotDir(), snapshot.Origin{Dir: cwd, Session: os.Getenv("SAFESHELL_HOOK")}, report.MaskSecrets(a.Line), ts, snapshotLimit)
 	if err != nil {
 		return "No snapshot taken (" + err.Error() + "): this cannot be undone."
 	}
 	autoPrune(snapshotDir(), m.ID)
-	note := fmt.Sprintf("Snapshot saved (%s). Undo with: safeshell undo", report.HumanBytes(m.Bytes))
+	size := report.HumanBytes(m.Bytes)
+	if m.Native != nil {
+		size = m.Native.Kind + ", nothing copied"
+	}
+	note := fmt.Sprintf("Snapshot saved (%s). Undo with: safeshell undo", size)
 	if len(m.LeftOut) > 0 {
-		note = fmt.Sprintf("Snapshot saved (%s), except %s. Undo with: safeshell undo", report.HumanBytes(m.Bytes), leftOutText(m.LeftOut))
+		note = fmt.Sprintf("Snapshot saved (%s), except %s. Undo with: safeshell undo", size, leftOutText(m.LeftOut))
 	}
 	if a.TargetsGap {
 		note += ". Some files could not be named, so changes to those cannot be undone."
