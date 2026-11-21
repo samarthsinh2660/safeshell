@@ -758,28 +758,74 @@ func TestChecksumOfSomethingUnreadableIsAnError(t *testing.T) {
 	}
 }
 
-func TestAModelOfTheRightSizeButTheWrongContentIsNotInstalled(t *testing.T) {
+func TestAModelOfTheRightSizeButTheWrongContentIsNotInstalledAndNotHashedAgain(t *testing.T) {
 	good := payload(30_000)
 	m := models.Model{File: "m.gguf", Size: int64(len(good)), SHA: sum(good)}
 	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
-	if err := os.MkdirAll(filepath.Dir(d.ModelPath(m.File)), 0o755); err != nil {
+	path := d.ModelPath(m.File)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	bad := payload(30_000)
 	bad[100] ^= 1
-	if err := os.WriteFile(d.ModelPath(m.File), bad, 0o644); err != nil {
+	if err := os.WriteFile(path, bad, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if d.ModelInstalled(m) {
 		t.Fatal("a corrupted file of the right size counted as installed")
 	}
-	if _, err := os.Stat(markerPath(d.ModelPath(m.File))); err == nil {
-		t.Error("a marker was written for a file that does not match")
+	if b, _ := os.ReadFile(markerPath(path)); string(b) != sum(bad) {
+		t.Errorf("the marker should hold the checksum the file really has, got %q", b)
 	}
-	// A marker for another checksum does not vouch for it either.
-	_ = MarkVerified(d.ModelPath(m.File), "other")
+	// The file is now a good one, but the marker says otherwise and the file must not be read again to find out.
+	if err := os.WriteFile(path, good, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if d.ModelInstalled(m) {
-		t.Error("a marker with another checksum was trusted")
+		t.Error("the damaged file was hashed again")
+	}
+	// A new verified download overwrites the marker and fixes it.
+	if err := MarkVerified(path, m.SHA); err != nil || !d.ModelInstalled(m) {
+		t.Errorf("a verified download should recover the model: %v", err)
+	}
+}
+
+func TestAModelThatCannotBeReadIsNotInstalledAndGetsNoMarker(t *testing.T) {
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	path := d.ModelPath("m.gguf")
+	if err := os.MkdirAll(path, 0o755); err != nil { // a folder: it has a size but cannot be read as a file
+		t.Fatal(err)
+	}
+	fi, _ := os.Stat(path)
+	if Verified(path, "x", fi.Size()) {
+		t.Error("an unreadable model counted as installed")
+	}
+	if _, err := os.Stat(markerPath(path)); err == nil {
+		t.Error("a marker was written for something that could not be checked")
+	}
+}
+
+func TestInstallModelReportsADownloadThatFails(t *testing.T) {
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	m := models.Model{Title: "T", File: "m.gguf", URL: "https://example.invalid/m.gguf", Size: 10, SHA: "x"}
+	if err := d.InstallModel(context.Background(), &http.Client{Transport: rewrite{srv.URL}}, m, &strings.Builder{}); err == nil {
+		t.Error("a failed download was ignored")
+	}
+}
+
+func TestInstallModelReportsAChecksumItCannotSave(t *testing.T) {
+	model := payload(30_000)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write(model) }))
+	defer srv.Close()
+	d := Dirs{Data: t.TempDir(), State: t.TempDir()}
+	m := models.Model{Title: "T", File: "m.gguf", URL: "https://example.invalid/m.gguf", Size: int64(len(model)), SHA: sum(model)}
+	if err := os.MkdirAll(markerPath(d.ModelPath(m.File)), 0o755); err != nil { // the marker cannot be written
+		t.Fatal(err)
+	}
+	if err := d.InstallModel(context.Background(), &http.Client{Transport: rewrite{srv.URL}}, m, &strings.Builder{}); err == nil {
+		t.Error("a marker that could not be saved was ignored")
 	}
 }
 

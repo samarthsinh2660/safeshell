@@ -214,5 +214,6 @@ func (s Setup) EnsureModel(ctx context.Context) (string, error) {
 	if err := runtime.Download(ctx, s.Client, modelURL, s.ModelPath(), modelSHA, modelSize, s.Out); err != nil {
 		return "", fmt.Errorf("could not download the speech model: %w. %s", err, retry)
 	}
+	_ = runtime.MarkVerified(s.ModelPath(), modelSHA) // Download has just checked it
 	return s.ModelPath(), nil
 }

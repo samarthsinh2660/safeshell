@@ -30,23 +30,25 @@ func MarkVerified(path, sha string) error {
 	return os.WriteFile(markerPath(path), []byte(sha), 0o644)
 }
 
-// Verified reports whether the file at path has the pinned size and SHA-256. A matching marker (written after a
-// verified download) answers at once. A file with no matching marker, such as one downloaded by an older version,
-// is checked against the SHA once and, if it matches, gets a marker; a damaged file of the right size does not
-// count.
+// Verified reports whether the file at path has the pinned size and SHA-256. The marker next to it holds the SHA-256
+// the file was last found to have: a marker equal to sha answers true and any other marker answers false, both without
+// reading the file again. With no marker (a download from an older version) the file is hashed once and the marker is
+// written with the SHA it really has, so a damaged file of the right size is not hashed on every call. A new verified
+// download overwrites the marker, which is how a damaged model is fixed.
 func Verified(path, sha string, size int64) bool {
 	fi, err := os.Stat(path)
 	if err != nil || fi.Size() != size {
 		return false
 	}
-	if b, err := os.ReadFile(markerPath(path)); err == nil && string(b) == sha {
-		return true
+	if b, err := os.ReadFile(markerPath(path)); err == nil {
+		return string(b) == sha
 	}
-	if ok, _ := fileMatches(path, sha, nil); !ok {
+	actual, err := fileSHA(path, nil)
+	if err != nil {
 		return false
 	}
-	_ = MarkVerified(path, sha) // best effort: without it the file is just checked again next time
-	return true
+	_ = MarkVerified(path, actual) // best effort: without it the file is just checked again next time
+	return actual == sha
 }
 
 // InstallEngine downloads, verifies and unpacks a build (and its runtime
