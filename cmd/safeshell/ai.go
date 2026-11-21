@@ -126,6 +126,9 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 		fmt.Fprintln(stderr, "SafeShell AI is off.", aiOffHint)
 		return 1, false
 	}
+	if len(request) > nl.MaxRequest {
+		fmt.Fprintln(stderr, "Your request is too long, so only the first part was sent to the AI. Shorten it if the end matters.")
+	}
 	env := gatherEnv(cwd)
 	var replies []string
 	var in io.Reader

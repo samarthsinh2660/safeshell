@@ -34,7 +34,9 @@ Before an approved command runs, the files it will change are saved so  safeshel
      find the five largest files in this folder
      what is using port 8080
 A line is treated as English when its first word is not a command and it reads like a sentence.
+Any language works (for example Hindi or Spanish); the AI answers in the language you wrote.
 To force it, start the line with ?   (for example:  ? how much disk is free).
+A request over 2000 bytes is shortened, and SafeShell tells you.
 You always see the command first and press Enter to run it. It is then checked like any typed
 command, so a dangerous suggestion is still stopped. Questions ("what does chmod 755 mean") are
 answered and nothing runs. If something is unclear (several files match), SafeShell asks you a

@@ -29,6 +29,7 @@ Rules:
 - If the request can be done but one specific thing is missing or ambiguous (several files match, no destination given, which branch), put ONE short question naming the choices in "question" and leave "command" and "answer" empty. Lines starting with "clarification" inside <request> are the person's replies to your earlier questions; use them. Do not ask when a sensible safe default exists. A request to tidy or clean up that names no target is ambiguous: ask which files or folders, and never guess a deletion. This never applies to dangerous requests, which are always refused in "answer".
 - Never put a made-up value (user@server, /path/to/dir, <file>) in a command: ask for it in "question" instead.
 - Use the context before asking: the files listed, the project facts, the recent commands and the <conversation>. Words like it, them, that, again or "the same for X" refer to the latest exchange or recent command; if that makes the request clear, give the command. To undo something SafeShell ran, the command is safeshell undo.
+- Write "note", "answer" and "question" in the language of the request; "command" is always a normal shell command.
 - If the request makes no sense at all, leave "command" empty and say what is missing in "answer".
 - SafeShell will check, simulate and ask the user before anything risky runs, so do not refuse a legitimate request; just choose the safe form of it.
 
@@ -58,6 +59,9 @@ request: run the tests
 {"command":"make test","note":"Runs the project's test target.","answer":""}
 request: what does chmod 755 mean
 {"command":"","note":"","answer":"The owner can read, write and run the file; everyone else can read and run it."}`
+
+// MaxRequest is how many bytes of a request the model is shown; the rest is cut at a character boundary.
+const MaxRequest = 2000
 
 // Env is what the model is told about the machine. All of it is data, not instructions.
 type Env struct {
@@ -165,7 +169,7 @@ func Translate(ctx context.Context, b ai.Backend, request string, env Env) (Resu
 // TranslateWith is Translate plus the person's replies to earlier questions.
 // They sit inside the request block, so they are untrusted data like the request.
 func TranslateWith(ctx context.Context, b ai.Backend, request string, clarifications []string, env Env) (Result, error) {
-	request = strings.TrimSpace(clean(request, 2000))
+	request = strings.TrimSpace(clean(request, MaxRequest))
 	if request == "" {
 		return Result{}, errors.New("nothing to translate")
 	}
@@ -204,12 +208,13 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 	return r, nil
 }
 
-var word = regexp.MustCompile(`^[A-Za-z][A-Za-z'-]*$`)
+var word = regexp.MustCompile(`^\pL[\pL\pM'-]*$`)
 
 // LooksLikeRequest decides whether a line the shell cannot run is plain
 // English. A leading "?" always counts. Otherwise the first word must not be a
 // command (the caller checks that), the line must have at least two words, and
-// it must not contain shell syntax. The returned text has any "?" removed.
+// it must not contain shell syntax. Any language counts: the first word may
+// start with any letter. The returned text has any "?" removed.
 func LooksLikeRequest(line string, firstWordIsCommand bool) (text string, ok bool) {
 	line = strings.TrimSpace(line)
 	if t, found := strings.CutPrefix(line, "?"); found {
