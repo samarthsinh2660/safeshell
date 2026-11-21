@@ -45,9 +45,21 @@ func TestLongRequestIsCutOnACharacterBoundary(t *testing.T) {
 	}
 }
 
-func TestPromptAsksForTheUsersLanguage(t *testing.T) {
-	if !strings.Contains(system, "in the language of the request") {
-		t.Error("the prompt does not ask for replies in the request's language")
+func TestOnlyANonEnglishRequestIsAskedForItsLanguage(t *testing.T) {
+	for _, c := range []struct {
+		request string
+		note    bool
+	}{{"list the files", false}, {"सभी फ़ाइलें दिखाओ", true}, {"borra los archivos de caché", true}} {
+		f := &fake{reply: `{"command":"ls","note":"","answer":""}`}
+		if _, err := Translate(context.Background(), f, c.request, env); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(f.got, "in the language of the request"); got != c.note {
+			t.Errorf("%q: language note %v, want %v", c.request, got, c.note)
+		}
+	}
+	if strings.Contains(system, "language") {
+		t.Error("the system prompt changed; English requests must keep the prompt the bench measures")
 	}
 }
 

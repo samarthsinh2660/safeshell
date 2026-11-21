@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/report"
@@ -29,7 +30,6 @@ Rules:
 - If the request can be done but one specific thing is missing or ambiguous (several files match, no destination given, which branch), put ONE short question naming the choices in "question" and leave "command" and "answer" empty. Lines starting with "clarification" inside <request> are the person's replies to your earlier questions; use them. Do not ask when a sensible safe default exists. A request to tidy or clean up that names no target is ambiguous: ask which files or folders, and never guess a deletion. This never applies to dangerous requests, which are always refused in "answer".
 - Never put a made-up value (user@server, /path/to/dir, <file>) in a command: ask for it in "question" instead.
 - Use the context before asking: the files listed, the project facts, the recent commands and the <conversation>. Words like it, them, that, again or "the same for X" refer to the latest exchange or recent command; if that makes the request clear, give the command. To undo something SafeShell ran, the command is safeshell undo.
-- Write "note", "answer" and "question" in the language of the request; "command" is always a normal shell command.
 - If the request makes no sense at all, leave "command" empty and say what is missing in "answer".
 - SafeShell will check, simulate and ask the user before anything risky runs, so do not refuse a legitimate request; just choose the safe form of it.
 
@@ -176,7 +176,7 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 	for i, c := range clarifications {
 		request += fmt.Sprintf("\nclarification %d: %s", i+1, strings.TrimSpace(clean(c, 300)))
 	}
-	prompt := env.render() + env.renderConversation() + "<request>" + request + "</request>"
+	prompt := env.render() + env.renderConversation() + languageNote(request) + "<request>" + request + "</request>"
 	raw, err := ask(ctx, b, prompt)
 	if errors.Is(err, ai.ErrNotJSON) { // small models sometimes ramble; one firm reminder usually fixes it
 		raw, err = ask(ctx, b, prompt+"\nReply with the JSON object only.")
@@ -206,6 +206,18 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		}
 	}
 	return r, nil
+}
+
+// languageNote asks for replies in the request's language when the request is
+// not plain ASCII. English requests get no note, so their prompt stays exactly
+// the one the bench measures.
+func languageNote(request string) string {
+	for _, r := range request {
+		if r >= utf8.RuneSelf {
+			return "Write \"note\", \"answer\" and \"question\" in the language of the request; \"command\" is always a normal shell command.\n"
+		}
+	}
+	return ""
 }
 
 var word = regexp.MustCompile(`^\pL[\pL\pM'-]*$`)
