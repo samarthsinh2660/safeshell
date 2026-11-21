@@ -135,7 +135,7 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 		cancel()
 		if err != nil {
 			fmt.Fprintln(stderr, "safeshell ask:", firstErrLine(err))
-			return 1, !strings.Contains(err.Error(), "safeshell ai setup") && !strings.Contains(err.Error(), "local engine")
+			return 1, !errors.Is(err, ai.ErrUnavailable)
 		}
 		if r.Question != "" {
 			if in == nil {

@@ -92,14 +92,24 @@ func (d Dirs) Ensure(ctx context.Context, spec Spec, log io.Writer) (Endpoint, e
 		return Endpoint{}, err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+	if err := lockWithContext(ctx, lock); err != nil {
 		return Endpoint{}, err
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 
 	if s, ok := d.readState(); ok && s.running() {
-		if s.Model == spec.Model && healthy(ctx, s.Port) {
-			return Endpoint{s.Port, s.Key}, nil
+		if s.Model == spec.Model {
+			if healthy(ctx, s.Port) {
+				return Endpoint{s.Port, s.Key}, nil
+			}
+			if err := ctx.Err(); err != nil { // out of time: that says nothing about the engine
+				return Endpoint{}, err
+			}
+			// Alive with the right model but not answering yet: it is still loading. Only an engine that
+			// has taken longer than the start limit is treated as wedged.
+			if began := d.startedAt(); time.Since(began) < startLimit {
+				return d.waitReady(ctx, s.Port, s.Key, began.Add(startLimit), func() bool { return !s.running() })
+			}
 		}
 		_ = syscall.Kill(s.PID, syscall.SIGTERM) // a different model was asked for, or it is wedged
 		time.Sleep(300 * time.Millisecond)
@@ -138,19 +148,59 @@ func (d Dirs) Ensure(ctx context.Context, spec Spec, log io.Writer) (Endpoint, e
 	b, _ := json.Marshal(state{PID: cmd.Process.Pid, Port: port, Model: spec.Model, Key: key, Bin: spec.Bin})
 	_ = os.WriteFile(d.statePath(), b, 0o600)
 
-	for end := time.Now().Add(180 * time.Second); time.Now().Before(end); {
+	return d.waitReady(ctx, port, key, time.Now().Add(startLimit), func() bool {
 		select {
 		case <-exited:
-			return Endpoint{}, fmt.Errorf("the local engine stopped while starting (see %s)", filepath.Join(d.State, "llama.log"))
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+// startLimit is how long an engine may take to load its model.
+const startLimit = 180 * time.Second
+
+// startedAt is when the engine in the state file was started.
+func (d Dirs) startedAt() time.Time {
+	fi, err := os.Stat(d.statePath())
+	if err != nil {
+		return time.Time{}
+	}
+	return fi.ModTime()
+}
+
+// waitReady waits until the engine on port answers, it stops (gone), end passes or ctx ends.
+func (d Dirs) waitReady(ctx context.Context, port int, key string, end time.Time, gone func() bool) (Endpoint, error) {
+	for time.Now().Before(end) {
+		select {
 		case <-ctx.Done():
 			return Endpoint{}, ctx.Err()
 		case <-time.After(300 * time.Millisecond):
+		}
+		if gone() {
+			return Endpoint{}, fmt.Errorf("the local engine stopped while starting (see %s)", filepath.Join(d.State, "llama.log"))
 		}
 		if healthy(ctx, port) {
 			return Endpoint{port, key}, nil
 		}
 	}
 	return Endpoint{}, errors.New("the local engine did not become ready within 3 minutes")
+}
+
+// lockWithContext takes the exclusive lock on f without blocking past ctx.
+func lockWithContext(ctx context.Context, f *os.File) error {
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err != syscall.EWOULDBLOCK {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 // Stop ends the background server, if one is running.

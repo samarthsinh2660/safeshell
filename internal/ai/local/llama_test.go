@@ -2,17 +2,19 @@ package local
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
 	"testing"
 
+	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/models"
 	"github.com/samarthsinh2660/safeshell/internal/runtime"
 )
 
-var tiny = models.Model{ID: "tiny", File: "tiny.gguf", Size: 4}
+var tiny = models.Model{ID: "tiny", File: "tiny.gguf", Size: 4, SHA: "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4"} // SHA-256 of "1234"
 
 func TestNameCarriesTheModel(t *testing.T) {
 	if got := (Llama{Model: tiny}).Name(); got != "local:tiny" {
@@ -29,6 +31,9 @@ func TestNotReadyUntilTheModelAndAnEngineAreInstalled(t *testing.T) {
 	_, err := l.Complete(context.Background(), "", "")
 	if err == nil || !strings.Contains(err.Error(), "safeshell ai setup") {
 		t.Errorf("the error should say what to run: %v", err)
+	}
+	if !errors.Is(err, ai.ErrUnavailable) {
+		t.Errorf("a missing model must be reported as unavailable: %v", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dirs.ModelPath(tiny.File)), 0o755); err != nil {
@@ -80,5 +85,13 @@ func TestCompleteReportsEnginesThatWillNotStart(t *testing.T) {
 	_, err := l.Complete(context.Background(), "", "")
 	if err == nil || !strings.Contains(err.Error(), "cpu engine") {
 		t.Errorf("%v", err)
+	}
+	if !errors.Is(err, ai.ErrUnavailable) {
+		t.Errorf("an engine that will not start must be reported as unavailable: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := l.Complete(ctx, "", ""); !errors.Is(err, context.Canceled) || errors.Is(err, ai.ErrUnavailable) {
+		t.Errorf("running out of time is not the engine being unavailable: %v", err)
 	}
 }
