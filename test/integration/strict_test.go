@@ -41,8 +41,14 @@ func TestStrictModeCancelsRiskyLinesWhenSafeShellBreaksButReadOnlyOnesRun(t *tes
 			sh.send(load + "\r")
 			sh.send("echo hooked\r")
 			sh.waitFor(t, "hooked\r\n")
-			// Break SafeShell: the same file now fails with exit 7.
-			if err := os.WriteFile(cp, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+			// Break SafeShell: the same path now fails with exit 7. The script is renamed
+			// over the copy, because writing into a binary that is still running (its
+			// daemon, for one) fails with "text file busy".
+			broken := cp + ".broken"
+			if err := os.WriteFile(broken, []byte("#!/bin/sh\nexit 7\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(broken, cp); err != nil {
 				t.Fatal(err)
 			}
 			sh.send("rm -rf " + victim + "\r")
