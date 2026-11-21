@@ -29,7 +29,7 @@ func Init() int {
 	if err := json.NewDecoder(os.Stdin).Decode(&req); err != nil {
 		return report(outcome{Error: "bad request: " + err.Error()})
 	}
-	layers, warnings, err := buildRoot(req)
+	layers, warnings, loose, err := buildRoot(req)
 	if err != nil {
 		return report(outcome{Error: err.Error()})
 	}
@@ -54,11 +54,11 @@ func Init() int {
 	var ee *exec.ExitError
 	switch {
 	case err == nil:
-		return report(outcome{Warnings: warnings, Layers: layers})
+		return report(outcome{Warnings: warnings, Layers: layers, Loose: loose.changes()})
 	case errors.As(err, &ee):
-		return report(outcome{Exit: ee.ExitCode(), Warnings: warnings, Layers: layers})
+		return report(outcome{Exit: ee.ExitCode(), Warnings: warnings, Layers: layers, Loose: loose.changes()})
 	default:
-		return report(outcome{Exit: 127, Warnings: warnings, Layers: layers, Error: "could not start " + shell + ": " + err.Error()})
+		return report(outcome{Exit: 127, Warnings: warnings, Layers: layers, Loose: loose.changes(), Error: "could not start " + shell + ": " + err.Error()})
 	}
 }
 
@@ -66,16 +66,16 @@ func Init() int {
 // result. It returns the overlays that were really mounted and warnings for
 // anything that could not be mirrored: such a path is left empty, never
 // exposed writable.
-func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, err error) {
+func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, loose *looseCopies, err error) {
 	if err := syscall.Mount("", "/", "", syscall.MS_REC|syscall.MS_PRIVATE, ""); err != nil {
-		return nil, nil, fmt.Errorf("make mounts private: %w", err)
+		return nil, nil, nil, fmt.Errorf("make mounts private: %w", err)
 	}
 	merged := filepath.Join(req.Root, "merged")
 	if err := syscall.Mount("tmpfs", merged, "tmpfs", 0, "mode=755,size=4m"); err != nil {
-		return nil, nil, fmt.Errorf("mount new root: %w", err)
+		return nil, nil, nil, fmt.Errorf("mount new root: %w", err)
 	}
 	if err := skeleton(merged); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	b := &builder{root: req.Root, merged: merged, static: map[string]bool{}}
 	for _, l := range req.Layers {
@@ -84,29 +84,29 @@ func buildRoot(req request) (layers []Layer, warnings []sandbox.Warning, err err
 	for _, l := range req.Layers {
 		for _, p := range []string{l.Mount, l.Upper, l.Work} {
 			if strings.ContainsAny(p, ",:") {
-				return nil, nil, fmt.Errorf("path %q contains , or : which overlayfs options cannot carry", p)
+				return nil, nil, nil, fmt.Errorf("path %q contains , or : which overlayfs options cannot carry", p)
 			}
 		}
 		b.overlay(l, 0)
 	}
 	if err := mountPseudo(merged); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := stageRootShim(req.Root, merged); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// pivot_root(".", ".") swaps the root without needing a directory for the old one.
 	if err := syscall.Chdir(merged); err != nil {
-		return nil, nil, fmt.Errorf("enter merged root: %w", err)
+		return nil, nil, nil, fmt.Errorf("enter merged root: %w", err)
 	}
 	if err := syscall.PivotRoot(".", "."); err != nil {
-		return nil, nil, fmt.Errorf("pivot_root: %w", err)
+		return nil, nil, nil, fmt.Errorf("pivot_root: %w", err)
 	}
 	if err := syscall.Unmount(".", syscall.MNT_DETACH); err != nil {
-		return nil, nil, fmt.Errorf("detach old root: %w", err)
+		return nil, nil, nil, fmt.Errorf("detach old root: %w", err)
 	}
 	shimRootCommands()
-	return b.done, b.summary(), syscall.Chdir("/")
+	return b.done, b.summary(), &b.loose, syscall.Chdir("/")
 }
 
 const maxDepth = 6
@@ -116,7 +116,8 @@ type builder struct {
 	static       map[string]bool // mounts that have their own layer in the plan
 	done         []Layer
 	warnings     []sandbox.Warning // paths that are missing from the sandbox
-	partial      []string          // directories whose loose files are not visible
+	partial      []string          // directories with loose files that are not visible
+	loose        looseCopies       // loose files copied into the sandbox
 	dyn          int
 }
 
@@ -128,7 +129,7 @@ func (b *builder) summary() []sandbox.Warning {
 		if len(shown) > 4 {
 			shown = shown[:4]
 		}
-		out = append(out, sandbox.Warning{Paths: b.partial, Text: fmt.Sprintf("loose files directly inside %d directories (for example %s) are not visible in the sandbox", len(b.partial), strings.Join(shown, ", "))})
+		out = append(out, sandbox.Warning{Paths: b.partial, Text: fmt.Sprintf("loose files directly inside %d directories (for example %s) are too big or too many to show in the sandbox", len(b.partial), strings.Join(shown, ", "))})
 	}
 	return out
 }
@@ -136,7 +137,8 @@ func (b *builder) summary() []sandbox.Warning {
 // overlay mounts l. A directory with other mounts beneath it is refused by the
 // kernel (EINVAL): those mounts are locked to the sandbox's parent. For such a
 // directory the children are overlaid one by one instead, which loses only the
-// loose files directly inside it (reported as a warning).
+// loose files directly inside it: small ones are copied in, the rest are
+// reported as a warning.
 func (b *builder) overlay(l Layer, depth int) {
 	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", l.Mount, l.Upper, l.Work)
 	err := syscall.Mount("overlay", filepath.Join(b.merged, l.Mount), "overlay", 0, opts)
@@ -163,7 +165,6 @@ func (b *builder) descend(mount string, depth int) {
 		b.warnings = append(b.warnings, unavailable(mount, err))
 		return
 	}
-	loose := 0
 	for _, e := range entries {
 		dst := filepath.Join(b.merged, mount, e.Name())
 		child := filepath.Join(mount, e.Name())
@@ -183,11 +184,9 @@ func (b *builder) descend(mount string, depth int) {
 			if os.MkdirAll(l.Upper, 0o755) == nil && os.MkdirAll(l.Work, 0o755) == nil {
 				b.overlay(l, depth+1)
 			}
-		default:
-			loose++
 		}
 	}
-	if loose > 0 {
+	if b.loose.stage(b.merged, mount, entries) > 0 {
 		b.partial = append(b.partial, mount)
 	}
 }

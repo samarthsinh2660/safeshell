@@ -81,9 +81,14 @@ jobs:
       # install the same profile the .deb ships, for the binary just built.
       - name: Allow the sandbox
         run: scripts/install-apparmor.sh --yes bin/safeshell && bin/safeshell doctor
+      # A folder you can write to with a mount directly inside it, so the loose-files test (#70) runs.
+      - name: Make a partly mirrored folder
+        run: |
+          sudo mkdir -p /srv/ss-partly/mnt && sudo chown -R "$USER" /srv/ss-partly
+          sudo mount -t tmpfs -o size=1m,uid="$(id -u)",gid="$(id -g)" tmpfs /srv/ss-partly/mnt
       # SS_NEED_SANDBOX makes a sandbox test fail instead of skip, so none is skipped silently.
       - name: Integration tests with the real sandbox
-        run: SS_NEED_SANDBOX=1 make integration
+        run: SS_NEED_SANDBOX=1 SS_PARTLY_DIR=/srv/ss-partly make integration
       - name: Sweep every labelled command through the real binary
         run: SS_NEED_SANDBOX=1 SS_SWEEP=1 go test -count=1 -timeout 20m ./test/integration -run Sweep
 

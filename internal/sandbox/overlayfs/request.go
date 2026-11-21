@@ -20,4 +20,6 @@ type outcome struct {
 	Warnings []sandbox.Warning
 	// Layers are the overlays actually mounted, including ones added by the child.
 	Layers []Layer
+	// Loose are the changes made to loose files copied into partly mirrored folders.
+	Loose []sandbox.Change
 }
