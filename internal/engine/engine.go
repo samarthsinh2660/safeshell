@@ -5,8 +5,11 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/classify"
 	"github.com/samarthsinh2660/safeshell/internal/classify/rules"
@@ -61,6 +64,7 @@ type Engine struct {
 	Rules      []policy.Rule     // the admin's team policy; nil when there is none
 	Hosts      map[string]string // the user's host patterns and labels (prod, staging); nil when none
 	Home       string            // the user's home folder, so a home outside /home is protected
+	Protect    []string          // absolute folders the user keeps safe: any change inside them is raised to R3
 }
 
 // Analysis is everything learned about one command line.
@@ -83,6 +87,8 @@ type Analysis struct {
 	PolicyWarning string         `json:"policy_warning,omitempty"`
 	// Host is what the user's host labels ask of this line.
 	Host policy.HostOutcome `json:"host"`
+	// Protected is what the protected folders ask of this line.
+	Protected policy.ProtectOutcome `json:"protected"`
 	// AI is the AI's review of this line; nil when none was made.
 	AI *AIReview `json:"ai,omitempty"`
 }
@@ -113,6 +119,9 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 
 	a.Team = policy.Evaluate(e.Rules, cmds)
 	a.Host = policy.EvaluateHosts(e.Hosts, a.Verdict, cmds)
+	if len(e.Protect) > 0 {
+		a.Protected = policy.EvaluateProtected(e.Protect, changedPaths(cmds, cwd, e.Home))
+	}
 	a.simulate(ctx, e.Sim, cwd)
 	if a.Sim == nil {
 		paths, complete := rules.WritePaths(cmds, cwd)
@@ -199,4 +208,47 @@ func (a *Analysis) decide() {
 	a.Decision = policy.Decide(a.Level, a.Effects)
 	a.Level, a.Decision = a.Team.Apply(a.Level, a.Decision)
 	a.Level, a.Decision = a.Host.Apply(a.Level, a.Decision)
+	a.Level, a.Decision = a.Protected.Apply(a.Level, a.Decision)
+}
+
+// changedPaths are the files and folders the commands change, from their
+// arguments alone. ~ stands for home, and a word with a glob or variable is
+// cut back to the folder before it ("~/thesis/$f" is "~/thesis/"), so a
+// pattern cannot slip past a protected folder. A path that cannot be named at
+// all is left out.
+func changedPaths(cmds []shellparse.Command, cwd, home string) []string {
+	cut := func(w string) string {
+		switch {
+		case w == "~":
+			return home
+		case strings.HasPrefix(w, "~/"):
+			w = home + w[1:]
+		}
+		if i := strings.IndexAny(w, "*?[]{}$`"); i >= 0 {
+			w = w[:i]
+			w = w[:strings.LastIndex(w, "/")+1]
+			if w == "" {
+				w = "./"
+			}
+		}
+		return w
+	}
+	expanded := make([]shellparse.Command, len(cmds))
+	for i, c := range cmds {
+		c.Args = slices.Clone(c.Args)
+		for j, a := range c.Args {
+			c.Args[j] = cut(a)
+		}
+		c.Redirs = slices.Clone(c.Redirs)
+		for j, r := range c.Redirs {
+			c.Redirs[j].Target = cut(r.Target)
+		}
+		expanded[i] = c
+	}
+	var out []string
+	written, _ := rules.WritePaths(expanded, cwd)
+	for _, w := range written {
+		out = append(out, cmp.Or(w.Into, w.Path))
+	}
+	return out
 }

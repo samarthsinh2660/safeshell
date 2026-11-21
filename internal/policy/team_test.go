@@ -115,3 +115,17 @@ func TestApplyOnlyRaises(t *testing.T) {
 		}
 	}
 }
+
+func TestParseFileReadsStrictAndRulesStayTheSame(t *testing.T) {
+	f, err := ParseFile([]byte(`{"strict":true}`))
+	if err != nil || !f.Strict || len(f.Rules) != 0 {
+		t.Fatalf("%+v %v", f, err)
+	}
+	f, err = ParseFile([]byte(`{"strict":false,"rules":[{"match":"apt purge","snapshot":true}]}`))
+	if err != nil || f.Strict || len(f.Rules) != 1 {
+		t.Fatalf("strict false must leave it off: %+v %v", f, err)
+	}
+	if _, err := ParseFile([]byte(`{"strict":"yes"}`)); err == nil {
+		t.Error("a strict that is not true or false must be refused")
+	}
+}
