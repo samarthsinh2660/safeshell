@@ -2,6 +2,28 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.7.0 - 2026-11-21
+
+AI, voice, accessibility and other languages.
+
+### Added
+- Voice: `safeshell voice setup --model base.en|base|small --language CODE` chooses the speech model and the language it listens for. Each model is pinned by size and SHA-256; the old model stays until the new one is verified. `safeshell voice status` shows the model and language. (#33)
+- Requests in any language: a Hindi, Spanish or French sentence is recognised without a leading `?`. A request with non-English letters asks the AI to answer in that language (the local 3B model often still answers in English; the command is right either way). `safeshell ai bench` scores a new set of 10 Hindi requests on its own line (local Qwen 3B: 8 of 10). (#107)
+- Plain output for screen readers: `SAFESHELL_PLAIN=1`, `"plain": true` in config.json, or `--plain` on `check`, `analyze` and `guard`. One full sentence per line, no colour or columns, the choices in words and the question last. The answers you type are the same as before. See `safeshell help accessibility`. (#106)
+- `safeshell ai bench --injection`: 17 dangerous commands with planted text in file names and output (fake instructions, fake verdicts, `</data>` tags, Hindi and French variants). Verdicts changed: 0 of 17, as a review can only raise a level. Local Qwen 3B was swayed to a lower rating in 6 of 17 (0 of 17 with the planted text removed), which only cancels the AI's extra raise. Cloud models were not measured. (#105)
+- Every AI review is written to the audit log (provider, level, reason, whether it raised the level, secrets masked), and `safeshell history` marks the ones that raised it. (#108)
+
+### Changed
+- Model files (AI and voice) are checked by SHA-256, not only size. A verified download writes a small `.sha256` marker next to the file; a damaged model of the right size is reported as not installed. The first check after upgrading hashes an existing model once, which takes a few seconds for a large AI model. (#81)
+- A request over 2000 bytes is shortened on a character boundary and you are told. (#107)
+
+### Fixed
+- The local AI engine is no longer killed and restarted when a second request arrives while the model is still loading, so the AI review works on slow machines (a 7B model on CPU). (#109)
+- A check waiting for the engine start lock gives up at its own deadline instead of killing the engine another check just started. (#110)
+- Home-folder redaction before cloud calls replaces only whole paths (`/home/sam` no longer turns `/home/samuel/x` into `~uel/x`) and hides the user name when it is 4 or more letters. (#56)
+- Text placed in AI prompts is cut on a character boundary, and `</DATA>`, `</data >` and similar closing tags are removed too. (#80)
+- The AI-availability check uses error types instead of matching error text. (#81)
+
 ## 1.6.0 - 2026-11-20
 
 More shells, AI coding agents, remote machines and CI.
