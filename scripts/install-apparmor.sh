@@ -85,7 +85,8 @@ echo "Anyone who can replace that file gets the same permission, so keep it in a
 [ "$legacy_is_ours" = 1 ] && echo "The old profile $legacy for this binary will be removed."
 confirm "Install it?" || exit 1
 
+# The old profile goes first: two loaded profiles for one binary would both claim it.
+if [ "$legacy_is_ours" = 1 ]; then remove_legacy; fi
 echo "$profile" | sudo tee "$profile_file" >/dev/null
 sudo apparmor_parser -r "$profile_file"
-[ "$legacy_is_ours" = 1 ] && remove_legacy
 echo "installed. Check with: $bin doctor"
