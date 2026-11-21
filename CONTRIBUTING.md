@@ -206,7 +206,7 @@ Keep one concern per PR. If `main` moved while you worked, `git rebase origin/ma
 
 ## Dependency updates (Dependabot)
 
-Every GitHub Action is pinned to a commit. Dependabot checks the pins weekly and opens pull requests:
+Every GitHub Action is pinned to a commit. Dependabot checks the pins weekly and opens pull requests, only for releases at least 7 days old (`cooldown` in `.github/dependabot.yml`):
 
 - **Patch and minor updates** come together as one pull request. The `dependabot auto-merge` workflow turns on auto-merge for it, and GitHub merges it only after the required `check` job passes (unit, integration with the real sandbox, the sweep, the Debian build and the reproducibility check). If anything fails, it stays open.
 - **Major updates** come one per pull request and are never merged automatically. Read the action's release notes, check that CI passes, then merge by hand.

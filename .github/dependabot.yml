@@ -6,6 +6,10 @@ updates:
       - /.github/actions/safeshell-check
     schedule:
       interval: weekly
+    # Wait a week after an action's release before proposing it, so a bad or compromised release
+    # is usually pulled before it can be auto-merged into the workflows that sign releases.
+    cooldown:
+      default-days: 7
     # Patch and minor bumps come as one pull request a week; each major bump comes alone, for a person to review.
     groups:
       actions-minor-and-patch:

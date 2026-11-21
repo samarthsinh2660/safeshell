@@ -9,10 +9,13 @@ on:
 permissions:
   contents: read
 
-concurrency: release
-
 jobs:
   release:
+    # On the job, not the workflow: every pull request closed on main starts this workflow, and a
+    # run whose job is skipped must never take the place of a queued release in the group.
+    concurrency:
+      group: release
+      cancel-in-progress: false
     if: github.event.pull_request.merged == true && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-24.04
     # Only this job writes: contents to create the tag and release, the other two to sign build provenance.
