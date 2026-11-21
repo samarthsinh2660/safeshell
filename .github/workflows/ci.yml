@@ -97,15 +97,19 @@ jobs:
           go-version-file: go.mod
       - name: Install the btrfs and ZFS tools
         run: sudo apt-get update -q && sudo apt-get install -y -q btrfs-progs zfsutils-linux
-      - name: A btrfs subvolume the runner user owns
+      # Like Fedora and openSUSE: the subvolume is its own mount ("subvol=home"), not a folder
+      # inside a bigger btrfs mount.
+      - name: A btrfs subvolume the runner user owns, mounted on its own
         run: |
           truncate -s 1G "$RUNNER_TEMP/btrfs.img"
           mkfs.btrfs -q "$RUNNER_TEMP/btrfs.img"
-          sudo mkdir -p /mnt/btrfs
-          sudo mount -o loop,user_subvol_rm_allowed "$RUNNER_TEMP/btrfs.img" /mnt/btrfs
-          sudo btrfs subvolume create /mnt/btrfs/home
-          sudo chown -R "$USER" /mnt/btrfs/home
-          echo "SS_BTRFS_DIR=/mnt/btrfs/home" >> "$GITHUB_ENV"
+          sudo mkdir -p /mnt/btrfs-top /mnt/btrfs
+          sudo mount -o loop "$RUNNER_TEMP/btrfs.img" /mnt/btrfs-top
+          sudo btrfs subvolume create /mnt/btrfs-top/home
+          sudo umount /mnt/btrfs-top
+          sudo mount -o loop,subvol=home,user_subvol_rm_allowed "$RUNNER_TEMP/btrfs.img" /mnt/btrfs
+          sudo chown "$USER" /mnt/btrfs
+          echo "SS_BTRFS_DIR=/mnt/btrfs" >> "$GITHUB_ENV"
       # The runner kernel may have no ZFS module. Then only the ZFS part is skipped, and says so.
       - name: A ZFS dataset the runner user may snapshot
         run: |
@@ -126,17 +130,17 @@ jobs:
       - name: Diagnostics
         run: |
           findmnt /mnt/btrfs || true
-          stat -f -c %T /mnt/btrfs/home || true
-          stat -c %i /mnt/btrfs/home || true
-          btrfs subvolume show /mnt/btrfs/home || true
+          stat -f -c %T /mnt/btrfs || true
+          stat -c %i /mnt/btrfs || true
+          btrfs subvolume show /mnt/btrfs || true
           echo "--- snapshot as the runner user, no sudo"
-          btrfs subvolume snapshot -r /mnt/btrfs/home /mnt/btrfs/home/.probe && btrfs subvolume delete /mnt/btrfs/home/.probe || true
+          btrfs subvolume snapshot -r /mnt/btrfs /mnt/btrfs/.probe && btrfs property set -ts /mnt/btrfs/.probe ro false && btrfs subvolume delete /mnt/btrfs/.probe || true
           echo "--- doctor with HOME on btrfs"
-          mkdir -p /mnt/btrfs/home/diag-data
-          HOME=/mnt/btrfs/home XDG_DATA_HOME=/mnt/btrfs/home/diag-data bin/safeshell doctor | grep -i snapshot || true
+          mkdir -p /mnt/btrfs/diag-data
+          HOME=/mnt/btrfs XDG_DATA_HOME=/mnt/btrfs/diag-data bin/safeshell doctor | grep -i snapshot || true
           echo "--- simulate rm -rf on btrfs"
-          mkdir -p /mnt/btrfs/home/diag/proj && echo x > /mnt/btrfs/home/diag/proj/a.txt
-          bin/safeshell simulate --json --cwd /mnt/btrfs/home/diag "rm -rf proj" || true
+          mkdir -p /mnt/btrfs/diag/proj && echo x > /mnt/btrfs/diag/proj/a.txt
+          bin/safeshell simulate --json --cwd /mnt/btrfs/diag "rm -rf proj" || true
       # With SS_BTRFS_DIR or SS_ZFS_DIR set, the test fails unless the native snapshot was really used.
       - name: Undo from a native snapshot
         run: SS_NEED_SANDBOX=1 go test -count=1 -v -run TestUndoFromNativeSnapshot ./test/integration

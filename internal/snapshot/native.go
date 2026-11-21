@@ -104,6 +104,9 @@ func (h Host) Delete(ref NativeRef) error {
 	var err error
 	switch ref.Kind {
 	case "btrfs":
+		// A read-only subvolume cannot be deleted by its owner (the kernel says "Read-only
+		// file system"): make it writable first. If that is not allowed, the delete says so.
+		_, _ = h.Run(ctx, "btrfs", "property", "set", "-ts", ref.Path, "ro", "false")
 		out, err = h.Run(ctx, "btrfs", "subvolume", "delete", ref.Path)
 	case "zfs":
 		out, err = h.Run(ctx, "zfs", "destroy", ref.Name)

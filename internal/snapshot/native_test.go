@@ -378,7 +378,7 @@ func TestPruneDeletesNativeSnapshotsFirst(t *testing.T) {
 	if err != nil || r.Removed != 1 {
 		t.Fatalf("%v %+v", err, r)
 	}
-	if len(f.calls) != 1 || !strings.HasPrefix(f.calls[0], "btrfs subvolume delete ") {
+	if len(f.calls) != 2 || !strings.HasPrefix(f.calls[0], "btrfs property set -ts ") || !strings.HasPrefix(f.calls[1], "btrfs subvolume delete ") {
 		t.Errorf("calls %v", f.calls)
 	}
 	if _, err := os.Stat(dir(store, m.ID)); err == nil {
