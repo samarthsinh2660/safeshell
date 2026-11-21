@@ -57,9 +57,14 @@ for what a cloud model receives.
 .RB "models [" list ]
 Choose the AI model from a menu, or list the models your cloud key offers.
 .TP
-.B ai setup|status|stop|bench
+.B ai setup|status|stop|bench [\-\-injection]
 Manage the optional built-in AI. Nothing is downloaded until you run
 .BR "ai setup" .
+.B ai bench
+scores the model on English requests;
+.B ai bench \-\-injection
+shows it dangerous commands with planted "ignore the rules" text in file names and exits 1
+if the model is talked into a lower rating.
 .TP
 .B voice [setup [\-\-yes] [\-\-model base.en|base|small] [\-\-language CODE]|status|\-\-text]
 Speak a request. The speech is turned into text on this machine and then handled like
