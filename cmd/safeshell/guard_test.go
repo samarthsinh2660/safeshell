@@ -142,6 +142,7 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	backend = func() (ai.Backend, error) { return nil, nil }                 // tests never reach a real model
 	socketPath = func() string { return filepath.Join(d, "no-daemon.sock") } // nor a real daemon
 	realLoadPolicy = loadPolicy
+	realTeamFile = teamFile
 	loadPolicy = func() ([]policy.Rule, bool, error) { return nil, false, nil }       // nor a policy on this machine
 	teamFile = func() (policy.File, bool, error) { return policy.File{}, false, nil } // nor its team policy
 	realLoadHosts = loadHosts
