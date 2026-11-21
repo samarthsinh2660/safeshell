@@ -12,6 +12,7 @@ import (
 var colourCode = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestPlainBlockPromptInBash(t *testing.T) {
+	needSandbox(t)
 	victim := filepath.Join(t.TempDir(), "proj")
 	_ = os.MkdirAll(victim, 0o755)
 	_ = os.WriteFile(filepath.Join(victim, "a.txt"), []byte("x"), 0o644)
