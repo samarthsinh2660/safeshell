@@ -205,9 +205,15 @@ func fileSize(f *os.File) int64 {
 
 // fileMatches hashes path, showing Progress on w (which may be nil).
 func fileMatches(path, wantSHA string, w io.Writer) (bool, error) {
+	sum, err := fileSHA(path, w)
+	return sum == wantSHA, err
+}
+
+// fileSHA is the SHA-256 of the file at path, showing Progress on w (which may be nil).
+func fileSHA(path string, w io.Writer) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	defer f.Close()
 	if w != nil {
@@ -216,8 +222,8 @@ func fileMatches(path, wantSHA string, w io.Writer) (bool, error) {
 	p := newProgress(w, fileSize(f), 0, false)
 	h := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(h, p), f); err != nil {
-		return false, err
+		return "", err
 	}
 	p.Finish()
-	return hex.EncodeToString(h.Sum(nil)) == wantSHA, nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

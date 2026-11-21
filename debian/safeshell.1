@@ -23,13 +23,13 @@ or
 .BR \-\-help ,
 which prints its help and does nothing else.
 .TP
-.BI "check [--json] " command
+.BI "check [--json] [--plain] " command
 Rate a command without running it. Exit status 0 means R0 to R2, 3 means R3, 4 means R4.
 .TP
 .BI "check --script " FILE... " [--format text|json|sarif|github] [--fail-on R2|R3|R4]"
 Rate every command in one or more shell scripts without running them; only the built-in rules are used, never the sandbox, the AI or the daemon. Each command that is not R0 is listed with the line it starts on, the level and the reason; the result is the highest level over all files. A script that is not valid shell or cannot be read is reported and the other files are still checked (exit status 2 if nothing worse). \fB\-\-format\fR chooses text (default), json (one object per file with path, level and lines), sarif (SARIF 2.1.0) or github (workflow annotations, ::error for R3 and R4 and ::warning for R2). The exit status is that of the highest level when it is at least \fB\-\-fail-on\fR (default R3: 3 for R3, 4 for R4; 1 for R2), otherwise 0.
 .TP
-.BI "analyze [--json] [--verbose] [--cwd " DIR "] " command
+.BI "analyze [--json] [--verbose] [--plain] [--cwd " DIR "] " command
 Rate a command, run it in the sandbox, and report the real files, processes and disks it would touch.
 .TP
 .BI "analyze [--verbose] [--cwd " DIR "] --script " FILE
@@ -119,7 +119,7 @@ Check every part and say what to fix: sandbox, hook (installed and active in thi
 A one-minute walk-through in a throwaway folder: an R0 command, a blocked rm -rf, a snapshot and an undo. Nothing is left behind.
 The hook mentions the tour once per user, in a terminal.
 .TP
-.BI "guard [--cwd " DIR "] \-\- " command
+.BI "guard [--plain] [--cwd " DIR "] \-\- " command
 What the shell hook runs for each command line: analyse it, ask if needed, and print the command to run.
 Exit status 0 means run the printed command, 1 means it was cancelled, 2 means wrong usage.
 .TP
@@ -134,7 +134,7 @@ Exit status 0 means allowed (a Claude Code hook is always answered with 0), 2 me
 Print the hook to add to Claude Code's settings.json, or a script that runs one command only when SafeShell allows it. Nothing is edited.
 .TP
 .RB "help [" topic ]
-Short guides: start, safety, english, models, voice, learn, pause, agents, undo, policy, hosts, commands, privacy and trouble.
+Short guides: start, safety, english, models, voice, learn, accessibility, pause, agents, undo, policy, hosts, commands, privacy and trouble.
 .TP
 .B version
 Print the version.
@@ -165,6 +165,9 @@ when they are set.
 .TP
 .B SAFESHELL_OFF
 When set to anything, even 0, the hook in that terminal does not check commands. Unset it to check again.
+.TP
+.B SAFESHELL_PLAIN
+When set to 1, output is for screen readers: no colour, no aligned columns, one full sentence per line, and the choices at a prompt spelled out in words with the question last. The answers accepted are the same. \fB\-\-plain\fR on check, analyze and guard does the same for one run, and "plain": true in config.json turns it on for good.
 .TP
 .B SAFESHELL_NODAEMON
 When set, checks never use the background daemon and run directly.

@@ -228,6 +228,7 @@ With this, `ssh prod1 'rm -rf /var/tmp/x'` is raised one level (at most R4) with
 
 - **Local, default Qwen2.5-Coder 3B.** SafeShell downloads and manages a pinned, checksum-verified `llama.cpp`
   server (CUDA, Vulkan or CPU, picked for your machine) and the model. Starts on demand, stops when idle.
+  A model counts as downloaded only when its checksum matches (a small `.sha256` file is kept next to it).
   Nothing is downloaded until you ask.
 - **Cloud.** Claude, GPT or Gemini with your own key, stored with `0600` permissions or read from
   `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`. Your home path is redacted before anything is sent.
@@ -256,6 +257,21 @@ Requests in any language are recognised (a Hindi sentence needs no leading `?`),
 | English with context and follow-ups | 14 of 20 (local Qwen 3B): follow-ups 6/6, context 4/6, not asking needlessly 4/4, asking 0/4 |
 | Sandbox safety sweep | 700 labelled commands run through the real binary: no file outside the sandbox changed |
 | Tests | unit, fuzz, and integration tests on a real terminal and the real kernel |
+
+## Accessibility
+
+For screen readers, turn on plain output with `SAFESHELL_PLAIN=1`, `"plain": true` in `~/.config/safeshell/config.json`, or `--plain` on `check`, `analyze` and `guard`. There is no colour, no aligned columns and no symbols; every line is one full sentence, the choices at a prompt are spelled out in words, and the question comes last:
+
+```
+Risk level 3 of 4: this cannot be undone. The command is blocked, but you can choose to override that.
+Safer option 1 of 1: trash-put build
+Type c to cancel. Pressing Enter also cancels.
+Type 1 to run the safer command: trash-put build
+Type d to run it anyway. You will be asked to type yes to confirm.
+What do you want to do?
+```
+
+The answers are the same as in the normal prompt (`c`, `d`, a number, `yes`, the typed phrase). See `safeshell help accessibility`.
 
 ## Documentation
 

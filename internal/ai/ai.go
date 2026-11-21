@@ -38,6 +38,10 @@ const (
 // ErrOff means AI is switched off.
 var ErrOff = errors.New("AI is off")
 
+// ErrUnavailable means the model cannot be used on this machine (not downloaded, engine will not start), as opposed
+// to being switched off or giving a bad answer.
+var ErrUnavailable = errors.New("AI is not available")
+
 // Chain tries each backend in turn and returns the first answer.
 type Chain []Backend
 

@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -14,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/samarthsinh2660/safeshell/internal/runtime"
 )
 
 func TestArgsAndHintsForEveryTool(t *testing.T) {
@@ -196,12 +200,35 @@ func TestDownloadFailuresAreExplained(t *testing.T) {
 	}
 }
 
+func TestEnsureModelDownloadsAndMarksAModel(t *testing.T) {
+	data := []byte("a tiny pretend speech model")
+	sum := sha256.Sum256(data)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write(data) }))
+	defer srv.Close()
+	s := setup(t)
+	s.Client = &http.Client{Transport: redirect{srv.URL}}
+	s.Model = Model{Name: "tiny", Title: "Tiny", File: "tiny.bin", Size: int64(len(data)), SHA: hex.EncodeToString(sum[:])}
+	if s.Status().ModelReady {
+		t.Fatal("not downloaded yet")
+	}
+	if p, err := s.EnsureModel(context.Background()); err != nil || p != s.ModelPath() {
+		t.Fatalf("%q %v", p, err)
+	}
+	if b, _ := os.ReadFile(s.ModelPath() + ".sha256"); string(b) != s.Model.SHA {
+		t.Errorf("the model was not marked as verified: %q", b)
+	}
+	if !s.Status().ModelReady {
+		t.Error("a downloaded model should be ready")
+	}
+}
+
 func TestEnsureModelWhenPresent(t *testing.T) {
 	s := setup(t)
 	_ = os.MkdirAll(filepath.Dir(s.ModelPath()), 0o755)
 	f, _ := os.Create(s.ModelPath())
 	_ = f.Truncate(147964211)
 	f.Close()
+	_ = runtime.MarkVerified(s.ModelPath(), s.model().SHA)
 	if p, err := s.EnsureModel(context.Background()); err != nil || p != s.ModelPath() {
 		t.Errorf("%q %v", p, err)
 	}

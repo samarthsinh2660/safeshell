@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/samarthsinh2660/safeshell/internal/config"
+	"github.com/samarthsinh2660/safeshell/internal/runtime"
 	"github.com/samarthsinh2660/safeshell/internal/voice"
 )
 
@@ -22,6 +23,7 @@ func modelSetup(t *testing.T, names ...string) voice.Setup {
 		f, _ := os.Create(s.ModelPath())
 		_ = f.Truncate(m.Size)
 		f.Close()
+		_ = runtime.MarkVerified(s.ModelPath(), m.SHA)
 	}
 	s.Model = voice.Model{}
 	return s

@@ -77,8 +77,7 @@ func (s Setup) Status() Status {
 	} else if fi, err := os.Stat(st.EnginePath); err == nil && fi.Mode()&0o111 != 0 {
 		st.EngineBin = st.EnginePath
 	}
-	fi, err := os.Stat(s.ModelPath())
-	st.ModelReady = err == nil && fi.Size() == s.model().Size
+	st.ModelReady = runtime.Verified(s.ModelPath(), s.model().SHA, s.model().Size)
 	return st
 }
 
@@ -218,5 +217,6 @@ func (s Setup) EnsureModel(ctx context.Context) (string, error) {
 	if err := runtime.Download(ctx, s.Client, m.URL(), s.ModelPath(), m.SHA, m.Size, s.Out); err != nil {
 		return "", fmt.Errorf("could not download the speech model: %w. %s", err, retry)
 	}
+	_ = runtime.MarkVerified(s.ModelPath(), m.SHA) // Download has just checked it
 	return s.ModelPath(), nil
 }
