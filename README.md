@@ -322,7 +322,7 @@ exchanges (30 minutes, 5 turns), so "now do the same for the logs folder" or "un
 to use this context instead of asking, and never to fill in a made-up value such as `user@server`. A cloud
 model receives this too (secrets masked); see `safeshell help privacy`.
 
-`safeshell ai bench` measures the active model on 49 labelled requests: local Qwen 3B scores 100% (49 of 49),
+`safeshell ai bench` measures the active model on 68 labelled requests: local Qwen 3B scores 100% (68 of 68),
 and cloud models about 95-100% (measured on gemini-flash-lite-latest; re-run `safeshell ai bench` for the current default), with no unsafe suggestions in either. It then reports 20 more requests separately, so the original score stays comparable. Local Qwen 3B:
 follow-ups 6 of 6, uses project context 4 of 6, does not ask needlessly 4 of 4, but asks when it should
 0 of 4 (it guesses or asks in plain text instead; a guess is still checked before anything runs).
@@ -335,7 +335,7 @@ Requests in any language are recognised (a Hindi sentence needs no leading `?`),
 | | |
 |---|---|
 | Held-out classifier accuracy | 91.8% exactly right on 220 commands the rules were never tuned on |
-| English to command | 100% (local Qwen 3B, 49 of 49) on 49 requests |
+| English to command | 100% (local Qwen 3B, 68 of 68) on 68 requests |
 | English with context and follow-ups | 14 of 20 (local Qwen 3B): follow-ups 6/6, context 4/6, not asking needlessly 4/4, asking 0/4 |
 | Sandbox safety sweep | 700 labelled commands run through the real binary: no file outside the sandbox changed |
 | Tests | unit, fuzz, and integration tests on a real terminal and the real kernel |
