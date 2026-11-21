@@ -26,8 +26,8 @@ func TestContextSetLoadsAndCoversEveryCategory(t *testing.T) {
 		}
 	}
 	base, _ := LoadRequests()
-	if len(base) != 49 {
-		t.Errorf("the original set must stay at 49 requests, got %d", len(base))
+	if len(base) != 68 {
+		t.Errorf("the original set must stay at 68 requests, got %d", len(base))
 	}
 	for _, r := range base {
 		if r.Category != "" || r.Conversation != nil {
