@@ -66,8 +66,11 @@ func TestStageCopiesSmallFilesAndLeavesTheRealOnesAlone(t *testing.T) {
 
 func TestStageWithNothingToCopyRecordsNothing(t *testing.T) {
 	var c looseCopies
-	if c.stage(t.TempDir(), "/x", nil) != 0 || len(c.dirs) != 0 {
+	if c.stage(t.TempDir(), "/x", nil) != 0 || len(c.before) != 0 || c.used != 0 {
 		t.Errorf("nothing to copy, got %+v", c)
+	}
+	if len(c.dirs) != 1 {
+		t.Errorf("an empty partly mirrored folder is still compared after the run, got %+v", c.dirs)
 	}
 }
 
@@ -77,7 +80,7 @@ func TestStageStopsAtTheTotalLimit(t *testing.T) {
 	putFile(t, filepath.Join(real, "a"), "aaa", 0o644)
 	entries, _ := os.ReadDir(real)
 	c := looseCopies{used: maxLooseTotal - 2}
-	if c.stage(merged, real, entries) != 1 || len(c.dirs) != 0 {
+	if c.stage(merged, real, entries) != 1 || len(c.before) != 0 {
 		t.Errorf("a file past the total limit stays flagged, got %+v", c)
 	}
 }
@@ -87,7 +90,7 @@ func TestStageSkipsAFileThatCannotBeWritten(t *testing.T) {
 	putFile(t, filepath.Join(real, "a.txt"), "aaa", 0o644)
 	entries, _ := os.ReadDir(real)
 	var c looseCopies
-	if c.stage(filepath.Join(real, "missing"), real, entries) != 1 || len(c.dirs) != 0 {
+	if c.stage(filepath.Join(real, "missing"), real, entries) != 1 || len(c.before) != 0 {
 		t.Errorf("an uncopyable file stays flagged, got %+v", c)
 	}
 }
@@ -151,5 +154,53 @@ func TestChangesIgnoresAnUnreadableFile(t *testing.T) {
 	c := looseCopies{dirs: []string{d}}
 	if got := c.changes(); len(got) != 0 {
 		t.Errorf("an unreadable file cannot be compared, got %+v", got)
+	}
+}
+
+func TestCopyLooseRefusesWhatChangedSinceTheListing(t *testing.T) {
+	d, dst := t.TempDir(), filepath.Join(t.TempDir(), "x")
+	if err := syscall.Mkfifo(filepath.Join(d, "pipe"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	putFile(t, filepath.Join(d, "real"), "r", 0o644)
+	_ = os.Symlink("real", filepath.Join(d, "link"))
+	putFile(t, filepath.Join(d, "big"), strings.Repeat("x", maxLooseFile+1), 0o644)
+	for _, n := range []string{"pipe", "link", "big", "nope"} {
+		if _, ok := copyLoose(filepath.Join(d, n), dst); ok { // the FIFO case would hang if it were opened to read
+			t.Errorf("%s must not be copied", n)
+		}
+	}
+	if _, err := os.Stat(dst); err == nil {
+		t.Error("nothing should have been written")
+	}
+}
+
+func TestReadLimited(t *testing.T) {
+	if d, ok := readLimited(strings.NewReader("abc")); !ok || string(d) != "abc" {
+		t.Errorf("small read: %q %v", d, ok)
+	}
+	if _, ok := readLimited(strings.NewReader(strings.Repeat("x", maxLooseFile+1))); ok {
+		t.Error("a longer read must be refused")
+	}
+	if _, ok := readLimited(strings.NewReader(strings.Repeat("x", maxLooseFile))); !ok {
+		t.Error("a read of exactly the limit is fine")
+	}
+}
+
+func TestChangesReportsANewFileInAFolderWithNoLooseFiles(t *testing.T) {
+	d := t.TempDir()
+	var c looseCopies
+	c.stage(t.TempDir(), d, nil)
+	if got := c.changes(); len(got) != 0 {
+		t.Fatalf("nothing happened yet, got %+v", got)
+	}
+	putFile(t, filepath.Join(d, "new"), "n", 0o644)
+	putFile(t, filepath.Join(d, "huge"), strings.Repeat("x", maxLooseFile+10), 0o644)
+	got := map[string]sandbox.Kind{}
+	for _, ch := range c.changes() {
+		got[filepath.Base(ch.Path)] = ch.Kind
+	}
+	if len(got) != 2 || got["new"] != sandbox.Created || got["huge"] != sandbox.Created {
+		t.Errorf("got %v", got)
 	}
 }

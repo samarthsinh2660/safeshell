@@ -8,7 +8,6 @@ import (
 
 	"github.com/samarthsinh2660/safeshell/eval"
 	"github.com/samarthsinh2660/safeshell/internal/ai"
-	"github.com/samarthsinh2660/safeshell/internal/ai/local"
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/models"
 	"github.com/samarthsinh2660/safeshell/internal/report"
@@ -54,7 +53,7 @@ func runAI(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout, "Warning:", report.Printable(u))
 		}
 		b, berr := backend()
-		localReady := local.Llama{Dirs: d, Model: md, GPU: c.AI.Local.GPU}.Ready()
+		localReady := localLlama(c, d).Ready()
 		if why := aiOffReason(c.AI.Mode, b, berr, localReady); why != "" {
 			fmt.Fprintf(stdout, "AI: off (mode %s). %s\n", c.AI.Mode, why)
 		} else {
