@@ -101,7 +101,7 @@ make build && bash scripts/install.sh
 
 Open a new terminal and every command you press Enter on is checked first. A command typed over several lines (a here-document, an open quote, a trailing backslash) is checked once, when it is complete. The hook runs the `safeshell` that installed it, wherever that is on `PATH`, and running `safeshell install` again after you move or reinstall SafeShell updates the hook. Run `safeshell doctor` to check
 every part (sandbox, hook, daemon, snapshots, AI) and see what to fix, and `safeshell tour` for a one-minute walk-through in a throwaway folder. On Ubuntu 24.04+ the sandbox needs a one-time AppArmor rule; the `.deb` installs it,
-otherwise run `scripts/install-apparmor.sh` (uses sudo).
+otherwise run `scripts/install-apparmor.sh [path/to/safeshell]` (uses sudo). It writes one profile per binary, so it never touches the `.deb`'s rule and can sit next to it; `scripts/install-apparmor.sh --uninstall [path]` removes only that binary's profile.
 
 ### Servers and shared machines
 

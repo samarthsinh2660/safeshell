@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -40,5 +41,16 @@ func TestUndoNotesWhenItCannotMarkThePlanDone(t *testing.T) {
 	answerShared(t, "yes\ny\n")
 	if code, out, _ := runSS("undo"); code != 0 || !strings.Contains(out, "could not mark this snapshot as undone") {
 		t.Errorf("%d %q", code, out)
+	}
+}
+
+func TestRunCommandRunsThePlanInItsFolder(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	if err := runCommand("pwd", dir, &out, &out); err != nil || strings.TrimSpace(out.String()) != dir {
+		t.Errorf("%v %q", err, out.String())
+	}
+	if err := runCommand("exit 3", dir, &out, &out); err == nil {
+		t.Error("a failing plan must report an error")
 	}
 }
