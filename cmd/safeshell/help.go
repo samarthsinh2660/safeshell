@@ -144,7 +144,7 @@ the snapshot, and both the note when it is saved and undo name them.
 On btrfs and ZFS, when one subvolume or dataset holds all the files and you may take snapshots
 (btrfs subvolume snapshot, or zfs allow snapshot), SafeShell takes a read-only filesystem snapshot
 instead of copying, and undo restores only the files the command touched from it. If you may not,
-or the files span several, it copies as usual. "safeshell doctor" shows which applies to your home.
+or the files span several, or the snapshots folder is on a different filesystem, it copies as usual. "safeshell doctor" shows which applies to your home.
 Nothing is saved when the files are over 2 GiB or the disk has too little room; it says so before
 copying anything. After each snapshot the oldest are deleted once they are older than 30 days or
 together over 5 GiB. Change that in ~/.config/safeshell/config.json:
