@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -216,6 +217,9 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 // A command that merely starts with "$" or contains backticks is left alone.
 // A "# " prompt is not stripped: "# find big files" is a comment, and unwrapping
 // it would turn the comment into a command.
+// fenceTags are the language tags a model puts after a code fence for a shell command.
+var fenceTags = []string{"", "sh", "bash", "zsh", "fish", "shell", "console", "shell-session", "terminal"}
+
 func unwrap(cmd string) string {
 	cmd = strings.TrimSpace(cmd)
 	for {
@@ -225,8 +229,8 @@ func unwrap(cmd string) string {
 			next = strings.TrimSpace(next[2:])
 		case len(next) > 6 && strings.HasPrefix(next, "```") && strings.HasSuffix(next, "```") && !strings.Contains(next[3:len(next)-3], "`"):
 			inner := next[3 : len(next)-3]
-			if tag, rest, ok := strings.Cut(inner, "\n"); ok && !strings.ContainsAny(tag, " \t") {
-				inner = rest // drop a language tag such as "sh"
+			if tag, rest, ok := strings.Cut(inner, "\n"); ok && slices.Contains(fenceTags, strings.TrimSpace(tag)) {
+				inner = rest // drop a language tag such as "sh"; any other first line is part of the command
 			}
 			next = strings.TrimSpace(inner)
 		case len(next) > 2 && strings.HasPrefix(next, "`") && strings.HasSuffix(next, "`") && !strings.Contains(next[1:len(next)-1], "`"):
