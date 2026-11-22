@@ -19,15 +19,42 @@ var dockerReads = map[string][]string{
 	"compose":   {"ps", "ls", "config", "images", "logs"},
 }
 
+// composeValue are compose's own options that take the next word as their value.
+var composeValue = []string{"-p", "--project-name", "-f", "--file", "--env-file", "--profile", "--project-directory", "--ansi", "--parallel", "--progress"}
+
+// mgmtSub is the subcommand of a management command ("container ls", "compose -p web down"):
+// the first word after it that is neither an option nor the value of one of compose's
+// options. Operands alone cannot tell, because an option's value is an operand too.
+func mgmtSub(f flags) string {
+	if len(f.pos) == 0 {
+		return ""
+	}
+	i := slices.Index(f.all, f.pos[0])
+	for i++; i > 0 && i < len(f.all); i++ {
+		w := f.all[i]
+		switch {
+		case f.pos[0] == "compose" && slices.Contains(composeValue, w):
+			i++ // and its value
+		case strings.HasPrefix(w, "-"):
+			if f.pos[0] != "compose" {
+				return "" // an option before the subcommand: not a plain read
+			}
+		default:
+			return w
+		}
+	}
+	return ""
+}
+
 func ruleDocker(c shellparse.Command, f flags) []Finding {
-	if len(f.pos) > 1 && slices.Contains(dockerReads[f.pos[0]], f.pos[1]) {
+	if sub := mgmtSub(f); slices.Contains(dockerReads[f.sub()], sub) && !(sub == "config" && f.has('o', "output")) {
 		return one(fnd(R0, c, "Only reads container information."))
 	}
 	switch f.sub() {
 	case "ps", "images", "logs", "inspect", "info", "version", "stats", "top", "history", "ls", "search", "diff", "port":
 		return one(fnd(R0, c, "Only reads container information."))
 	case "compose":
-		if len(f.pos) > 1 && f.pos[1] == "down" && f.has('v', "volumes") {
+		if mgmtSub(f) == "down" && f.has('v', "volumes") {
 			return one(fnd(R3, c, "Stops the project and deletes its volumes, which hold the data of databases and similar services."))
 		}
 		return one(fnd(R2, c, "Starts, stops or rebuilds a project's containers."))

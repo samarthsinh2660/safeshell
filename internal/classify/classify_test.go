@@ -285,6 +285,10 @@ func TestDockerManagementReadsMatchShortForms(t *testing.T) {
 		want Level
 	}{
 		{"docker ps", R0}, {"docker container ls", R0}, {"docker container list -a", R0},
+		// An option's value is not the subcommand: these change things, whatever the project is called.
+		{"docker compose -p config down -v", R3}, {"docker compose -p web down -v", R3}, {"docker compose --project-name=web down -v", R3},
+		{"docker compose -f logs down", R2}, {"docker compose -p logs rm -f", R2}, {"docker compose config -o out.yml", R2},
+		{"docker compose -f dc.yml ps", R0}, {"docker compose --dry-run ps", R0}, {"docker compose config", R0},
 		{"docker container ps", R0}, {"docker container inspect web", R0}, {"docker container logs web", R0},
 		{"docker container top web", R0}, {"docker container port web", R0},
 		{"docker container stats --no-stream", R0}, {"docker container diff web", R0},
