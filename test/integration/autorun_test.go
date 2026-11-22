@@ -52,6 +52,26 @@ func TestAutorunMovesAFileWithoutAsking(t *testing.T) {
 	if asked {
 		t.Error("autorun still asked")
 	}
+	sh.send("safeshell history\r")
+	sh.waitFor(t, "autorun")
+}
+
+func TestAutorunStillAsksBeforeRunningAScript(t *testing.T) {
+	needSandbox(t)
+	d := t.TempDir()
+	script := filepath.Join(d, "setup.sh")
+	marker := filepath.Join(d, "ran")
+	_ = os.WriteFile(script, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755)
+	sh := startBash(t, autorunModel(t, `{"command":"`+script+`","note":"runs the setup"}`)...)
+	sh.waitFor(t, "READY>")
+	sh.send(`eval "$(safeshell hook bash)"` + "\r")
+	sh.send("please set the project up\r")
+	sh.waitFor(t, "Run it? [Y/n]")
+	sh.send("n\r")
+	sh.waitFor(t, "Nothing was run")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("autorun ran a script without asking")
+	}
 }
 
 func TestAutorunCanOpenAFolderInTheShellItself(t *testing.T) {

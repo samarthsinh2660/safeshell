@@ -88,7 +88,7 @@ opts:
 	if multiline && shellparse.Incomplete(line) {
 		return exitIncomplete
 	}
-	return guardLine(line, cwd, stdout, stderr, color, false)
+	return guardLine(line, cwd, stdout, stderr, color, fromPerson)
 }
 
 // changesShell is true for a line that sets up the shell itself, or that cannot be read.
@@ -97,8 +97,17 @@ func changesShell(line string) bool {
 	return err != nil || r.ChangesShell
 }
 
+// origin says who wrote the line guardLine is checking.
+type origin int
+
+const (
+	fromPerson    origin = iota // the person typed it
+	fromAssistant               // the AI wrote it from a plain-English request
+	fromUndo                    // "safeshell undo" proposed it and the person already agreed to run it
+)
+
 // guardLine analyses one command line, asks if needed, and prints what to run.
-func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed bool) int {
+func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, from origin) int {
 	_ = snapshot.Seal(snapshotDir(), os.Getenv("SAFESHELL_HOOK")) // the previous command here has finished: note what it left, so undo can spot later edits
 	ctx, stop := interruptible()
 	a := analyzeFast(ctx, line, cwd, stderr)
@@ -130,9 +139,10 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 	}
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true
-	if proposed && runsUnasked(line, a) {
+	if from == fromAssistant && runsUnasked(line, a) {
+		a.Autorun = true
 		fmt.Fprintln(stderr, "Running it now. Turn this off with: safeshell autorun off")
-	} else if proposed && a.Decision == domain.Allow {
+	} else if from != fromPerson && a.Decision == domain.Allow {
 		proceed := ui.Proceed
 		if plainOn() {
 			proceed = ui.ProceedPlain
@@ -202,6 +212,9 @@ func record(a engine.Analysis, cmd string, ran bool) {
 	outcome, run := audit.Outcome(a.Decision, ran, a.Line, cmd)
 	if a.Trusted && outcome == "allowed" {
 		outcome = audit.OutcomeTrusted
+	}
+	if a.Autorun && outcome == "allowed" {
+		outcome = audit.OutcomeAutorun
 	}
 	e := audit.Entry{Time: time.Now().UTC(), Line: report.MaskSecrets(a.Line), Run: report.MaskSecrets(run), Level: a.Level.String(), Decision: a.Decision.String(), Outcome: outcome}
 	if a.AI != nil {

@@ -134,7 +134,7 @@ func TestPlainProceedForACommandTheAssistantWrote(t *testing.T) {
 	fakeAnalyze(t, a)
 	answer(t, "\n")
 	var b strings.Builder
-	if code := guardLine("ls", "/work", &strings.Builder{}, &b, false, true); code != 0 {
+	if code := guardLine("ls", "/work", &strings.Builder{}, &b, false, fromAssistant); code != 0 {
 		t.Errorf("code %d", code)
 	}
 	if !strings.HasSuffix(b.String(), "Do you want to run it? ") || strings.Contains(b.String(), "[Y/n]") {

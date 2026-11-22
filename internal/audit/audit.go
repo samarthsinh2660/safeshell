@@ -38,6 +38,7 @@ const (
 	OutcomeChecksOff  = "checks-off"  // SAFESHELL_OFF was used: the line was not checked
 	OutcomeNotChecked = "not-checked" // SafeShell itself failed and the hook let the line through
 	OutcomeTrusted    = "trusted"     // a command the person had chosen to always run in this folder
+	OutcomeAutorun    = "autorun"     // a command the assistant wrote that ran without a question because autorun is on
 )
 
 // IsEvent is true for an entry that records one of those events, not a command.

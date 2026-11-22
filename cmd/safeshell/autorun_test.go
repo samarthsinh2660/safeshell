@@ -143,10 +143,19 @@ func autorunSet(t *testing.T, on bool) {
 	autorunOn = func() bool { return on }
 }
 
-func TestWithoutAutorunASafeCommandStillAsks(t *testing.T) {
+// proposal is an allowed analysis of a line made of the given commands, as the checks would give it.
+func proposal(level domain.Level, cmds ...string) engine.Analysis {
 	a := sampleAnalysis()
-	a.Level, a.Decision = domain.R1, domain.Allow
-	fakeAnalyze(t, a)
+	a.Level, a.Decision, a.Effects = level, domain.Allow, nil
+	a.Verdict = domain.Verdict{Level: level}
+	for _, c := range cmds {
+		a.Verdict.Findings = append(a.Verdict.Findings, domain.Finding{Level: level, Command: c})
+	}
+	return a
+}
+
+func TestWithoutAutorunASafeCommandStillAsks(t *testing.T) {
+	fakeAnalyze(t, proposal(domain.R1, "mv notes.txt backup/"))
 	autorunSet(t, false)
 	code, out, errOut := askWith(t, "mv notes.txt backup/", nil)
 	if code != 1 || out != "" || !strings.Contains(errOut, "Run it?") || strings.Contains(errOut, "Running it now") {
@@ -156,25 +165,21 @@ func TestWithoutAutorunASafeCommandStillAsks(t *testing.T) {
 
 func TestAutorunRunsASafeCommandWithoutAsking(t *testing.T) {
 	for _, l := range []domain.Level{domain.R0, domain.R1} {
-		a := sampleAnalysis()
-		a.Level, a.Decision = l, domain.Allow
-		fakeAnalyze(t, a)
+		fakeAnalyze(t, proposal(l, "mv notes.txt backup/"))
 		autorunSet(t, true)
 		code, out, errOut := askWith(t, "mv notes.txt backup/", nil)
 		if code != 0 || out != "mv notes.txt backup/\n" || !strings.Contains(errOut, "Proposed: mv notes.txt backup/") ||
 			!strings.Contains(errOut, "Running it now") || !strings.Contains(errOut, "safeshell autorun off") || strings.Contains(errOut, "Run it?") {
 			t.Errorf("%s: %d %q %q", l, code, out, errOut)
 		}
-		if e := lastAudit(t); e.Outcome != "allowed" {
-			t.Errorf("%s: an autorun command is still recorded as allowed: %+v", l, e)
+		if e := lastAudit(t); e.Outcome != "autorun" {
+			t.Errorf("%s: history must show that nobody confirmed it: %+v", l, e)
 		}
 	}
 }
 
 func TestAutorunLetsCdThrough(t *testing.T) {
-	a := sampleAnalysis()
-	a.Level, a.Decision = domain.R0, domain.Allow
-	fakeAnalyze(t, a)
+	fakeAnalyze(t, proposal(domain.R0, "cd projects"))
 	autorunSet(t, true)
 	if code, out, _ := askWith(t, "cd projects", nil); code != 0 || out != "cd projects\n" {
 		t.Errorf("%d %q", code, out)
@@ -190,13 +195,15 @@ func TestAutorunNeverSkipsARiskierQuestion(t *testing.T) {
 		{"R2 asks", "chmod -R 755 projects", func(a *engine.Analysis) { a.Level, a.Decision = domain.R2, domain.Confirm }},
 		{"R3 is blocked", "rm -rf projects", func(a *engine.Analysis) { a.Level, a.Decision = domain.R3, domain.Block }},
 		{"R4 is stopped", "rm -rf /", func(a *engine.Analysis) { a.Level, a.Decision = domain.R4, domain.HardBlock }},
-		{"a program the rules do not know", "mytool --go", func(a *engine.Analysis) { a.Verdict.Unclassified = []string{"mytool"} }},
+		{"a program the rules do not know", "ls", func(a *engine.Analysis) { a.Verdict.Unclassified = []string{"mytool"} }},
+		{"a script rated R1", "./run.sh", func(a *engine.Analysis) { a.Verdict.Findings[0].Command = "./run.sh" }},
+		{"a build tool rated R1", "make", func(a *engine.Analysis) { a.Verdict.Findings[0].Command = "make" }},
+		{"a program on a labelled host", "ls", func(a *engine.Analysis) { a.Host = policy.HostOutcome{Note: "prod-db is labelled production"} }},
 		{"a broken team policy", "ls", func(a *engine.Analysis) { a.PolicyWarning = "the team policy could not be read" }},
-		{"a command that changes the shell", "export FOO=1", nil},
+		{"a command that changes the shell", "cd x && export FOO=1", nil},
 		{"a command that sets a variable", "FOO=1", nil},
 	} {
-		a := sampleAnalysis()
-		a.Level, a.Decision = domain.R1, domain.Allow
+		a := proposal(domain.R1, "ls")
 		if c.mutate != nil {
 			c.mutate(&a)
 		}
@@ -206,5 +213,16 @@ func TestAutorunNeverSkipsARiskierQuestion(t *testing.T) {
 		if code != 1 || out != "" || strings.Contains(errOut, "Running it now") {
 			t.Errorf("%s: %d %q %q", c.name, code, out, errOut)
 		}
+	}
+}
+
+func TestAutorunDoesNotApplyToTheUndoPlan(t *testing.T) {
+	fakeAnalyze(t, proposal(domain.R1, "mv backup/notes.txt notes.txt"))
+	autorunSet(t, true)
+	answer(t, "")
+	var out, errOut strings.Builder
+	if code := guardLine("mv backup/notes.txt notes.txt", "/work", &out, &errOut, false, fromUndo); code != 1 || out.String() != "" ||
+		!strings.Contains(errOut.String(), "Run it?") || strings.Contains(errOut.String(), "Running it now") {
+		t.Errorf("%d %q %q", code, out.String(), errOut.String())
 	}
 }

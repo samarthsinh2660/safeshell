@@ -132,7 +132,7 @@ Keep SafeShell warm in the background for faster checks. A daemon left running f
 Pause checking in every terminal, open and new, and turn it back on. Nothing needs restarting; while paused the hook costs nothing. SAFESHELL_OFF=1 pauses one terminal only.
 .TP
 .B autorun [on|off|status]
-Let the assistant run safe commands at once, without the "Run it?" question; off by default. A command written from your plain-English request runs right away only when it is rated R0 or R1 after the checks, every program in it is known to the rules and it does not change the shell itself. Anything riskier still asks or is blocked. Ignored in strict mode.
+Let the assistant run safe commands at once, without the "Run it?" question; off by default. A command written from your plain-English request (typed or spoken) runs right away only when every program in it is one of cd, ls, pwd, cat, head, tail, wc, du, df, stat, file, grep, mv, cp, mkdir and touch, the checks rate the line R0 or R1, there is no host label on it and it does not change the shell itself. Scripts, make, python, npm, git, ssh and anything riskier still ask or are blocked. Ignored in strict mode. History shows these commands as autorun.
 .TP
 .B learn [on|off|status]
 Learning mode, off by default. When on, each command that passes without a warning gets one line saying what it does, its level and the safer form. It only adds output.

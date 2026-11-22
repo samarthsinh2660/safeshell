@@ -40,7 +40,8 @@ A line is treated as English when its first word is not a command and it reads l
 Any language works (for example Hindi or Spanish). A request with non-English letters, such as Hindi, gets its answer in that language.
 To force it, start the line with ?   (for example:  ? how much disk is free).
 A request over 2000 bytes is shortened, and SafeShell tells you.
-You always see the command first and press Enter to run it. It is then checked like any typed
+You see the command first and press Enter to run it (unless you turned on  safeshell autorun,
+which runs a few everyday file commands at once). It is then checked like any typed
 command, so a dangerous suggestion is still stopped. Questions ("what does chmod 755 mean") are
 answered and nothing runs. If something is unclear (several files match), SafeShell asks you a
 short question first.
@@ -98,13 +99,14 @@ It only adds output: it never changes what is allowed or blocked, and it needs n
 The setting is "learn": true in ~/.config/safeshell/config.json.`},
 	{"autorun", "Let the assistant run safe commands at once", `By default, a command the assistant writes for you waits for "Run it? [Y/n]". Turn autorun on once:
      safeshell autorun on       (off again with  safeshell autorun off;  safeshell autorun status  shows which)
-Then, when you ask in plain English ("move notes.txt into the backup folder", "go into projects"), a safe
-command runs right after it is shown. Safe means all of these:
-     it is rated R0 or R1 (reads, or is easy to undo) after the sandbox check and any AI review
-     SafeShell knows every program in it
-     it does not change the shell itself (export, source, eval)
-Anything else still asks or is blocked as usual: R2 asks, R3 is blocked with a safer option, R4 is stopped.
-Autorun is ignored in strict mode. Every command it runs is in  safeshell history  and can be undone with  safeshell undo.
+Then, when you ask in plain English ("move notes.txt into the backup folder", "take me into projects"), an
+everyday file or folder command runs right after it is shown. Only these programs run this way:
+     cd  ls  pwd  cat  head  tail  wc  du  df  stat  file  grep  mv  cp  mkdir  touch
+and only when the checks rate the whole line R0 or R1 (it reads, or is easy to undo).
+Everything else still asks or is blocked as usual: scripts, make, python, npm, git and ssh, anything on a host
+you labelled, and export, source or eval. R2 asks, R3 is blocked with a safer option, R4 is stopped.
+It also applies to a request you speak. Autorun is ignored in strict mode. Each command it runs shows in
+safeshell history as autorun and can be undone with  safeshell undo.
 The setting is "autorun": true in ~/.config/safeshell/config.json.`},
 	{"accessibility", "Plain output for screen readers", `Turn it on for one command:
      safeshell check --plain 'rm -rf build'      (also analyze and guard)
