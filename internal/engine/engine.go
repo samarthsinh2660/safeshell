@@ -102,6 +102,9 @@ type Analysis struct {
 	Protected policy.ProtectOutcome `json:"protected"`
 	// AI is the AI's review of this line; nil when none was made.
 	AI *AIReview `json:"ai,omitempty"`
+	// Trusted says the person's "always run this here" answer turned the
+	// confirmation into Allow (see ApplyTrust).
+	Trusted bool `json:"trusted,omitempty"`
 }
 
 // AIReview is what an AI review said: who answered, the level it gave and why,
@@ -247,6 +250,35 @@ func (a *Analysis) decide() {
 	a.Level, a.Decision = a.Team.Apply(a.Level, a.Decision)
 	a.Level, a.Decision = a.Host.Apply(a.Level, a.Decision)
 	a.Level, a.Decision = a.Protected.Apply(a.Level, a.Decision)
+}
+
+// trustCase is the analysis as policy needs it to judge trust.
+func (a Analysis) trustCase(set []policy.Trust, cwd string) policy.TrustCase {
+	return policy.TrustCase{
+		Set: set, Line: a.Line, Cwd: cwd, RuleLevel: a.Verdict.Level, Level: a.Level, Effects: a.Effects,
+		Flagged: a.Team != (policy.Outcome{}) || a.Host != (policy.HostOutcome{}) || a.Protected != (policy.ProtectOutcome{}) ||
+			a.PolicyWarning != "" || (a.AI != nil && a.AI.Raised) || len(a.Verdict.Unclassified) > 0,
+	}
+}
+
+// CanTrust says whether the person may be offered "always run this here" for
+// this line: it is asking for confirmation and nothing but plain R2 is behind it.
+func (a Analysis) CanTrust(cwd string) bool {
+	return a.Decision == domain.Confirm && a.trustCase(nil, cwd).Eligible()
+}
+
+// ApplyTrust turns a confirmation into Allow when the person trusted this exact
+// line in this folder. Call it last, after any AI review: it never touches a
+// block, and a case that anything raised is left as it was.
+func (a *Analysis) ApplyTrust(set []policy.Trust, cwd string) {
+	if a.TrustedHere(set, cwd) {
+		a.Decision, a.Trusted = domain.Allow, true
+	}
+}
+
+// TrustedHere says whether ApplyTrust would let this line through as it stands now.
+func (a Analysis) TrustedHere(set []policy.Trust, cwd string) bool {
+	return a.Decision == domain.Confirm && policy.DecideTrusted(a.Decision, a.trustCase(set, cwd)) == domain.Allow
 }
 
 // changedPaths are the files and folders the commands change, from their

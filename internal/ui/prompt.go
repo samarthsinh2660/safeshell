@@ -16,19 +16,26 @@ const HardPhrase = "destroy my data"
 
 // Choose asks what to do about a command that was not allowed outright. It
 // returns the command to run, or ok=false to cancel. Anything unclear, and
-// end of input, cancels: the safe answer is the default.
-func Choose(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative) (cmd string, ok bool) {
-	return chooseWith(in, w, line, d, alts, false)
+// end of input, cancels: the safe answer is the default. With offer, a plain
+// confirmation also accepts "a": run it, and always run this exact command in
+// this folder (always is then true).
+func Choose(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative, offer bool) (cmd string, ok, always bool) {
+	return chooseWith(in, w, line, d, alts, false, offer)
 }
 
 // ChoosePlain is Choose for screen readers: no brackets or symbols, one full
 // sentence per line, the choices spelled out in words and the question last.
 // It accepts exactly the same answers as Choose.
-func ChoosePlain(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative) (cmd string, ok bool) {
-	return chooseWith(in, w, line, d, alts, true)
+func ChoosePlain(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative, offer bool) (cmd string, ok, always bool) {
+	return chooseWith(in, w, line, d, alts, true, offer)
 }
 
-func chooseWith(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative, plain bool) (cmd string, ok bool) {
+func chooseWith(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative, plain, offer bool) (cmd string, ok, always bool) {
+	cmd, ok = answer(in, w, line, d, alts, plain, offer, &always)
+	return cmd, ok, always
+}
+
+func answer(in *bufio.Reader, w io.Writer, line string, d domain.Decision, alts []domain.Alternative, plain, offer bool, always *bool) (cmd string, ok bool) {
 	ask := func(prompt string) string {
 		fmt.Fprint(w, prompt)
 		s, _ := in.ReadString('\n')
@@ -38,14 +45,24 @@ func chooseWith(in *bufio.Reader, w io.Writer, line string, d domain.Decision, a
 	case domain.Allow:
 		return line, true
 	case domain.Confirm:
-		if plain {
+		var a string
+		switch {
+		case plain && offer:
+			fmt.Fprint(w, "\nType yes to run it anyway. Type always to run it anyway and not be asked again for this exact command in this folder. Press Enter to cancel.\n")
+			a = ask("Do you want to run it anyway? ")
+		case plain:
 			fmt.Fprint(w, "\nType yes to run it anyway. Press Enter to cancel.\n")
-			if a := strings.ToLower(ask("Do you want to run it anyway? ")); a == "y" || a == "yes" {
-				return line, true
-			}
-			return "", false
+			a = ask("Do you want to run it anyway? ")
+		case offer:
+			a = ask("\nRun it anyway? [y/N/a] (a = yes, and don't ask again for this exact command in this folder) ")
+		default:
+			a = ask("\nRun it anyway? [y/N] ")
 		}
-		if a := strings.ToLower(ask("\nRun it anyway? [y/N] ")); a == "y" || a == "yes" {
+		switch strings.ToLower(a) {
+		case "a", "always":
+			*always = offer
+			return line, offer
+		case "y", "yes":
 			return line, true
 		}
 		return "", false

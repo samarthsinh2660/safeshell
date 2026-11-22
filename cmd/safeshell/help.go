@@ -27,7 +27,7 @@ var helpTopics = []topic{
 It reads the command, then (for risky or unfamiliar ones) runs it inside a sandbox where nothing
 real can change, and shows what it WOULD do: files deleted, processes killed, disks erased,
 network contacted. The real result can only raise the rating, never lower it.
-   R0-R1 run silently.  R2 asks you to confirm.  R3 is blocked with the reason and safer options;
+   R0-R1 run silently.  R2 asks you to confirm (answer a to stop being asked, see safeshell help trust).  R3 is blocked with the reason and safer options;
    you may still choose "do it anyway".  R4 needs you to type a phrase.
 When no rule knows a safer option and an AI is set up, it may suggest one. You see it only if the
 sandbox ran it and showed it is rated lower and changes nothing the original would not; it is labelled
@@ -123,6 +123,7 @@ When SafeShell is missing, crashes or fails:
      the message tells you to run  safeshell doctor
 SAFESHELL_OFF=1 is refused in strict mode: it prints a note and every line is still checked.
 An administrator can turn strict mode on for everyone with "strict": true in /etc/safeshell/policy.json (it can never be turned off there).
+Strict mode also turns off "always run this here" (safeshell help trust).
 Strict mode also refuses safeshell deactivate, and a pause file left in the state folder is ignored with a note.`},
 	{"agents", "Check commands run by AI agents", `AI coding agents run commands outside your hooked shell. Connect them so SafeShell checks each one first:
      safeshell agent snippet claude     the hook to add to Claude Code's settings.json (PreToolUse, matcher Bash)
@@ -173,6 +174,7 @@ together over 5 GiB. Change that in ~/.config/safeshell/config.json:
                 {"match": "rm", "min_level": "R3"}]}
 "match" is a command and the words that follow it ("apt purge" also matches "sudo apt -y purge x").
 A rule can block with a reason (there is no "do it anyway"), ask for a snapshot, or raise the level.
+"no_trust": true turns off "always run this here" for everyone (safeshell help trust).
 Rules can only make SafeShell stricter; user settings cannot override them. The file and /etc/safeshell
 must belong to root and not be writable by anyone else, or the policy is ignored with a warning.
 safeshell doctor  shows which policy is active.`},
@@ -207,6 +209,17 @@ A project can add its own in a .safeshell.json at its top (the nearest one above
 Folders there are relative to the project and must stay inside it. Because a cloned project is not
 trusted, it can only make SafeShell stricter. Anything that would loosen is ignored, with a warning
 naming the file and the key.`},
+	{"trust", "Stop being asked about a safe, repeated command", `A low-risk (R2) command asks "Run it anyway?" every time, such as  make clean. Answer  a  instead of y to say
+"always run this exact command in this folder". SafeShell saves it ("trusted" in ~/.config/safeshell/config.json)
+and stops asking. The snapshot is still taken, so  safeshell undo  works, and  safeshell history  shows it as trusted.
+     safeshell trust list        what is trusted, numbered
+     safeshell trust remove N    ask again for number N
+     safeshell trust clear       ask again for everything
+Trust is narrow on purpose. It covers only the same line in the same folder, and only when the command was
+really tried in the sandbox. It never covers R3 or R4, a command SafeShell could only guess about, a protected
+folder, a prod host, a team or project rule, a command the AI rated higher, or an AI agent's commands.
+Strict mode turns it off. An administrator can turn it off for everyone with "no_trust": true in
+/etc/safeshell/policy.json. A project's .safeshell.json cannot add trust.`},
 	{"commands", "Every command", `   safeshell help [topic]            this guide
    safeshell check <cmd>             rate a command without running it
    safeshell check --script FILE...  rate every command in scripts, with line numbers; for CI:
@@ -219,6 +232,7 @@ naming the file and the key.`},
    safeshell ask <english>           turn English into a checked command
    safeshell deactivate / activate   pause or resume checking in every terminal
    safeshell learn [on|off|status]   learning mode: one line on what each passing command does
+   safeshell trust list|remove N|clear      the commands you chose to always run in a folder
    safeshell undo / safeshell snapshots     restore / list
    safeshell history [-n 20] [--json]       the decisions SafeShell recorded, newest first
    safeshell models  (or /models)    choose a local model or connect Claude, GPT, Gemini
