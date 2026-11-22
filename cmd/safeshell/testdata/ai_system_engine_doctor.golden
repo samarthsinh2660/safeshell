@@ -1,0 +1,10 @@
+
+Local AI (mode local, gpu setting cpu)
+  info     NVIDIA graphics card       none found
+  info     Vulkan loader              <varies>
+  info     engine program             system <home>/bin/llama-server (version: 9999 (abcdef0))
+  info     model                      Qwen2.5-Coder 3B, downloaded: true
+
+AI in use
+  ok       AI now                     local:qwen2.5-coder-3b (mode local)
+  info     cloud provider             none chosen. To use Claude, GPT or Gemini type /models

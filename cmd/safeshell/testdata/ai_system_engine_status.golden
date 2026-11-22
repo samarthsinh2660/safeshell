@@ -1,0 +1,4 @@
+AI: local:qwen2.5-coder-3b (mode local)
+Local engine program: system <home>/bin/llama-server (version: 9999 (abcdef0))
+Local model Qwen2.5-Coder 3B: downloaded
+Local engine: not running (starts when needed; once started it keeps running until you run: safeshell ai stop)

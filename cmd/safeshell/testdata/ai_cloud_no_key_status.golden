@@ -1,0 +1,4 @@
+AI: off (mode cloud). no API key for Claude: type /models
+Local engine program: bundled llama.cpp b11429 (downloaded by SafeShell)
+Local model Qwen2.5-Coder 3B: not downloaded
+Local engine: not running (starts when needed; once started it keeps running until you run: safeshell ai stop)
