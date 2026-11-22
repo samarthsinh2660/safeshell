@@ -115,7 +115,7 @@ shows the main items only.
 | **v1.7.0** | AI, voice, accessibility and other languages | Choosing the voice model and language (#33); requests in Hindi and other languages (#107); plain output for screen readers (#106); a prompt-injection test set (#105); AI reviews in the audit log (#108); model files verified by SHA-256 and sentinel errors (#81); the local engine kept while loading and respecting deadlines (#109, #110); path-boundary redaction and safe prompt text (#56, #80) |
 | **v1.8.0** | Servers and supply chain | Strict mode (#111); protected folders (#112); per-project rules (#113); system-wide install (#114); journald and metrics (#115, #116); verifiable releases (#117); latency benchmark in CI (#118); least-privilege CI and pinned actions (#79); the engine key only to its own port (#76) |
 | **v1.9.0** | More filesystems and big folders | Native btrfs (#29) and ZFS (#30) snapshots; visible loose files (#70); undo for packages and services (#119); large folders (#120); a system llama-server for offline labs (#121); misspelled settings reported (#122); one AppArmor profile per binary (#66) |
-| **v2.0.0** | Polish for the next major release | AI-proposed safer alternatives checked in the sandbox (#124); "don't ask again here" (#89); status and doctor text fixes (#128); small AI fixes (#125, #127) |
+| **v2.0.0** | Polish for the next major release | AI-proposed safer alternatives checked in the sandbox (#124); "don't ask again here" (#89); status and doctor text fixes (#128); wrapped AI answers (#125); docker read-only forms rated R0 (#91) |
 
 Issues go in milestones; pull requests don't. A pull request belongs to the release whose issue it closes.
 

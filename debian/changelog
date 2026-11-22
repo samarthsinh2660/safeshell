@@ -1,3 +1,14 @@
+safeshell (2.0.0-1) unstable; urgency=medium
+
+  * New upstream release: AI-proposed safer commands shown only after
+    the sandbox checked them; "always for this command in this folder"
+    for observed R2 lines, with safeshell trust to list and remove;
+    doctor shows where the cloud key comes from; ai status describes
+    the idle engine correctly; read-only docker long forms rate R0;
+    wrapped AI answers are offered as commands.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Sun, 22 Nov 2026 18:00:00 +0530
+
 safeshell (1.9.0-1) unstable; urgency=medium
 
   * New upstream release: native btrfs and ZFS snapshots for undo;

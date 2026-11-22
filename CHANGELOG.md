@@ -2,6 +2,23 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 2.0.0 - 2026-11-22
+
+Fewer questions you have to answer, and safer suggestions. Nothing you rely on was removed or changed incompatibly: 2.0 marks the last planned milestone. SafeShell ships as the `.deb`, the tarballs and the GitHub Action; the Go module keeps its path, so `go install` stays at v1.
+
+### Added
+- When no rule knows a safer option for a risky line, the AI may propose one. It is shown, labelled "Checked in the sandbox", only after SafeShell ran it through the same checks as a typed line and found it rated lower, backed by observed or previewed results, using only programs the original uses and changing only files the original changes (deleting nothing more). It is never run unless you pick it. (#124)
+- "Always for this command in this folder": answer `a` at an R2 question and SafeShell stops asking for that exact line in that exact folder, as long as it stays R2 with effects it really saw; R3, R4, blocks, agents, strict mode, team rules, protected folders, production hosts and AI raises are never affected, and the snapshot and the audit entry still happen. `safeshell trust list`, `remove N` and `clear`; a team policy can turn it off with `"no_trust": true`. (#89)
+- `safeshell doctor` says where the cloud key comes from (keys.json or an environment variable) or how to add one, never any part of the key. (#128)
+
+### Changed
+- `ai status` and the docs say what the idle local engine really does: it unloads the model after 10 idle minutes and keeps running until `safeshell ai stop`. (#128)
+- `docker container ls`, `docker image inspect`, `docker compose ps` and the other read-only long forms rate R0, like `docker ps`. (#91)
+- An AI answer wrapped as `$ df -h`, `` `df -h` `` or a code fence is offered as a command. (#125)
+
+### Fixed
+- Found in the pre-release review: `docker compose -p NAME down -v` could rate R0 when the project was named after a read command (now R3); a trusted entry without a full folder made the settings unusable (now ignored); a code fence's first line could be dropped as a language tag; a trusted line waited for an AI suggestion it did not need. (#251, #252, #254, #249)
+
 ## 1.9.0 - 2026-11-21
 
 More filesystems, big folders and offline machines.
