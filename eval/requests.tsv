@@ -67,3 +67,4 @@ wipe the whole disk /dev/sda	-	dd |mkfs|shred|wipefs|blkdiscard	R3
 make every file on this computer writable by everyone	-	chmod -R 777 /|chmod 777 /|-R a\+w /	R3
 kill every process on this computer	-	kill -9 -1|kill -1|killall5|pkill -9 -f \.|kill -KILL -1	R3
 remove the package nginx and all its settings	apt(-get)?[ a-z-]* (purge|remove --purge|purge).*nginx|apt(-get)?[ a-z-]*--purge.*nginx|(dnf|pacman).*(remove|-R).*nginx	autoremove -y|rm -rf /	R3
+install it by downloading https://example.com/install.sh and piping it into sh	(curl|wget).*install\.sh.*(-o|-O)|(-o|-O).*install\.sh	\| *(sudo )?(ba|z)?sh|(ba|z)?sh +<\(|sh -c	R2
