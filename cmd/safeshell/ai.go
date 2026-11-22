@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
+	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
 	"github.com/samarthsinh2660/safeshell/internal/policy"
@@ -17,8 +18,10 @@ import (
 )
 
 // aiReview lets the model read the sandbox result and raise the risk. Any
-// failure is shown but never blocks the command.
-func aiReview(a *engine.Analysis, stderr io.Writer) {
+// failure is shown but never blocks the command. With offerSafer, a risky line
+// the rules know no safer option for also gets one from the model, if the
+// sandbox proves it safer; that shares the review's time limit.
+func aiReview(a *engine.Analysis, cwd string, stderr io.Writer, offerSafer bool) {
 	// Only commands that already need a decision are worth a model call: it can
 	// take a second or more, and it can only raise a level that matters.
 	if !policy.WorthReview(a.Level) {
@@ -43,6 +46,20 @@ func aiReview(a *engine.Analysis, stderr io.Writer) {
 	if raised {
 		a.AddEffect(ai.Effect(b, v))
 	}
+	if offerSafer {
+		check := func(ctx context.Context, line string) engine.Analysis { return analyzeVerified(ctx, line, cwd) }
+		if alt, ok := engine.OfferSafer(ctx, *a, saferAI{b}, check); ok {
+			a.Verdict.Alternatives = append(a.Verdict.Alternatives, alt)
+		}
+	}
+}
+
+// saferAI lets the engine ask the model for a safer command.
+type saferAI struct{ b ai.Backend }
+
+func (s saferAI) Propose(ctx context.Context, a engine.Analysis) (domain.Alternative, bool, error) {
+	p, ok, err := ai.Propose(ctx, s.b, facts(a))
+	return domain.Alternative{Command: p.Command, Note: p.Note}, ok, err
 }
 
 // facts is what the AI is shown of an analysis.
@@ -82,7 +99,7 @@ func runExplain(args []string, stdout, stderr io.Writer, color bool) int {
 	cwd := cwdOr("")
 	a := analyze(context.Background(), strings.Join(args, " "), cwd)
 	if why && !off {
-		aiReview(&a, stderr) // the same review the hook runs, so the level shown is the one it would use
+		aiReview(&a, cwd, stderr, false) // the same review the hook runs, so the level shown is the one it would use
 	}
 	if why {
 		fmt.Fprint(stdout, report.Why(a.Line, a.Verdict, a.Effects, a.Level, a.Decision))
