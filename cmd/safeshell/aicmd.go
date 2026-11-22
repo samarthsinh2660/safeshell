@@ -59,7 +59,7 @@ func runAI(args []string, stdout, stderr io.Writer) int {
 		} else {
 			fmt.Fprintf(stdout, "AI: %s (mode %s)\n", b.Name(), c.AI.Mode)
 		}
-		fmt.Fprintln(stdout, engineLine(c.AI.Local.Engine))
+		fmt.Fprintln(stdout, "Local engine program:", engineLine(c.AI.Local.Engine))
 		state := "not downloaded"
 		if d.ModelInstalled(md) {
 			state = "downloaded"
