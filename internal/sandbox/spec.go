@@ -25,6 +25,9 @@ type Result struct {
 	Net       []NetAttempt // network operations the command tried; the sandbox has no route out
 	Duration  time.Duration
 	Truncated bool // output was cut at MaxOutput
+	// ScratchFull says the scratch area had (almost) no space left after the run,
+	// so writes may have failed and the diff may be short.
+	ScratchFull bool
 	// Warnings list parts of the filesystem that could not be mirrored; they
 	// are empty inside the sandbox, so commands touching them behave differently.
 	Warnings []Warning
