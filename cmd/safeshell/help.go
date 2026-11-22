@@ -30,7 +30,7 @@ network contacted. The real result can only raise the rating, never lower it.
    R0-R1 run silently.  R2 asks you to confirm (answer a to stop being asked, see safeshell help trust).  R3 is blocked with the reason and safer options;
    you may still choose "do it anyway".  R4 needs you to type a phrase.
 When no rule knows a safer option and an AI is set up, it may suggest one. You see it only if the
-sandbox ran it and showed it is rated lower and changes nothing the original would not; it is labelled
+sandbox ran it and showed it is rated lower, uses the same programs and changes nothing the original would not; it is labelled
 "Checked in the sandbox" and never runs unless you pick it.
 Before an approved command runs, the files it will change are saved so  safeshell undo  can put them back.`},
 	{"english", "Talk to your terminal in plain English", `Just type what you want:

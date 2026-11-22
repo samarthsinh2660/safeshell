@@ -352,7 +352,7 @@ func OfferSafer(ctx context.Context, a Analysis, p Proposer, check func(ctx cont
 }
 
 func (a Analysis) outcome() report.Outcome {
-	o := report.Outcome{Level: a.Level, Decision: a.Decision, TeamBlocked: a.Team.Block != "", Effects: a.Effects}
+	o := report.Outcome{Level: a.Level, Decision: a.Decision, TeamBlocked: a.Team.Block != "", Effects: a.Effects, Programs: report.Programs(a.Verdict)}
 	if a.Sim != nil {
 		o.Diff = &a.Sim.Diff
 	}
