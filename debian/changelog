@@ -1,3 +1,14 @@
+safeshell (1.9.0-1) unstable; urgency=medium
+
+  * New upstream release: native btrfs and ZFS snapshots for undo;
+    undo plans for apt install and systemctl stop, disable and mask;
+    big folders are sized and simulated on disk or not simulated;
+    an installed llama-server can be used offline; misspelled
+    settings are reported; small loose files in partly mirrored
+    folders are seen; one AppArmor profile per binary.
+
+ -- samarthsinh2660 <rajuvala80@gmail.com>  Sat, 21 Nov 2026 22:30:00 +0530
+
 safeshell (1.8.0-1) unstable; urgency=medium
 
   * New upstream release: strict mode that fails closed; protected

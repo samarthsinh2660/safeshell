@@ -2,6 +2,36 @@
 
 All notable changes to SafeShell. Versions follow [semantic versioning](https://semver.org/).
 
+## 1.9.0 - 2026-11-21
+
+More filesystems, big folders and offline machines.
+
+### Added
+- Native btrfs and ZFS snapshots: when every file a command changes is in one btrfs subvolume (with the snapshots folder on the same filesystem) or one ZFS dataset, undo takes a read-only filesystem snapshot instead of copying, so nothing is copied. Anything else, or a snapshot that is not allowed, copies as before. `safeshell doctor` shows which is used for your home folder. (#29, #30)
+- Undo for packages and services: after `apt install`, `safeshell undo` offers `sudo apt remove` with exactly the packages that run installed (from apt's own log); after `systemctl stop`, `disable` or `mask`, it offers the command that puts the service back as it was. A plan runs only after you type yes, and goes through the normal check. (#119)
+- Big folders: the files a command could touch are sized first. Too big for memory, but room on disk: the simulation runs with its scratch area on disk. Otherwise it is not simulated, says why, and is never run unattended. (#120)
+- `"ai": {"local": {"engine": "system"}}` uses the `llama-server` already installed on the machine, for labs without internet; a model copied in by hand is checked against its pinned checksum. (#121)
+- A misspelled setting in config.json is reported by `safeshell doctor` and `safeshell ai status`, with "did you mean"; `ai status` says why AI is off. (#122)
+
+### Changed
+- Changes to small files sitting directly in a folder that holds a mount point (up to 256 KiB each, 2 MiB in all) are now seen by the sandbox; bigger ones stay flagged as before. (#70)
+- `scripts/install-apparmor.sh` gives each binary its own AppArmor profile and refuses files owned by a package; an old single profile is replaced. (#66)
+- The AI bench has 69 English requests (was 49), adding packages, services, disk use, archives, ports, git, ssh, four destructive requests that must be refused and a piped download. Local Qwen 3B: 69 of 69, 0 too dangerous. (#239, #243)
+- Dependabot proposes GitHub Action updates only once a release is a week old. (#235)
+
+### Fixed
+- A command that removes the search bit from a folder (`chmod -R 600 .`) made the simulation fail. (#225)
+- Deleting old btrfs snapshots failed because they are read-only. (#224)
+- `safeshell doctor` showed the snapshot backend twice, once as a guess from the root filesystem. (#228)
+- Undo never takes a native snapshot that would miss files (a nested btrfs subvolume or a child ZFS dataset inside a changed folder), or that the user could not delete later; it copies instead. Pruning goes on past a snapshot it cannot delete, and a ZFS snapshot folder that is not readable yet is waited for instead of giving an empty snapshot. (#234)
+- `safeshell ai status` and `doctor` said the local engine was not installed when `ai.local.engine` is `system`. (#230)
+- Undo after `systemctl disable` re-enabled a unit that was only enabled until the next boot permanently; it now uses `enable --runtime`. (#231)
+- The size check now sizes every source of `cp -t DIR` and `mv --target-directory`; loose-file copies in the sandbox can no longer block on a pipe or read a file that grew; a new file in a partly mirrored folder with no other loose files is now seen. (#232)
+- A release could be cancelled by an ordinary pull request merging at the same moment. (#235)
+- When the AI proposes running a download straight in a shell (`curl ... | sh`), it now proposes saving the script and showing it first, and says how to run it after reading. (#236)
+- A command the sandbox could not finish (its scratch area filled up, or the overlay failed, as on a nested btrfs subvolume) was reported as "changes no files"; it is now "not simulated" with the reason, needs a person, and undo saves the files it names. The overlay is mounted with `xino=off`, so nested btrfs subvolumes simulate correctly. (#227, #238)
+- A run whose scratch area is on disk is stopped before it can fill the disk, and leftover scratch folders are found by a lock instead of a process id, so two SafeShells in different containers never remove each other's. (#237, #238)
+
 ## 1.8.0 - 2026-11-21
 
 Servers, shared machines and verifiable releases.
