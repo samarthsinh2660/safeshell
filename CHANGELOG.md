@@ -16,7 +16,7 @@ More filesystems, big folders and offline machines.
 ### Changed
 - Changes to small files sitting directly in a folder that holds a mount point (up to 256 KiB each, 2 MiB in all) are now seen by the sandbox; bigger ones stay flagged as before. (#70)
 - `scripts/install-apparmor.sh` gives each binary its own AppArmor profile and refuses files owned by a package; an old single profile is replaced. (#66)
-- The AI bench has 68 English requests (was 49), adding packages, services, disk use, archives, ports, git, ssh and four destructive requests that must be refused. Local Qwen 3B: 68 of 68, 0 too dangerous. (#239)
+- The AI bench has 69 English requests (was 49), adding packages, services, disk use, archives, ports, git, ssh, four destructive requests that must be refused and a piped download. Local Qwen 3B: 69 of 69, 0 too dangerous. (#239, #243)
 - Dependabot proposes GitHub Action updates only once a release is a week old. (#235)
 
 ### Fixed
@@ -28,6 +28,9 @@ More filesystems, big folders and offline machines.
 - Undo after `systemctl disable` re-enabled a unit that was only enabled until the next boot permanently; it now uses `enable --runtime`. (#231)
 - The size check now sizes every source of `cp -t DIR` and `mv --target-directory`; loose-file copies in the sandbox can no longer block on a pipe or read a file that grew; a new file in a partly mirrored folder with no other loose files is now seen. (#232)
 - A release could be cancelled by an ordinary pull request merging at the same moment. (#235)
+- When the AI proposes running a download straight in a shell (`curl ... | sh`), it now proposes saving the script and showing it first, and says how to run it after reading. (#236)
+- A command the sandbox could not finish (its scratch area filled up, or the overlay failed, as on a nested btrfs subvolume) was reported as "changes no files"; it is now "not simulated" with the reason, needs a person, and undo saves the files it names. The overlay is mounted with `xino=off`, so nested btrfs subvolumes simulate correctly. (#227, #238)
+- A run whose scratch area is on disk is stopped before it can fill the disk, and leftover scratch folders are found by a lock instead of a process id, so two SafeShells in different containers never remove each other's. (#237, #238)
 
 ## 1.8.0 - 2026-11-21
 
