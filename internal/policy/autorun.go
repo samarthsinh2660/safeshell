@@ -88,9 +88,6 @@ func writerPathsOK(args []string, cwd, home string) bool {
 			}
 			continue
 		}
-		if strings.ContainsAny(a, "$`\\\"'{[;&|<>()") {
-			return false
-		}
 		p := a
 		switch {
 		case a == "~":

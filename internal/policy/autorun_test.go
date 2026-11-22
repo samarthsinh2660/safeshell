@@ -118,6 +118,15 @@ func TestAutorunSafe(t *testing.T) {
 	}
 }
 
+// The findings are checked as well as the line, in case they disagree.
+func TestAutorunFindingsMustAgreeWithTheLine(t *testing.T) {
+	for _, f := range []string{" ", "make", "git log"} {
+		if AutorunSafe(verdictOf(f), "ls", "/home/u", "/home/u") {
+			t.Errorf("finding %q must stop a plain line", f)
+		}
+	}
+}
+
 func TestAutorunWritersNeedAKnownHomeAndFolder(t *testing.T) {
 	v := verdictOf("mv a b")
 	for _, c := range []struct{ cwd, home string }{{"/home/u/work", ""}, {"", "/home/u"}, {"work", "/home/u"}, {"/home/u/work", "u"}, {"/etc", "/home/u"}, {"/home/u/.ssh", "/home/u"}} {
