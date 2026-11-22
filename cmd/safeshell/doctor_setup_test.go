@@ -152,7 +152,7 @@ func TestDoctorAIAndCloud(t *testing.T) {
 	if err := config.Save(config.Path(), c); err != nil {
 		t.Fatal(err)
 	}
-	wantAll(t, doctorOut(t), "Claude, model claude-haiku-5-5", "MISSING  cloud key", "no key for Claude", "ANTHROPIC_API_KEY")
+	wantAll(t, doctorOut(t), "Claude, model claude-haiku-5-5", "MISSING  cloud key", "missing. Type /models", "ANTHROPIC_API_KEY")
 
 	c.AI.Cloud.Model = "my-model"
 	if err := config.Save(config.Path(), c); err != nil {
@@ -160,7 +160,7 @@ func TestDoctorAIAndCloud(t *testing.T) {
 	}
 	t.Setenv("ANTHROPIC_API_KEY", "sk-secret-value")
 	out := doctorOut(t)
-	wantAll(t, out, "Claude, model my-model", "ok       cloud key", "set for Claude")
+	wantAll(t, out, "Claude, model my-model", "ok       cloud key", "from ANTHROPIC_API_KEY")
 	if strings.Contains(out, "sk-secret-value") {
 		t.Error("doctor printed the key")
 	}

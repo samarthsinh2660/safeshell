@@ -1,0 +1,4 @@
+AI: local:qwen2.5-coder-3b (mode auto)
+Local engine program: bundled llama.cpp b11429 (downloaded by SafeShell)
+Local model Qwen2.5-Coder 3B: downloaded
+Local engine: running (<home>/data/safeshell/models/qwen2.5-coder-3b-instruct-q4_k_m.gguf). It keeps running, with the model unloaded after 10 idle minutes, until you run: safeshell ai stop

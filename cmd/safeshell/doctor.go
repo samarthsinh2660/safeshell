@@ -225,10 +225,14 @@ func doctorCloud(w io.Writer) {
 		return
 	}
 	if key == "" {
-		doctorRow(w, "MISSING", "cloud key", "no key for "+p.Title+". Type /models to add one, or set "+p.Env[0])
+		doctorRow(w, "MISSING", "cloud key", "missing. Type /models to add one for "+p.Title+", or set "+p.Env[0])
 		return
 	}
-	doctorRow(w, "ok", "cloud key", "set for "+p.Title)
+	src := "set in keys.json"
+	if p.KeyFromEnv() != "" {
+		src = "from " + p.EnvKeyName()
+	}
+	doctorRow(w, "ok", "cloud key", src)
 }
 
 // nvidiaDriver and hostArch are test seams: tests replace them to describe
