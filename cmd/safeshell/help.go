@@ -96,6 +96,16 @@ Commands that only read (R0) get no line. Commands SafeShell stops or asks about
 explained in full, so they get nothing extra.
 It only adds output: it never changes what is allowed or blocked, and it needs no AI.
 The setting is "learn": true in ~/.config/safeshell/config.json.`},
+	{"autorun", "Let the assistant run safe commands at once", `By default, a command the assistant writes for you waits for "Run it? [Y/n]". Turn autorun on once:
+     safeshell autorun on       (off again with  safeshell autorun off;  safeshell autorun status  shows which)
+Then, when you ask in plain English ("move notes.txt into the backup folder", "go into projects"), a safe
+command runs right after it is shown. Safe means all of these:
+     it is rated R0 or R1 (reads, or is easy to undo) after the sandbox check and any AI review
+     SafeShell knows every program in it
+     it does not change the shell itself (export, source, eval)
+Anything else still asks or is blocked as usual: R2 asks, R3 is blocked with a safer option, R4 is stopped.
+Autorun is ignored in strict mode. Every command it runs is in  safeshell history  and can be undone with  safeshell undo.
+The setting is "autorun": true in ~/.config/safeshell/config.json.`},
 	{"accessibility", "Plain output for screen readers", `Turn it on for one command:
      safeshell check --plain 'rm -rf build'      (also analyze and guard)
 for one terminal:  export SAFESHELL_PLAIN=1
@@ -232,6 +242,7 @@ Strict mode turns it off. An administrator can turn it off for everyone with "no
    safeshell ask <english>           turn English into a checked command
    safeshell deactivate / activate   pause or resume checking in every terminal
    safeshell learn [on|off|status]   learning mode: one line on what each passing command does
+   safeshell autorun [on|off|status] the assistant runs safe commands at once, without asking
    safeshell trust list|remove N|clear      the commands you chose to always run in a folder
    safeshell undo / safeshell snapshots     restore / list
    safeshell history [-n 20] [--json]       the decisions SafeShell recorded, newest first

@@ -130,6 +130,7 @@ Work as normal. Inside your prompt:
 | `safeshell trust list` | the commands you chose "always run this here" for at an R2 prompt (answer `a`); `remove N` or `clear` undoes it. See `safeshell help trust` |
 | `safeshell learn on` | learning mode: one line after each command that passes, saying what it does and the safer form (`off` to stop; see `safeshell help learn`) |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
+| `safeshell autorun on` | let the assistant run safe commands (R0/R1, known programs, not `export`/`source`) at once, without "Run it?"; riskier ones still ask or are blocked; off by default (see `safeshell help autorun`) |
 | Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
 
 ### Turn off / on

@@ -63,6 +63,7 @@ Usage:
   safeshell activate                        turn checking back on
   safeshell learn [on|off|status]           learning mode: one line after each command that passes, saying what it does
                                             and the safer form (off by default)
+  safeshell autorun [on|off|status]         let the assistant run safe commands at once, without "Run it?" (off by default)
   safeshell trust list|remove N|clear       the commands you chose "always run here" for (answer a at a low-risk prompt); see or undo them
   safeshell undo [ID]                       put back what the last approved command changed, and verify it (also proposes the reverse of apt install and systemctl stop/disable/mask)
   safeshell snapshots [prune]               list saved snapshots / delete old ones (--older 30d, --max 5G)
@@ -150,6 +151,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runPause(args[0] == "deactivate", stdout, stderr)
 	case "learn":
 		return runLearn(args[1:], stdout, stderr)
+	case "autorun":
+		return runAutorun(args[1:], stdout, stderr)
 	case "trust":
 		return runTrust(args[1:], stdout, stderr)
 	case "undo":
