@@ -169,7 +169,9 @@ func TestACommandThatFillsTheScratchAreaOnDiskIsStopped(t *testing.T) {
 	line := fmt.Sprintf("i=0; while [ $i -lt %d ]; do dd if=/dev/zero of=big$i bs=1M count=1000 status=none; i=$((i+1)); done", limit/gib+2)
 	a, tree, _, took := sizedRunIn(t, cache, map[string]int64{"a.img": size}, line)
 	// A stopped run keeps no result: it is "not simulated" and needs a person.
-	if a.Sim != nil || !strings.Contains(a.SimNote, "not simulated") {
+	t.Logf("note: %s (took %s)", a.SimNote, took)
+	// The reason must be the stopped run, not the size check refusing to simulate at all.
+	if a.Sim != nil || !strings.Contains(a.SimNote, "not simulated") || !strings.Contains(a.SimNote, "ran out of space") {
 		t.Errorf("a stopped run was reported as simulated: note %q (took %s)", a.SimNote, took)
 	}
 	var estimated bool
