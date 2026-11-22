@@ -150,6 +150,7 @@ func TestMain(m *testing.M) { // never write the real audit log from tests
 	realLoadProtected = loadProtected
 	loadProtected = func(string) ([]string, []policy.Rule, []string) { return nil, nil, nil } // nor their protected folders or a project file
 	learning = func() bool { return false }                                                   // nor the developer's own settings
+	autorunOn = func() bool { return false }                                                  // nor their autorun setting
 	plainSetting = func() bool { return false }                                               // nor whether they asked for plain output
 	journalSocket = filepath.Join(d, "no-journal.sock")                                       // nor the real journal
 	tourSeenPath = func() string { return filepath.Join(d, "tour-seen") }                     // nor the real state folder

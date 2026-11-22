@@ -131,6 +131,9 @@ Keep SafeShell warm in the background for faster checks. A daemon left running f
 .B deactivate, activate
 Pause checking in every terminal, open and new, and turn it back on. Nothing needs restarting; while paused the hook costs nothing. SAFESHELL_OFF=1 pauses one terminal only.
 .TP
+.B autorun [on|off|status]
+Let the assistant run safe commands at once, without the "Run it?" question; off by default. A command written from your plain-English request (typed or spoken) runs right away only when every program in it is one of cd, ls, pwd, cat, head, tail, wc, du, df, grep, mv, cp, mkdir and touch, written in plain words (no variables, quotes, redirects or $(...)), the checks rate the line R0 or R1, mv, cp, mkdir and touch only touch visible files inside your home folder, there is no host label on it and it does not change the shell itself. Scripts, make, python, npm, git, ssh and anything riskier still ask or are blocked. Ignored in strict mode. History shows these commands as autorun.
+.TP
 .B learn [on|off|status]
 Learning mode, off by default. When on, each command that passes without a warning gets one line saying what it does, its level and the safer form. It only adds output.
 .TP
@@ -170,7 +173,7 @@ Exit status 0 means allowed (a Claude Code hook is always answered with 0), 2 me
 Print the hook to add to Claude Code's settings.json, or a script that runs one command only when SafeShell allows it. Nothing is edited.
 .TP
 .RB "help [" topic ]
-Short guides: start, safety, english, models, voice, learn, accessibility, pause, strict, agents, undo, policy, audit, hosts, protect, trust, commands, privacy and trouble.
+Short guides: start, safety, english, models, voice, learn, autorun, accessibility, pause, strict, agents, undo, policy, audit, hosts, protect, trust, commands, privacy and trouble.
 .TP
 .B version
 Print the version.

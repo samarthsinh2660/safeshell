@@ -25,6 +25,9 @@ type Config struct {
 	// Learn turns on learning mode: one line after each command that passes
 	// without a warning, saying what it does and the safer form.
 	Learn bool `json:"learn"`
+	// Autorun lets the assistant run a safe command (R0 or R1, a program the rules
+	// know) at once, without the "Run it?" question. Anything riskier still asks.
+	Autorun bool `json:"autorun"`
 	// Plain turns on plain output for screen readers: no colour or columns,
 	// one full sentence per line and the choices spelled out in words.
 	Plain bool `json:"plain"`
@@ -213,6 +216,11 @@ func writePrivate(path string, b []byte) error {
 // damaged file is refused and left alone.
 func SetLearn(path string, on bool) error {
 	return setKey(path, "learn", json.RawMessage(strconv.FormatBool(on)))
+}
+
+// SetAutorun changes only the "autorun" key, the same way as SetLearn.
+func SetAutorun(path string, on bool) error {
+	return setKey(path, "autorun", json.RawMessage(strconv.FormatBool(on)))
 }
 
 // SetVoice records the speech model and language the same way: only the

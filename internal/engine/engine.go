@@ -105,6 +105,9 @@ type Analysis struct {
 	// Trusted says the person's "always run this here" answer turned the
 	// confirmation into Allow (see ApplyTrust).
 	Trusted bool `json:"trusted,omitempty"`
+	// Autorun says the assistant's command ran without a question because the
+	// person turned autorun on. It is set by the caller, never by the engine.
+	Autorun bool `json:"autorun,omitempty"`
 }
 
 // AIReview is what an AI review said: who answered, the level it gave and why,

@@ -40,7 +40,8 @@ A line is treated as English when its first word is not a command and it reads l
 Any language works (for example Hindi or Spanish). A request with non-English letters, such as Hindi, gets its answer in that language.
 To force it, start the line with ?   (for example:  ? how much disk is free).
 A request over 2000 bytes is shortened, and SafeShell tells you.
-You always see the command first and press Enter to run it. It is then checked like any typed
+You see the command first and press Enter to run it (unless you turned on  safeshell autorun,
+which runs a few everyday file commands at once). It is then checked like any typed
 command, so a dangerous suggestion is still stopped. Questions ("what does chmod 755 mean") are
 answered and nothing runs. If something is unclear (several files match), SafeShell asks you a
 short question first.
@@ -96,6 +97,19 @@ Commands that only read (R0) get no line. Commands SafeShell stops or asks about
 explained in full, so they get nothing extra.
 It only adds output: it never changes what is allowed or blocked, and it needs no AI.
 The setting is "learn": true in ~/.config/safeshell/config.json.`},
+	{"autorun", "Let the assistant run safe commands at once", `By default, a command the assistant writes for you waits for "Run it? [Y/n]". Turn autorun on once:
+     safeshell autorun on       (off again with  safeshell autorun off;  safeshell autorun status  shows which)
+Then, when you ask in plain English ("move notes.txt into the backup folder", "take me into projects"), an
+everyday file or folder command runs right after it is shown. Only these programs run this way:
+     cd  ls  pwd  cat  head  tail  wc  du  df  grep  mv  cp  mkdir  touch
+with plain words only (no variables, quotes, redirects or $(...)), only when the checks rate the line R0 or R1,
+and mv, cp, mkdir and touch only on visible files and folders inside your home folder (never .bashrc, .ssh
+or .git). A line that mixes cd with those is asked about.
+Everything else still asks or is blocked as usual: scripts, make, python, npm, git and ssh, anything on a host
+you labelled, and export, source or eval. R2 asks, R3 is blocked with a safer option, R4 is stopped.
+It also applies to a request you speak. Autorun is ignored in strict mode. Each command it runs shows in
+safeshell history as autorun and can be undone with  safeshell undo.
+The setting is "autorun": true in ~/.config/safeshell/config.json.`},
 	{"accessibility", "Plain output for screen readers", `Turn it on for one command:
      safeshell check --plain 'rm -rf build'      (also analyze and guard)
 for one terminal:  export SAFESHELL_PLAIN=1
@@ -232,6 +246,7 @@ Strict mode turns it off. An administrator can turn it off for everyone with "no
    safeshell ask <english>           turn English into a checked command
    safeshell deactivate / activate   pause or resume checking in every terminal
    safeshell learn [on|off|status]   learning mode: one line on what each passing command does
+   safeshell autorun [on|off|status] the assistant runs safe commands at once, without asking
    safeshell trust list|remove N|clear      the commands you chose to always run in a folder
    safeshell undo / safeshell snapshots     restore / list
    safeshell history [-n 20] [--json]       the decisions SafeShell recorded, newest first

@@ -91,7 +91,7 @@ func runPlans(plans []undo.Plan, cwd string, in io.Reader, stdout, stderr io.Wri
 	}
 	for _, p := range plans {
 		var cmd strings.Builder
-		if guardLine(p.Command, cwd, &cmd, stderr, color, true) != 0 {
+		if guardLine(p.Command, cwd, &cmd, stderr, color, fromUndo) != 0 {
 			return false
 		}
 		if err := runCommand(strings.TrimSpace(cmd.String()), cwd, stdout, stderr); err != nil {

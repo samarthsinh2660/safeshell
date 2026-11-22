@@ -238,5 +238,5 @@ func proposeAndGuard(r nl.Result, cwd string, stdout, stderr io.Writer, color bo
 	if r.Note != "" {
 		fmt.Fprintf(stderr, "          %s\n", report.Printable(r.Note))
 	}
-	return guardLine(r.Command, cwd, stdout, stderr, color, true)
+	return guardLine(r.Command, cwd, stdout, stderr, color, fromAssistant)
 }

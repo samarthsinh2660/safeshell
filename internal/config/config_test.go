@@ -341,3 +341,24 @@ func TestSetVoiceChangesOnlyItsKey(t *testing.T) {
 		t.Errorf("defaults must not be written: %s", b)
 	}
 }
+
+func TestSetAutorunChangesOnlyItsKey(t *testing.T) {
+	p := write(t, `{"learn":true,"ai":{"mode":"off"}}`)
+	if err := SetAutorun(p, true); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(p)
+	if err != nil || !c.Autorun || !c.Learn || c.AI.Mode != "off" {
+		t.Errorf("%+v %v", c, err)
+	}
+	if err := SetAutorun(p, false); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := Load(p); c.Autorun {
+		t.Error("off must be saved")
+	}
+	bad := write(t, "{")
+	if err := SetAutorun(bad, true); err == nil {
+		t.Error("a damaged file must be refused")
+	}
+}
