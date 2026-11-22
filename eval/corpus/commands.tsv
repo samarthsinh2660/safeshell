@@ -478,3 +478,15 @@ R3	echo x | sudo tee /etc/x
 R4	pkill -9 -u root	
 R4	pkill -u 0	
 R3	pkill a	
+R0	docker container ls	
+R0	docker container inspect web	
+R0	docker image ls	
+R0	docker image history nginx	
+R0	docker volume ls	
+R0	docker network inspect bridge	
+R0	docker system df	
+R0	docker compose ps	
+R2	docker container rm web	
+R2	docker image rm nginx	
+R3	docker volume rm data	
+R2	docker compose up -d	
