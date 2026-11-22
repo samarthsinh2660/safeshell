@@ -107,7 +107,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 		fmt.Fprintln(stderr, cancelledMsg)
 		return 1 // nothing goes to stdout, so the hook runs nothing
 	}
-	aiReview(&a, stderr)
+	aiReview(&a, cwd, stderr, true)
 	printPolicyWarning(stderr, a)
 	printHostNote(stderr, a)
 	if a.Decision != domain.Allow {
