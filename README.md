@@ -59,8 +59,8 @@ Linux, amd64 or arm64, bash, zsh or fish.
 
 ```bash
 arch=$(dpkg --print-architecture)   # amd64 or arm64
-wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.9.0/safeshell_1.9.0_${arch}.deb
-sudo apt install ./safeshell_1.9.0_${arch}.deb
+wget https://github.com/samarthsinh2660/safeshell/releases/download/v2.0.0/safeshell_2.0.0_${arch}.deb
+sudo apt install ./safeshell_2.0.0_${arch}.deb
 safeshell install          # adds the hook to your shell
 ```
 
@@ -74,8 +74,8 @@ sudo apt install safeshell
 **Any Linux (amd64 or arm64):**
 
 ```bash
-wget https://github.com/samarthsinh2660/safeshell/releases/download/v1.9.0/safeshell-v1.9.0-linux-amd64.tar.gz
-tar -xzf safeshell-v1.9.0-linux-amd64.tar.gz && cd safeshell-v1.9.0-linux-amd64
+wget https://github.com/samarthsinh2660/safeshell/releases/download/v2.0.0/safeshell-v2.0.0-linux-amd64.tar.gz
+tar -xzf safeshell-v2.0.0-linux-amd64.tar.gz && cd safeshell-v2.0.0-linux-amd64
 bash scripts/install.sh    # add --ai to also set up the built-in AI
 ```
 
@@ -192,9 +192,9 @@ For Claude Code an allowed command gets no answer at all, so Claude Code's own p
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: samarthsinh2660/safeshell/.github/actions/safeshell-check@v1.9.0
+- uses: samarthsinh2660/safeshell/.github/actions/safeshell-check@v2.0.0
   with:
-    version: v1.9.0        # the release to install; its SHA256SUMS is verified
+    version: v2.0.0        # the release to install; its SHA256SUMS is verified
     paths: "scripts/*.sh"  # default **/*.sh
     fail-on: R3            # default
 ```
@@ -203,7 +203,7 @@ For [pre-commit](https://pre-commit.com), add to `.pre-commit-config.yaml`:
 
 ```yaml
 - repo: https://github.com/samarthsinh2660/safeshell
-  rev: v1.9.0
+  rev: v2.0.0
   hooks:
     - id: safeshell-check
 ```
