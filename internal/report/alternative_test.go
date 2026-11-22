@@ -1,6 +1,7 @@
 package report
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/samarthsinh2660/safeshell/internal/domain"
@@ -31,6 +32,9 @@ func TestSaferAlternative(t *testing.T) {
 		want bool
 	}{
 		{"valid", alt(func(*Outcome) {}), nil, true},
+		{"same program", alt(func(o *Outcome) { o.Programs = []string{"rm"} }), &Outcome{Level: domain.R3, Effects: observed(domain.R3), Diff: diffOf(dir), Programs: []string{"rm"}}, true},
+		{"another program", alt(func(o *Outcome) { o.Programs = []string{"kubectl"} }), &Outcome{Level: domain.R3, Effects: observed(domain.R3), Diff: diffOf(dir), Programs: []string{"rm"}}, false},
+		{"original changes no files", alt(func(o *Outcome) { o.Diff = diffOf() }), &Outcome{Level: domain.R3, Effects: observed(domain.R3), Diff: diffOf()}, false},
 		{"changes nothing", alt(func(o *Outcome) { o.Diff = diffOf() }), nil, true},
 		{"previewed evidence", alt(func(o *Outcome) { o.Effects = []domain.Effect{{Evidence: domain.Previewed}} }), nil, true},
 		{"same level", alt(func(o *Outcome) { o.Level = domain.R3 }), nil, false},
@@ -57,5 +61,15 @@ func TestSaferAlternative(t *testing.T) {
 		if got := SaferAlternative(o, c.alt); got != c.want {
 			t.Errorf("%s: got %v", c.name, got)
 		}
+	}
+}
+
+func TestProgramsAreTheFirstRealWordOfEachCommand(t *testing.T) {
+	v := domain.Verdict{
+		Findings:     []domain.Finding{{Command: "rm -rf build"}, {Command: "FOO=1 make clean"}, {Command: "A=1"}},
+		Unclassified: []string{"mystery-tool"},
+	}
+	if got, want := Programs(v), []string{"rm", "make", "mystery-tool"}; !slices.Equal(got, want) {
+		t.Errorf("%v, want %v", got, want)
 	}
 }

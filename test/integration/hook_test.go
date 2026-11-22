@@ -423,15 +423,14 @@ func saferAlternativeSetup(t *testing.T) (dir, victim, other string) {
 		_ = os.MkdirAll(d, 0o755)
 		_ = os.WriteFile(filepath.Join(d, "a.txt"), []byte("x"), 0o644)
 	}
-	scripts := map[string]string{
-		"wipe":      "rm -rf " + victim,
-		"keep":      "echo y >> " + victim + "/a.txt",
-		"wipe-more": "rm -rf " + victim + " " + other,
-	}
-	for name, body := range scripts {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
+	// One program, three ways to run it: an AI proposal may only use programs the original uses.
+	body := "case \"$1\" in\n" +
+		"--wipe) rm -rf " + victim + " ;;\n" +
+		"--keep) echo y >> " + victim + "/a.txt ;;\n" +
+		"--wipe-more) rm -rf " + victim + " " + other + " ;;\n" +
+		"esac\n"
+	if err := os.WriteFile(filepath.Join(dir, "tool"), []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatal(err)
 	}
 	return dir, victim, other
 }
@@ -440,11 +439,11 @@ func TestAIProposedSaferCommandIsOfferedOnlyAfterTheSandboxChecked(t *testing.T)
 	needSandbox(t)
 	dir, victim, _ := saferAlternativeSetup(t)
 	// One reply answers both the review and the proposal: the review ignores the command.
-	keep := filepath.Join(dir, "keep")
-	sh := startBash(t, fakeModel(t, `{"level":"R3","reason":"Deletes a folder.","command":"`+keep+`","note":"Adds a line instead."}`)...)
+	tool := filepath.Join(dir, "tool")
+	sh := startBash(t, fakeModel(t, `{"level":"R3","reason":"Deletes a folder.","command":"`+tool+` --keep","note":"Adds a line instead."}`)...)
 	sh.waitFor(t, "READY>")
 	sh.send(`eval "$(safeshell hook bash)"` + "\r")
-	sh.send(filepath.Join(dir, "wipe") + "\r")
+	sh.send(tool + " --wipe\r")
 	sh.waitFor(t, "Checked in the sandbox")
 	sh.waitFor(t, "run a safer option")
 	sh.send("1\r")
@@ -459,10 +458,10 @@ func TestAIProposedSaferCommandIsOfferedOnlyAfterTheSandboxChecked(t *testing.T)
 func TestAIProposedCommandThatDeletesMoreIsNotOffered(t *testing.T) {
 	needSandbox(t)
 	dir, victim, other := saferAlternativeSetup(t)
-	sh := startBash(t, fakeModel(t, `{"level":"R3","reason":"Deletes a folder.","command":"`+filepath.Join(dir, "wipe-more")+`","note":"Does more."}`)...)
+	sh := startBash(t, fakeModel(t, `{"level":"R3","reason":"Deletes a folder.","command":"`+filepath.Join(dir, "tool")+` --wipe-more","note":"Does more."}`)...)
 	sh.waitFor(t, "READY>")
 	sh.send(`eval "$(safeshell hook bash)"` + "\r")
-	sh.send(filepath.Join(dir, "wipe") + "\r")
+	sh.send(filepath.Join(dir, "tool") + " --wipe\r")
 	sh.waitFor(t, "[c] cancel")
 	sh.send("c\r")
 	sh.waitFor(t, "Nothing was run")
