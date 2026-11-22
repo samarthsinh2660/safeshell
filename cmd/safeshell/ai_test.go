@@ -511,3 +511,15 @@ func TestExplainWhyDoesNotAskForASaferCommand(t *testing.T) {
 	useAI(t, fakeAI{reply: proposalReply}, nil)
 	runSS("explain", "--why", "mytool --wipe data")
 }
+
+func TestAnalyzeVerifiedLooksAtEvenAHarmlessLineInTheSandbox(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := analyzeVerified(context.Background(), "ls", t.TempDir())
+	if a.Line != "ls" || a.Level > domain.R1 {
+		t.Fatalf("%+v", a)
+	}
+	// Either the sandbox ran it and saw the files, or it was unavailable and that is said: never silent.
+	if a.Sim == nil && a.SimNote == "" {
+		t.Error("the line was neither run in the sandbox nor noted as not run")
+	}
+}
