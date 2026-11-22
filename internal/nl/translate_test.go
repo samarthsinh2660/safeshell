@@ -298,3 +298,16 @@ func TestWrappedCommandIsOfferedAsACommand(t *testing.T) {
 		t.Errorf("%+v", r)
 	}
 }
+
+func TestOnlyAShellTagIsDroppedFromAFence(t *testing.T) {
+	for in, want := range map[string]string{
+		"```bash\nls -la\n```":  "ls -la",
+		"```console\nls -la```": "ls -la",
+		"```ls\n-la```":         "ls\n-la", // the first line is the command, not a tag: nothing is dropped
+		"```bash ls```":         "bash ls",
+	} {
+		if got := unwrap(in); got != want {
+			t.Errorf("%q: %q, want %q", in, got, want)
+		}
+	}
+}
