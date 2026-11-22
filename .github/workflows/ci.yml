@@ -115,6 +115,12 @@ jobs:
           sudo mount -o loop,subvol=home,user_subvol_rm_allowed "$RUNNER_TEMP/btrfs.img" /mnt/btrfs
           sudo chown "$USER" /mnt/btrfs
           echo "SS_BTRFS_DIR=/mnt/btrfs" >> "$GITHUB_ENV"
+      # A subvolume inside the mounted one: its own device number, reached through the mount.
+      - name: A nested btrfs subvolume
+        run: |
+          sudo btrfs subvolume create /mnt/btrfs/nested
+          sudo chown "$USER" /mnt/btrfs/nested
+          echo "SS_BTRFS_NESTED_DIR=/mnt/btrfs/nested" >> "$GITHUB_ENV"
       # The runner kernel may have no ZFS module. Then only the ZFS part is skipped, and says so.
       - name: A ZFS dataset the runner user may snapshot
         run: |
@@ -160,6 +166,8 @@ jobs:
       # With SS_BTRFS_DIR or SS_ZFS_DIR set, the test fails unless the native snapshot was really used.
       - name: Undo from a native snapshot
         run: SS_NEED_SANDBOX=1 go test -count=1 -v -run TestUndoFromNativeSnapshot ./test/integration
+      - name: Simulation on a nested subvolume is honest
+        run: SS_NEED_SANDBOX=1 go test -count=1 -v -run TestNestedSubvolumeSimulationIsHonest ./test/integration
 
   script-check-action:
     name: SafeShell check action (passes a good script, fails a bad one)

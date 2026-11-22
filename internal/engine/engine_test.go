@@ -153,6 +153,23 @@ func TestTimeoutAddsAnEstimatedEffect(t *testing.T) {
 	}
 }
 
+func TestSandboxErrorIsNotReportedAsNoChanges(t *testing.T) {
+	for name, res := range map[string]sandbox.Result{
+		"overlay error": {ExitCode: 1, Stderr: "rm: cannot remove 'a': Value too large for defined data type"},
+		"scratch full":  {ScratchFull: true},
+	} {
+		a := (&Engine{Sim: &fakeSim{res: res}}).Analyze(context.Background(), "rm -rf proj", "/w")
+		fe := find(a, domain.EffectFS)
+		if a.Sim != nil || fe.Evidence != domain.Estimated || strings.Contains(fe.Summary, "no files") ||
+			!strings.Contains(a.SimNote, "not simulated") || a.Decision == domain.Allow || a.Level < a.Verdict.Level {
+			t.Errorf("%s: %+v", name, a)
+		}
+		if len(a.Targets) == 0 {
+			t.Errorf("%s: the snapshot needs the named files: %+v", name, a)
+		}
+	}
+}
+
 func TestInspectorsFeedTheDecision(t *testing.T) {
 	var got []shellparse.Command
 	inspect := func(cmds []shellparse.Command) []domain.Effect {
