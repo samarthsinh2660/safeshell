@@ -156,3 +156,23 @@ func TestMarkWritableKeepsOnlyPathsTheUserCanWrite(t *testing.T) {
 		t.Errorf("writable = %q, %q", got[0].Writable, got[1].Writable)
 	}
 }
+
+func TestOutOfSpace(t *testing.T) {
+	for _, tc := range []struct {
+		blocks, size uint64
+		want         bool
+	}{{0, 4096, true}, {100, 4096, true}, {256, 4096, false}, {1 << 20, 4096, false}} {
+		if got := outOfSpace(tc.blocks, tc.size); got != tc.want {
+			t.Errorf("outOfSpace(%d, %d) = %v", tc.blocks, tc.size, got)
+		}
+	}
+}
+
+func TestScratchFullReadsTheFilesystem(t *testing.T) {
+	if scratchFull(filepath.Join(t.TempDir(), "missing")) {
+		t.Error("an unreadable folder must not be called full")
+	}
+	if !scratchFull("/proc/self") { // procfs reports no free blocks
+		t.Error("a filesystem with no free blocks must be called full")
+	}
+}

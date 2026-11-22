@@ -164,6 +164,7 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		res.Diff.Truncated = res.Diff.Truncated || d.Truncated
 	}
 	res.Diff.Changes = append(res.Diff.Changes, out.Loose...)
+	res.ScratchFull = res.ScratchFull || scratchFull(store) // keep a stop by the size watch
 	return res, nil
 }
 
@@ -373,4 +374,20 @@ func markWritable(ws []sandbox.Warning) []sandbox.Warning {
 		}
 	}
 	return ws
+}
+
+// scratchFull says whether the filesystem holding the scratch folder is out of
+// space: a command that fills it fails with ENOSPC and its changes are cut short.
+func scratchFull(dir string) bool {
+	var st syscall.Statfs_t
+	if syscall.Statfs(dir, &st) != nil {
+		return false
+	}
+	return outOfSpace(st.Bavail, uint64(st.Bsize))
+}
+
+// outOfSpace is true when under minFree bytes are left.
+func outOfSpace(freeBlocks, blockSize uint64) bool {
+	const minFree = 1 << 20
+	return freeBlocks*blockSize < minFree
 }

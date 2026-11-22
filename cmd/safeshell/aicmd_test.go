@@ -300,7 +300,7 @@ func TestSystemEngineWithoutAVersionOrABinaryIsStillDescribed(t *testing.T) {
 	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := engineLine("system"); got != "Local engine program: system "+bin {
+	if got := engineLine("system"); got != "system "+bin {
 		t.Errorf("%q", got)
 	}
 	if err := os.Remove(bin); err != nil {

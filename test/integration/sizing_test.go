@@ -168,15 +168,19 @@ func TestACommandThatFillsTheScratchAreaOnDiskIsStopped(t *testing.T) {
 	// dd keeps to the 1 GiB limit of one file, so write several.
 	line := fmt.Sprintf("i=0; while [ $i -lt %d ]; do dd if=/dev/zero of=big$i bs=1M count=1000 status=none; i=$((i+1)); done", limit/gib+2)
 	a, tree, _, took := sizedRunIn(t, cache, map[string]int64{"a.img": size}, line)
-	if a.Sim == nil {
-		t.Fatalf("not simulated: %q", a.SimNote)
+	// A stopped run keeps no result: it is "not simulated" and needs a person.
+	if a.Sim != nil || !strings.Contains(a.SimNote, "not simulated") {
+		t.Errorf("a stopped run was reported as simulated: note %q (took %s)", a.SimNote, took)
 	}
-	var stopped bool
-	for _, w := range a.Sim.Warnings {
-		stopped = stopped || strings.Contains(w.Text, "stopped: the command wrote more than the sandbox's scratch area may use on disk")
+	var estimated bool
+	for _, e := range a.Effects {
+		if e.Kind == "files" && e.Evidence == "OBSERVED" {
+			t.Errorf("a stopped run still counts as observed: %+v", e)
+		}
+		estimated = estimated || e.Evidence == "ESTIMATED"
 	}
-	if !stopped {
-		t.Errorf("no stopped warning: %+v (took %s)", a.Sim.Warnings, took)
+	if !estimated || a.Decision == "allow" {
+		t.Errorf("effects %+v, decision %s: want an ESTIMATED effect and no unattended run", a.Effects, a.Decision)
 	}
 	if took > 30*time.Second {
 		t.Errorf("the run took %s", took)

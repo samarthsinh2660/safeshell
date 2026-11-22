@@ -140,7 +140,13 @@ func (b *builder) summary() []sandbox.Warning {
 // loose files directly inside it: small ones are copied in, the rest are
 // reported as a warning.
 func (b *builder) overlay(l Layer, depth int) {
-	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", l.Mount, l.Upper, l.Work)
+	// xino=off: a btrfs subvolume nested inside the mounted one has its own device
+	// number, so the lower layer spans several devices. With the default
+	// (xino=auto) overlayfs then tries to build unique inode numbers and can fail
+	// with EOVERFLOW ("Value too large for defined data type"); off reports the
+	// underlying numbers as they are (overlayfs.rst, "xino"). The only cost is that
+	// st_ino may repeat across devices, which a simulated run does not rely on.
+	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s,xino=off", l.Mount, l.Upper, l.Work)
 	err := syscall.Mount("overlay", filepath.Join(b.merged, l.Mount), "overlay", 0, opts)
 	switch {
 	case err == nil:
