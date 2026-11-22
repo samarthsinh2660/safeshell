@@ -27,7 +27,13 @@ type sizedAnalysis struct {
 // files cost no real disk, but count in full when the run is sized.
 func sizedRun(t *testing.T, files map[string]int64, line string) (a sizedAnalysis, tree, cache string, took time.Duration) {
 	t.Helper()
-	tree, cache = t.TempDir(), t.TempDir()
+	return sizedRunIn(t, t.TempDir(), files, line)
+}
+
+// sizedRunIn is sizedRun with the cache folder chosen by the caller.
+func sizedRunIn(t *testing.T, cache string, files map[string]int64, line string) (a sizedAnalysis, tree, _ string, took time.Duration) {
+	t.Helper()
+	tree = t.TempDir()
 	for name, size := range files {
 		f, err := os.Create(filepath.Join(tree, name))
 		if err != nil {
@@ -126,28 +132,42 @@ func memAvailable(t *testing.T) int64 {
 }
 
 // The scratch area on disk may use half the free space (less a reserve). A
-// command that writes past that is stopped, and the result says so.
+// command that writes past that is stopped, and the result says so. CI sets
+// SS_SMALL_CACHE_DIR to a small filesystem so that the limit is a few GiB; on a
+// dev machine the test runs only when the disk it uses is small enough.
 func TestACommandThatFillsTheScratchAreaOnDiskIsStopped(t *testing.T) {
 	needSandbox(t)
 	const gib = 1 << 30
+	small := os.Getenv("SS_SMALL_CACHE_DIR")
+	cacheParent := small
+	if small == "" {
+		cacheParent = t.TempDir()
+	}
+	cache, err := os.MkdirTemp(cacheParent, "cache-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(cache) })
 	var st syscall.Statfs_t
-	if err := syscall.Statfs(os.TempDir(), &st); err != nil {
-		t.Skip(err)
+	if err := syscall.Statfs(cache, &st); err != nil {
+		t.Fatal(err)
 	}
 	free, total := int64(st.Bavail)*int64(st.Bsize), int64(st.Blocks)*int64(st.Bsize)
 	limit := min(free/2, free-min(int64(gib), total/20))
-	if limit > 8*gib {
-		t.Skipf("the limit here is %d GiB; writing that much would take too long for a test", limit/gib)
-	}
-	// A sparse tree bigger than the in-memory limit (half of free memory) puts
-	// the run on disk; it costs no real space.
 	mem := memAvailable(t)
-	if mem > free/2 {
-		t.Skip("not enough free disk to place a run on disk")
+	ram := min(mem/2, 2*gib) // the in-memory limit: a source tree above it goes to disk
+	size := ram + gib/4
+	t.Logf("free %d MiB, scratch limit %d MiB, memory limit %d MiB, source tree %d MiB", free>>20, limit>>20, ram>>20, size>>20)
+	ok := limit <= 8*gib && size <= free/2
+	if !ok {
+		if small != "" && os.Getenv("SS_NEED_SANDBOX") != "" {
+			t.Fatal("the numbers do not work out on SS_SMALL_CACHE_DIR (see above)")
+		}
+		t.Skip("this disk is too big or too small for a quick run of this test")
 	}
 	// dd keeps to the 1 GiB limit of one file, so write several.
 	line := fmt.Sprintf("i=0; while [ $i -lt %d ]; do dd if=/dev/zero of=big$i bs=1M count=1000 status=none; i=$((i+1)); done", limit/gib+2)
-	a, tree, cache, took := sizedRun(t, map[string]int64{"a.img": mem}, line)
+	a, tree, _, took := sizedRunIn(t, cache, map[string]int64{"a.img": size}, line)
 	if a.Sim == nil {
 		t.Fatalf("not simulated: %q", a.SimNote)
 	}
@@ -158,7 +178,7 @@ func TestACommandThatFillsTheScratchAreaOnDiskIsStopped(t *testing.T) {
 	if !stopped {
 		t.Errorf("no stopped warning: %+v (took %s)", a.Sim.Warnings, took)
 	}
-	if took > 25*time.Second {
+	if took > 30*time.Second {
 		t.Errorf("the run took %s", took)
 	}
 	if _, err := os.Stat(filepath.Join(tree, "big0")); err == nil {

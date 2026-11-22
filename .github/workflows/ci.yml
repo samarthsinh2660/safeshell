@@ -86,9 +86,18 @@ jobs:
         run: |
           sudo mkdir -p /srv/ss-partly/mnt && sudo chown -R "$USER" /srv/ss-partly
           sudo mount -t tmpfs -o size=1m,uid="$(id -u)",gid="$(id -g)" tmpfs /srv/ss-partly/mnt
+      # A small filesystem for the sandbox cache, so the test that fills the on-disk scratch area
+      # (limit: half the free space, about 2.7 GiB here) is quick and really runs.
+      - name: Make a small filesystem for the sandbox cache
+        run: |
+          truncate -s 6G "$RUNNER_TEMP/cache.img"
+          mkfs.ext4 -q "$RUNNER_TEMP/cache.img"
+          sudo mkdir -p /mnt/sscache
+          sudo mount -o loop "$RUNNER_TEMP/cache.img" /mnt/sscache
+          sudo chown "$USER" /mnt/sscache
       # SS_NEED_SANDBOX makes a sandbox test fail instead of skip, so none is skipped silently.
       - name: Integration tests with the real sandbox
-        run: SS_NEED_SANDBOX=1 SS_PARTLY_DIR=/srv/ss-partly make integration
+        run: SS_NEED_SANDBOX=1 SS_PARTLY_DIR=/srv/ss-partly SS_SMALL_CACHE_DIR=/mnt/sscache make integration
       - name: Sweep every labelled command through the real binary
         run: SS_NEED_SANDBOX=1 SS_SWEEP=1 go test -count=1 -timeout 20m ./test/integration -run Sweep
 
