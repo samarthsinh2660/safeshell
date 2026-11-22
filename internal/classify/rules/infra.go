@@ -1,12 +1,28 @@
 package rules
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
 )
 
+// dockerReads lists the read-only subcommands of docker's management commands;
+// they match the short forms (ps, images, inspect, ...) that are already R0.
+var dockerReads = map[string][]string{
+	"container": {"ls", "list", "ps", "inspect", "logs", "top", "port", "stats", "diff"},
+	"image":     {"ls", "list", "inspect", "history"},
+	"volume":    {"ls", "list", "inspect"},
+	"network":   {"ls", "list", "inspect"},
+	"context":   {"ls", "inspect"},
+	"system":    {"df", "info"},
+	"compose":   {"ps", "ls", "config", "images", "logs"},
+}
+
 func ruleDocker(c shellparse.Command, f flags) []Finding {
+	if len(f.pos) > 1 && slices.Contains(dockerReads[f.pos[0]], f.pos[1]) {
+		return one(fnd(R0, c, "Only reads container information."))
+	}
 	switch f.sub() {
 	case "ps", "images", "logs", "inspect", "info", "version", "stats", "top", "history", "ls", "search", "diff", "port":
 		return one(fnd(R0, c, "Only reads container information."))
