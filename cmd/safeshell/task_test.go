@@ -100,17 +100,17 @@ func TestDoAsksAboutARiskyStepAndRunsItOnYes(t *testing.T) {
 	}
 }
 
-func TestDoRunsASafeStepWithoutAskingWhenAutorunIsOn(t *testing.T) {
+func TestDoAsksEvenWhenAutorunIsOn(t *testing.T) {
 	ai := &stepAI{name: "local:test", replies: []string{cmdReply("cat notes.txt"), `{"command":"","answer":"done"}`}}
 	ran := fakeRun(t, "x", nil)
 	fakeAnalyze(t, proposal(domain.R0, "cat notes.txt"))
 	autorunSet(t, true)
 	useAI(t, ai, nil)
-	answer(t, "")
+	answer(t, "n\n")
 	autorunHome(t)
 	code, _, errOut := runSS("do", "read", "my", "notes")
-	if code != 0 || len(*ran) != 1 || strings.Contains(errOut, "Run it?") || !strings.Contains(errOut, "Running it now") {
-		t.Errorf("%d %v\n%s", code, *ran, errOut)
+	if code != 1 || len(*ran) != 0 || !strings.Contains(errOut, "Run it?") || strings.Contains(errOut, "Running it now") {
+		t.Errorf("the model reads files in a task, so every step must ask: %d %v\n%s", code, *ran, errOut)
 	}
 }
 

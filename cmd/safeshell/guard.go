@@ -104,6 +104,7 @@ const (
 	fromPerson    origin = iota // the person typed it
 	fromAssistant               // the AI wrote it from a plain-English request
 	fromUndo                    // "safeshell undo" proposed it and the person already agreed to run it
+	fromTask                    // "safeshell do" wrote it after reading files, so autorun never applies
 )
 
 // guardLine analyses one command line, asks if needed, and prints what to run.

@@ -136,3 +136,34 @@ func TestAutorunStillAsksBeforeOverwritingAHiddenFile(t *testing.T) {
 		t.Fatal("autorun overwrote a hidden file without asking")
 	}
 }
+
+func TestDoReadsARealFileThenStopsWhenTheModelRepeats(t *testing.T) {
+	needSandbox(t)
+	d, homeEnv := autorunHome(t)
+	notes := filepath.Join(d, "notes.txt")
+	_ = os.WriteFile(notes, []byte("buy milk and eggs"), 0o644)
+	sh := startBash(t, append(autorunModel(t, `{"command":"cat `+notes+`","note":"reads the notes"}`), homeEnv)...)
+	sh.waitFor(t, "READY>")
+	sh.send("safeshell do read my notes\r")
+	sh.waitFor(t, "Run it? [Y/n]")
+	sh.send("\r") // yes
+	sh.waitFor(t, "buy milk and eggs")
+	sh.waitFor(t, "repeated a command")
+}
+
+func TestDoAsksBeforeATaskStepThatIsNotSafeAndNoStopsIt(t *testing.T) {
+	needSandbox(t)
+	d, homeEnv := autorunHome(t)
+	script := filepath.Join(d, "setup.sh")
+	marker := filepath.Join(d, "ran")
+	_ = os.WriteFile(script, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o755)
+	sh := startBash(t, append(autorunModel(t, `{"command":"`+script+`","note":"runs the setup"}`), homeEnv)...)
+	sh.waitFor(t, "READY>")
+	sh.send("safeshell do set the project up\r")
+	sh.waitFor(t, "Run it? [Y/n]")
+	sh.send("n\r")
+	sh.waitFor(t, "Nothing was run")
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the task ran a script the person declined")
+	}
+}

@@ -180,7 +180,7 @@ func askLine(request, cwd string, stdout, stderr io.Writer, color bool) (code in
 			remember(turn)
 			return 1, true
 		}
-		code = proposeAndGuard(r, cwd, stdout, stderr, color)
+		code = proposeAndGuard(r, cwd, stdout, stderr, color, fromAssistant)
 		turn.Ran = code == 0
 		remember(turn)
 		return code, true
@@ -233,10 +233,10 @@ func readLine(in io.Reader) (string, error) {
 	}
 }
 
-func proposeAndGuard(r nl.Result, cwd string, stdout, stderr io.Writer, color bool) int {
+func proposeAndGuard(r nl.Result, cwd string, stdout, stderr io.Writer, color bool, from origin) int {
 	fmt.Fprintf(stderr, "Proposed: %s\n", report.Printable(r.Command))
 	if r.Note != "" {
 		fmt.Fprintf(stderr, "          %s\n", report.Printable(r.Note))
 	}
-	return guardLine(r.Command, cwd, stdout, stderr, color, fromAssistant)
+	return guardLine(r.Command, cwd, stdout, stderr, color, from)
 }

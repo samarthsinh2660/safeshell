@@ -32,7 +32,8 @@ func (c *capped) Write(p []byte) (int, error) {
 
 // runDo is `safeshell do <task>`: the assistant works through a task one
 // command at a time. Each command is shown and checked like a typed one, asks
-// the person unless autorun covers it, and runs only on yes. What it printed
+// the person (autorun does not apply, because the model has read files and
+// what they say is untrusted) and runs only on yes. What it printed
 // (secrets masked) is shown to the model so it can choose the next command.
 func runDo(args []string, stdout, stderr io.Writer, color bool) int {
 	args, ok := endOptions("do", args, stderr)
@@ -99,7 +100,7 @@ func doStep(r nl.Result, cwd string, stdout, stderr io.Writer, color bool) (step
 		return step, false
 	}
 	var approved strings.Builder
-	if proposeAndGuard(r, cwd, &approved, stderr, color) != 0 {
+	if proposeAndGuard(r, cwd, &approved, stderr, color, fromTask) != 0 {
 		step.Output = "not run: the person declined it or it was blocked"
 		return step, true
 	}

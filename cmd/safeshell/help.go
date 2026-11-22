@@ -99,8 +99,8 @@ It only adds output: it never changes what is allowed or blocked, and it needs n
 The setting is "learn": true in ~/.config/safeshell/config.json.`},
 	{"do", "Let the assistant do a task step by step", `  safeshell do "read notes.txt and put a summary in summary.txt"
 The assistant works through the task one command at a time, like a helper at your keyboard. Each step is shown and
-checked like a command you typed, and it asks "Run it?" first (say no and the whole task stops). Safe everyday
-commands skip the question if you turned on  safeshell autorun. Risky ones are blocked or asked about as usual.
+checked like a command you typed, and it asks "Run it?" first (say no and the whole task stops). Autorun does not
+apply here, because the assistant reads your files. Risky steps are blocked or asked about as usual.
 After each step the assistant sees what the command printed (passwords and keys are hidden) and picks the next
 command, up to 8 steps. It never sees your editor, only your folder and what its own commands print. Because it
 reads that output, it only works with a local model; nothing leaves your computer. Choose one:  safeshell models
