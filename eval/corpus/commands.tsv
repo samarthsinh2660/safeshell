@@ -490,3 +490,6 @@ R2	docker container rm web
 R2	docker image rm nginx	
 R3	docker volume rm data	
 R2	docker compose up -d	
+R3	docker compose -p config down -v	
+R2	docker compose -f logs down	
+R2	docker compose config -o out.yml	
