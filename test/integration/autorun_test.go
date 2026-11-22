@@ -27,13 +27,20 @@ func autorunModel(t *testing.T, reply string) []string {
 	return env
 }
 
+// autorunHome is a home folder for the shell (HOME is where autorun may write) with a work folder in it.
+func autorunHome(t *testing.T) (home, env string) {
+	t.Helper()
+	home = t.TempDir()
+	return home, "HOME=" + home
+}
+
 func TestAutorunMovesAFileWithoutAsking(t *testing.T) {
 	needSandbox(t)
-	d := t.TempDir()
+	d, homeEnv := autorunHome(t)
 	from, to := filepath.Join(d, "notes.txt"), filepath.Join(d, "backup")
 	_ = os.MkdirAll(to, 0o755)
 	_ = os.WriteFile(from, []byte("my notes"), 0o644)
-	sh := startBash(t, autorunModel(t, `{"command":"mv `+from+` `+to+`/","note":"moves the file"}`)...)
+	sh := startBash(t, append(autorunModel(t, `{"command":"mv `+from+` `+to+`/","note":"moves the file"}`), homeEnv)...)
 	sh.waitFor(t, "READY>")
 	sh.send(`eval "$(safeshell hook bash)"` + "\r")
 	sh.send("move my notes into the backup folder\r")
@@ -76,10 +83,10 @@ func TestAutorunStillAsksBeforeRunningAScript(t *testing.T) {
 
 func TestAutorunCanOpenAFolderInTheShellItself(t *testing.T) {
 	needSandbox(t)
-	d := t.TempDir()
+	d, homeEnv := autorunHome(t)
 	proj := filepath.Join(d, "projects")
 	_ = os.MkdirAll(proj, 0o755)
-	sh := startBash(t, autorunModel(t, `{"command":"cd `+proj+`","note":"goes into the folder"}`)...)
+	sh := startBash(t, append(autorunModel(t, `{"command":"cd `+proj+`","note":"goes into the folder"}`), homeEnv)...)
 	sh.waitFor(t, "READY>")
 	sh.send(`eval "$(safeshell hook bash)"` + "\r")
 	sh.send("take me into the projects folder\r")
@@ -109,5 +116,23 @@ func TestAutorunStillBlocksADangerousCommand(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(victim, "a.txt")); err != nil {
 		t.Fatal("the dangerous command ran")
+	}
+}
+
+func TestAutorunStillAsksBeforeOverwritingAHiddenFile(t *testing.T) {
+	needSandbox(t)
+	d, homeEnv := autorunHome(t)
+	rc := filepath.Join(d, ".bashrc")
+	_ = os.WriteFile(rc, []byte("original"), 0o644)
+	_ = os.WriteFile(filepath.Join(d, "evil"), []byte("evil"), 0o644)
+	sh := startBash(t, append(autorunModel(t, `{"command":"mv `+filepath.Join(d, "evil")+` `+rc+`","note":"replaces it"}`), homeEnv)...)
+	sh.waitFor(t, "READY>")
+	sh.send(`eval "$(safeshell hook bash)"` + "\r")
+	sh.send("please replace my shell settings\r")
+	sh.waitFor(t, "Run it? [Y/n]")
+	sh.send("n\r")
+	sh.waitFor(t, "Nothing was run")
+	if b, _ := os.ReadFile(rc); string(b) != "original" {
+		t.Fatal("autorun overwrote a hidden file without asking")
 	}
 }

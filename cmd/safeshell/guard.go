@@ -139,7 +139,7 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, from orig
 	}
 	in := bufio.NewReader(guardInput())
 	cmd, ok := line, true
-	if from == fromAssistant && runsUnasked(line, a) {
+	if from == fromAssistant && runsUnasked(line, cwd, a) {
 		a.Autorun = true
 		fmt.Fprintln(stderr, "Running it now. Turn this off with: safeshell autorun off")
 	} else if from != fromPerson && a.Decision == domain.Allow {

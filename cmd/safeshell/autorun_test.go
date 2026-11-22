@@ -124,10 +124,25 @@ func TestAutorunIsOffInStrictMode(t *testing.T) {
 	}
 }
 
+// autorunHome makes a home folder with a work folder in it and runs the test there,
+// so relative paths in a proposal mean something under home.
+func autorunHome(t *testing.T) (home, work string) {
+	t.Helper()
+	home = t.TempDir()
+	work = filepath.Join(home, "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Chdir(work)
+	return home, work
+}
+
 // askWith runs "safeshell ask" with the AI proposing cmd, the checks rating it
 // as a, and no answer ready to read, so a question shows up as a cancelled run.
 func askWith(t *testing.T, cmd string, mutate func(*testing.T)) (code int, out, errOut string) {
 	t.Helper()
+	autorunHome(t)
 	useAI(t, fakeAI{reply: `{"command":"` + cmd + `","note":"does it"}`}, nil)
 	answer(t, "")
 	if mutate != nil {
@@ -196,6 +211,8 @@ func TestAutorunNeverSkipsARiskierQuestion(t *testing.T) {
 		{"R3 is blocked", "rm -rf projects", func(a *engine.Analysis) { a.Level, a.Decision = domain.R3, domain.Block }},
 		{"R4 is stopped", "rm -rf /", func(a *engine.Analysis) { a.Level, a.Decision = domain.R4, domain.HardBlock }},
 		{"a program the rules do not know", "ls", func(a *engine.Analysis) { a.Verdict.Unclassified = []string{"mytool"} }},
+		{"overwrite the shell startup file", "mv notes.txt ~/.bashrc", func(a *engine.Analysis) { a.Verdict.Findings[0].Command = "mv notes.txt ~/.bashrc" }},
+		{"overwrite ssh keys", "cp evil ~/.ssh/authorized_keys", func(a *engine.Analysis) { a.Verdict.Findings[0].Command = "cp evil ~/.ssh/authorized_keys" }},
 		{"a script rated R1", "./run.sh", func(a *engine.Analysis) { a.Verdict.Findings[0].Command = "./run.sh" }},
 		{"a build tool rated R1", "make", func(a *engine.Analysis) { a.Verdict.Findings[0].Command = "make" }},
 		{"a program on a labelled host", "ls", func(a *engine.Analysis) { a.Host = policy.HostOutcome{Note: "prod-db is labelled production"} }},
@@ -213,6 +230,18 @@ func TestAutorunNeverSkipsARiskierQuestion(t *testing.T) {
 		if code != 1 || out != "" || strings.Contains(errOut, "Running it now") {
 			t.Errorf("%s: %d %q %q", c.name, code, out, errOut)
 		}
+	}
+}
+
+func TestAutorunWritesOnlyInsideHome(t *testing.T) {
+	fakeAnalyze(t, proposal(domain.R1, "mv notes.txt backup/"))
+	autorunSet(t, true)
+	useAI(t, fakeAI{reply: `{"command":"mv notes.txt backup/"}`}, nil)
+	answer(t, "")
+	autorunHome(t)
+	t.Chdir(t.TempDir()) // a folder that is not under home
+	if code, out, _ := runSS("ask", "move", "my", "notes"); code != 1 || out != "" {
+		t.Errorf("outside home it must ask: %d %q", code, out)
 	}
 }
 

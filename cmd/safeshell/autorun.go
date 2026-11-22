@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
@@ -27,13 +28,15 @@ func readAutorun() bool {
 
 // runsUnasked is true for a command the assistant wrote that may run without
 // the "Run it?" question. All of these must hold: the checks allowed it at R0 or
-// R1; every program in it is one of the short list of everyday file and folder
-// programs (policy.AutorunSafe: no scripts, interpreters, build tools, package
+// R1; every program in it is on the short list in policy.AutorunSafe (everyday
+// file and folder programs; no scripts, interpreters, build tools, package
 // managers, git or ssh, because a low rating does not say whether a program runs
-// other code); there is no policy warning and no host label on it; and it does not
+// other code), and what the writing ones touch is inside the home folder and not
+// hidden; there is no policy warning and no host label on it; and it does not
 // change the shell itself. Everything else keeps its question or its block.
-func runsUnasked(line string, a engine.Analysis) bool {
-	return autorunOn() && a.Decision == domain.Allow && a.Level <= domain.R1 && policy.AutorunSafe(a.Verdict) &&
+func runsUnasked(line, cwd string, a engine.Analysis) bool {
+	home, _ := os.UserHomeDir()
+	return autorunOn() && a.Decision == domain.Allow && a.Level <= domain.R1 && policy.AutorunSafe(a.Verdict, line, cwd, home) &&
 		a.PolicyWarning == "" && a.Host.Note == "" && !changesShell(line)
 }
 

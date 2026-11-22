@@ -101,8 +101,10 @@ The setting is "learn": true in ~/.config/safeshell/config.json.`},
      safeshell autorun on       (off again with  safeshell autorun off;  safeshell autorun status  shows which)
 Then, when you ask in plain English ("move notes.txt into the backup folder", "take me into projects"), an
 everyday file or folder command runs right after it is shown. Only these programs run this way:
-     cd  ls  pwd  cat  head  tail  wc  du  df  stat  file  grep  mv  cp  mkdir  touch
-and only when the checks rate the whole line R0 or R1 (it reads, or is easy to undo).
+     cd  ls  pwd  cat  head  tail  wc  du  df  grep  mv  cp  mkdir  touch
+with plain words only (no variables, quotes, redirects or $(...)), only when the checks rate the line R0 or R1,
+and mv, cp, mkdir and touch only on visible files and folders inside your home folder (never .bashrc, .ssh
+or .git). A line that mixes cd with those is asked about.
 Everything else still asks or is blocked as usual: scripts, make, python, npm, git and ssh, anything on a host
 you labelled, and export, source or eval. R2 asks, R3 is blocked with a safer option, R4 is stopped.
 It also applies to a request you speak. Autorun is ignored in strict mode. Each command it runs shows in
