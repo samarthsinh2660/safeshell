@@ -188,3 +188,51 @@ func TestRedactHome(t *testing.T) {
 		}
 	}
 }
+
+func TestProposeReadsASaferCommand(t *testing.T) {
+	f := &fake{reply: "```json\n{\"command\":\" mytool --archive data \",\"note\":\"Keeps a copy.\"}\n```"}
+	p, ok, err := Propose(context.Background(), f, analysis(domain.R3))
+	if err != nil || !ok || p.Command != "mytool --archive data" || p.Note != "Keeps a copy." {
+		t.Errorf("%+v %v %v", p, ok, err)
+	}
+	if !strings.Contains(f.got, "rm -rf proj") || !strings.Contains(f.got, "would delete 3 files") {
+		t.Errorf("the model was not shown the command and what it does: %q", f.got)
+	}
+}
+
+func TestProposeWithNothingToSuggestIsNotAnError(t *testing.T) {
+	_, ok, err := Propose(context.Background(), &fake{reply: `{"command":"  ","note":""}`}, analysis(domain.R3))
+	if ok || err != nil {
+		t.Errorf("%v %v", ok, err)
+	}
+}
+
+func TestProposeRejectsWhatDoesNotFitTheSchema(t *testing.T) {
+	long := `{"command":"` + strings.Repeat("a", maxProposal+1) + `"}`
+	for _, reply := range []string{"no json", `{"command":"a\nb"}`, `{"command":"a\u0007b"}`, `{"command":"rm -rf proj"}`, long} {
+		if _, ok, err := Propose(context.Background(), &fake{reply: reply}, analysis(domain.R3)); ok || err == nil {
+			t.Errorf("%q was accepted", reply)
+		}
+	}
+}
+
+func TestProposeReportsABackendError(t *testing.T) {
+	boom := errors.New("down")
+	if _, ok, err := Propose(context.Background(), &fake{err: boom}, analysis(domain.R3)); ok || !errors.Is(err, boom) {
+		t.Errorf("%v %v", ok, err)
+	}
+}
+
+func TestProposeHidesSecretsFromACloudModel(t *testing.T) {
+	f := &fake{reply: `{"command":""}`}
+	a := analysis(domain.R3)
+	a.Line = `curl -H "Authorization: Bearer sk-test123" -u bob:hunter2 -o out https://h/x API_KEY=abc123`
+	if _, _, err := Propose(context.Background(), Redacting(f), a); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range []string{"sk-test123", "hunter2", "abc123"} {
+		if strings.Contains(f.got, s) {
+			t.Errorf("the request still contains %q: %q", s, f.got)
+		}
+	}
+}

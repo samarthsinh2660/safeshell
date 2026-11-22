@@ -66,9 +66,9 @@ func runAI(args []string, stdout, stderr io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "Local model %s: %s\n", md.Title, state)
 		if run, ok := d.Running(); ok {
-			fmt.Fprintf(stdout, "Local engine: running (%s)\n", run)
+			fmt.Fprintf(stdout, "Local engine: running (%s). It keeps running, with the model unloaded after 10 idle minutes, until you run: safeshell ai stop\n", run)
 		} else {
-			fmt.Fprintln(stdout, "Local engine: not running (starts when needed, stops itself after 10 idle minutes)")
+			fmt.Fprintln(stdout, "Local engine: not running (starts when needed; once started it keeps running until you run: safeshell ai stop)")
 		}
 		return 0
 	}

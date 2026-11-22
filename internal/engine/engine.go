@@ -72,6 +72,10 @@ type Engine struct {
 	Hosts      map[string]string // the user's host patterns and labels (prod, staging); nil when none
 	Home       string            // the user's home folder, so a home outside /home is protected
 	Protect    []string          // absolute folders the user keeps safe: any change inside them is raised to R3
+	// Verify runs every line the rules do not rate catastrophic in the sandbox,
+	// even a command they know to be harmless, so a proposed replacement gets
+	// observed evidence of what it does.
+	Verify bool
 }
 
 // Analysis is everything learned about one command line.
@@ -132,7 +136,7 @@ func (e *Engine) Analyze(ctx context.Context, line, cwd string) Analysis {
 	if len(e.Protect) > 0 {
 		a.Protected = policy.EvaluateProtected(e.Protect, changedPaths(cmds, cwd, e.Home))
 	}
-	a.simulate(ctx, e.Sim, e.Sizer, cmds, cwd)
+	a.simulate(ctx, e.Sim, e.Sizer, cmds, cwd, e.Verify)
 	if a.Sim == nil {
 		paths, complete := rules.WritePaths(cmds, cwd)
 		a.Targets, a.TargetsGap = paths, !complete
@@ -148,9 +152,9 @@ func needsSimulation(v domain.Verdict) bool {
 	return (v.Level >= domain.R2 && v.Level < domain.R4) || len(v.Unclassified) > 0
 }
 
-func (a *Analysis) simulate(ctx context.Context, sim Simulator, sizer Sizer, cmds []shellparse.Command, cwd string) {
+func (a *Analysis) simulate(ctx context.Context, sim Simulator, sizer Sizer, cmds []shellparse.Command, cwd string, verify bool) {
 	switch {
-	case !needsSimulation(a.Verdict) && !a.Team.Snapshot: // a snapshot needs the list of files the run changes
+	case !needsSimulation(a.Verdict) && !(verify && a.Verdict.Level < domain.R4) && !a.Team.Snapshot: // a snapshot needs the list of files the run changes
 		if a.Verdict.Level >= domain.R4 {
 			a.SimNote = "not simulated: rated catastrophic from the command text alone"
 		}
@@ -267,9 +271,14 @@ func (a Analysis) CanTrust(cwd string) bool {
 // line in this folder. Call it last, after any AI review: it never touches a
 // block, and a case that anything raised is left as it was.
 func (a *Analysis) ApplyTrust(set []policy.Trust, cwd string) {
-	if a.Decision == domain.Confirm && policy.DecideTrusted(a.Decision, a.trustCase(set, cwd)) == domain.Allow {
+	if a.TrustedHere(set, cwd) {
 		a.Decision, a.Trusted = domain.Allow, true
 	}
+}
+
+// TrustedHere says whether ApplyTrust would let this line through as it stands now.
+func (a Analysis) TrustedHere(set []policy.Trust, cwd string) bool {
+	return a.Decision == domain.Confirm && policy.DecideTrusted(a.Decision, a.trustCase(set, cwd)) == domain.Allow
 }
 
 // changedPaths are the files and folders the commands change, from their
@@ -312,4 +321,40 @@ func changedPaths(cmds []shellparse.Command, cwd, home string) []string {
 		out = append(out, cmp.Or(w.Into, w.Path))
 	}
 	return out
+}
+
+// Proposer asks a model for a safer command than the one analysed. ok is false
+// when it has none.
+type Proposer interface {
+	Propose(ctx context.Context, a Analysis) (alt domain.Alternative, ok bool, err error)
+}
+
+// OfferSafer asks p for a safer command for a, and returns it only when check,
+// the same full analysis a typed line gets (rules, sandbox, team policy,
+// protected folders, hosts), proves it so: see report.SaferAlternative. It
+// only ever adds an option; a is not changed, so no proposal can lower its
+// level. Nothing is offered when a already has safer options, is not worth a
+// model call, is refused by the team policy, or the model fails or has none.
+func OfferSafer(ctx context.Context, a Analysis, p Proposer, check func(ctx context.Context, line string) Analysis) (domain.Alternative, bool) {
+	if len(a.Verdict.Alternatives) > 0 || !policy.WorthReview(a.Level) || a.Team.Block != "" {
+		return domain.Alternative{}, false
+	}
+	alt, ok, err := p.Propose(ctx, a)
+	if err != nil || !ok {
+		return domain.Alternative{}, false
+	}
+	got := check(ctx, alt.Command)
+	if ctx.Err() != nil || !report.SaferAlternative(a.outcome(), got.outcome()) {
+		return domain.Alternative{}, false
+	}
+	alt.Note = fmt.Sprintf("Checked in the sandbox: rated %s instead of %s, and it changes only files the original also changes. %s", got.Level, a.Level, alt.Note)
+	return alt, true
+}
+
+func (a Analysis) outcome() report.Outcome {
+	o := report.Outcome{Level: a.Level, Decision: a.Decision, TeamBlocked: a.Team.Block != "", Effects: a.Effects}
+	if a.Sim != nil {
+		o.Diff = &a.Sim.Diff
+	}
+	return o
 }

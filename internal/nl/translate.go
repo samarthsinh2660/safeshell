@@ -185,7 +185,7 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		return Result{}, err
 	}
 	// A command wins over a question: Question is only set when there is no command.
-	cmd := strings.TrimSpace(strings.ReplaceAll(raw.Command, "\t", " "))
+	cmd := unwrap(strings.ReplaceAll(raw.Command, "\t", " "))
 	r := Result{Command: cmd, Note: strings.TrimSpace(clean(raw.Note, 300)), Answer: strings.TrimSpace(clean(raw.Answer, 600))}
 	q := strings.TrimSpace(clean(raw.Question, 300))
 	switch {
@@ -209,6 +209,34 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 		r.Command, r.Note = safer, note
 	}
 	return r, nil
+}
+
+// unwrap removes decoration a model puts around a command: surrounding space,
+// a "$ " prompt, a code fence or one pair of backticks around the whole command.
+// A command that merely starts with "$" or contains backticks is left alone.
+// A "# " prompt is not stripped: "# find big files" is a comment, and unwrapping
+// it would turn the comment into a command.
+func unwrap(cmd string) string {
+	cmd = strings.TrimSpace(cmd)
+	for {
+		next := cmd
+		switch {
+		case strings.HasPrefix(next, "$ "):
+			next = strings.TrimSpace(next[2:])
+		case len(next) > 6 && strings.HasPrefix(next, "```") && strings.HasSuffix(next, "```") && !strings.Contains(next[3:len(next)-3], "`"):
+			inner := next[3 : len(next)-3]
+			if tag, rest, ok := strings.Cut(inner, "\n"); ok && !strings.ContainsAny(tag, " \t") {
+				inner = rest // drop a language tag such as "sh"
+			}
+			next = strings.TrimSpace(inner)
+		case len(next) > 2 && strings.HasPrefix(next, "`") && strings.HasSuffix(next, "`") && !strings.Contains(next[1:len(next)-1], "`"):
+			next = strings.TrimSpace(next[1 : len(next)-1])
+		}
+		if next == cmd {
+			return cmd
+		}
+		cmd = next
+	}
 }
 
 // languageNote asks for replies in the request's language when the request is

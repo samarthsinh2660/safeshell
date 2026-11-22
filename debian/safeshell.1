@@ -234,6 +234,8 @@ Cloud model keys, used instead of the key file.
 .B other commands
 0 on success, 1 on failure, 2 for wrong usage.
 .SH NOTES
+When no rule knows a safer option for a risky line and an AI is set up, the AI may suggest one. It is shown among the safer options, labelled "Checked in the sandbox", only after SafeShell ran it through the same checks as a typed line and found it rated lower, backed by observed or previewed results, and changing only files the original also changes (deleting nothing more). It is never run unless you pick it.
+.PP
 The program is called
 .B safeshell
 and not

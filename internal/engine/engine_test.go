@@ -426,3 +426,101 @@ func TestRelativeWritesInAProtectedFolderAreProtected(t *testing.T) {
 		}
 	}
 }
+
+type fakeProposer struct {
+	alt domain.Alternative
+	ok  bool
+	err error
+}
+
+func (f fakeProposer) Propose(context.Context, Analysis) (domain.Alternative, bool, error) {
+	return f.alt, f.ok, f.err
+}
+
+func obs(l domain.Level, d domain.Decision, cs ...sandbox.Change) Analysis {
+	return Analysis{
+		Level: l, Decision: d,
+		Effects: []domain.Effect{{Kind: domain.EffectFS, Evidence: domain.Observed, MinLevel: l}},
+		Sim:     &sandbox.Result{Diff: sandbox.FileDiff{Changes: cs}},
+	}
+}
+
+func TestOfferSaferShowsAProvenSaferCommand(t *testing.T) {
+	orig := obs(domain.R3, domain.Block, sandbox.Change{Path: "home/me/data", Kind: sandbox.Deleted, IsDir: true})
+	safe := obs(domain.R1, domain.Allow, sandbox.Change{Path: "home/me/data/a", Kind: sandbox.Modified})
+	var asked string
+	check := func(_ context.Context, line string) Analysis { asked = line; return safe }
+	alt, ok := OfferSafer(context.Background(), orig, fakeProposer{alt: domain.Alternative{Command: "mytool --keep data", Note: "Keeps it."}, ok: true}, check)
+	if !ok || alt.Command != "mytool --keep data" || asked != "mytool --keep data" ||
+		!strings.Contains(alt.Note, "Checked in the sandbox") || !strings.Contains(alt.Note, "R1 instead of R3") || !strings.HasSuffix(alt.Note, "Keeps it.") {
+		t.Errorf("%+v %v %q", alt, ok, asked)
+	}
+}
+
+func TestOfferSaferShowsNothingUnlessProven(t *testing.T) {
+	del := sandbox.Change{Path: "home/me/data", Kind: sandbox.Deleted, IsDir: true}
+	orig := obs(domain.R3, domain.Block, del)
+	estimated := obs(domain.R1, domain.Allow)
+	estimated.Effects = append(estimated.Effects, domain.Effect{Evidence: domain.Estimated})
+	for name, safe := range map[string]Analysis{
+		"riskier":        obs(domain.R4, domain.HardBlock),
+		"not lower":      obs(domain.R3, domain.Block, del),
+		"estimated":      estimated,
+		"extra path":     obs(domain.R1, domain.Allow, sandbox.Change{Path: "home/me/other", Kind: sandbox.Created}),
+		"extra deletion": obs(domain.R2, domain.Confirm, sandbox.Change{Path: "home/me/keep", Kind: sandbox.Deleted}),
+	} {
+		check := func(context.Context, string) Analysis { return safe }
+		if alt, ok := OfferSafer(context.Background(), orig, fakeProposer{alt: domain.Alternative{Command: "x"}, ok: true}, check); ok {
+			t.Errorf("%s: offered %+v", name, alt)
+		}
+	}
+}
+
+func TestOfferSaferIsSkippedOrFailsQuietly(t *testing.T) {
+	orig := obs(domain.R3, domain.Block)
+	never := func(context.Context, string) Analysis { t.Error("a proposal was checked"); return Analysis{} }
+	withAlt, blocked := orig, orig
+	withAlt.Verdict.Alternatives = []domain.Alternative{{Command: "trash-put x"}}
+	blocked.Team = policy.Outcome{Block: "no"}
+	for name, a := range map[string]Analysis{"already has one": withAlt, "team block": blocked, "too low": obs(domain.R1, domain.Allow), "too high": obs(domain.R4, domain.HardBlock)} {
+		if _, ok := OfferSafer(context.Background(), a, fakeProposer{alt: domain.Alternative{Command: "x"}, ok: true}, never); ok {
+			t.Errorf("%s: offered", name)
+		}
+	}
+	for name, p := range map[string]fakeProposer{"AI error": {err: errors.New("down")}, "no proposal": {}} {
+		if _, ok := OfferSafer(context.Background(), orig, p, never); ok {
+			t.Errorf("%s: offered", name)
+		}
+	}
+}
+
+func TestOfferSaferShowsNothingWhenTheTimeIsUp(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	check := func(context.Context, string) Analysis { cancel(); return obs(domain.R1, domain.Allow) }
+	orig := obs(domain.R3, domain.Block)
+	if _, ok := OfferSafer(ctx, orig, fakeProposer{alt: domain.Alternative{Command: "x"}, ok: true}, check); ok {
+		t.Error("offered after the deadline")
+	}
+}
+
+func TestOfferSaferDoesNotChangeTheOriginal(t *testing.T) {
+	orig := obs(domain.R3, domain.Block)
+	check := func(context.Context, string) Analysis { return obs(domain.R1, domain.Allow) }
+	OfferSafer(context.Background(), orig, fakeProposer{alt: domain.Alternative{Command: "x"}, ok: true}, check)
+	if orig.Level != domain.R3 || orig.Decision != domain.Block || len(orig.Verdict.Alternatives) != 0 {
+		t.Errorf("%+v", orig)
+	}
+}
+
+func TestVerifyRunsEvenAHarmlessLineInTheSandboxButNotACatastrophicOne(t *testing.T) {
+	sim := &fakeSim{}
+	e := &Engine{Sim: sim, Verify: true}
+	a := e.Analyze(context.Background(), "ls -la", "/w")
+	if a.Sim == nil || len(sim.calls) != 1 || find(a, domain.EffectFS).Evidence != domain.Observed {
+		t.Errorf("a harmless line was not run in the sandbox: %+v", sim.calls)
+	}
+	e.Analyze(context.Background(), "rm -rf /", "/w")
+	if len(sim.calls) != 1 {
+		t.Error("a catastrophic line was run in the sandbox")
+	}
+}

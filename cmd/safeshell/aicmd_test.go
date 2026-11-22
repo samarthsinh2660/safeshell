@@ -135,13 +135,13 @@ func TestAIReviewPrintsFailuresButNeverBlocks(t *testing.T) {
 	a := sampleAnalysis()
 	var b strings.Builder
 	useAI(t, nil, errors.New("settings are broken"))
-	aiReview(&a, &b)
+	aiReview(&a, "", &b, false)
 	if !strings.Contains(b.String(), "AI review skipped: settings are broken") {
 		t.Errorf("%q", b.String())
 	}
 	b.Reset()
 	useAI(t, fakeAI{err: errors.New("down")}, nil)
-	aiReview(&a, &b)
+	aiReview(&a, "", &b, false)
 	if !strings.Contains(b.String(), "AI review unavailable: down") {
 		t.Errorf("%q", b.String())
 	}

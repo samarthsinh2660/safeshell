@@ -108,8 +108,10 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 		fmt.Fprintln(stderr, cancelledMsg)
 		return 1 // nothing goes to stdout, so the hook runs nothing
 	}
-	aiReview(&a, stderr)
 	trusted, trustOn := trustSet()
+	// A line trusted here runs without a question, so it needs no AI-proposed alternative;
+	// the review still runs and can still raise it.
+	aiReview(&a, cwd, stderr, !a.TrustedHere(trusted, cwd))
 	a.ApplyTrust(trusted, cwd) // last: the AI can still raise it, and nothing but plain R2 is ever let through
 	printPolicyWarning(stderr, a)
 	printHostNote(stderr, a)

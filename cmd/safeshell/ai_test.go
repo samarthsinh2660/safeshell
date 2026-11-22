@@ -13,6 +13,8 @@ import (
 
 	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/domain"
+	"github.com/samarthsinh2660/safeshell/internal/engine"
+	"github.com/samarthsinh2660/safeshell/internal/sandbox"
 )
 
 type fakeAI struct {
@@ -445,5 +447,79 @@ func TestGuardAuditRecordsTheAIReviewOnlyWhenOneWasMade(t *testing.T) {
 	ls := strings.Split(strings.TrimSpace(string(b)), "\n")
 	if last := ls[len(ls)-1]; strings.Contains(last, "ai_") {
 		t.Errorf("AI off, but the entry has AI keys: %s", last)
+	}
+}
+
+// riskyNoAlt is a risky line the rules know no safer option for.
+func riskyNoAlt() engine.Analysis {
+	a := sampleAnalysis()
+	a.Line = "mytool --wipe data"
+	a.Verdict.Alternatives = nil
+	a.Sim = &sandbox.Result{Diff: sandbox.FileDiff{Changes: []sandbox.Change{{Path: "work/data", Kind: sandbox.Deleted, IsDir: true}}}}
+	return a
+}
+
+// useVerified replaces the check of a proposed command and records what it was asked.
+func useVerified(t *testing.T, a engine.Analysis) *string {
+	t.Helper()
+	old := analyzeVerified
+	t.Cleanup(func() { analyzeVerified = old })
+	var asked string
+	analyzeVerified = func(_ context.Context, line, _ string) engine.Analysis { asked = line; return a }
+	return &asked
+}
+
+const proposalReply = `{"level":"R3","reason":"Deletes data.","command":"mytool --keep data","note":"Keeps the files."}`
+
+func TestGuardOffersASaferCommandTheSandboxChecked(t *testing.T) {
+	fakeAnalyze(t, riskyNoAlt())
+	safe := engine.Analysis{Level: domain.R1, Decision: domain.Allow,
+		Effects: []domain.Effect{{Kind: domain.EffectFS, Evidence: domain.Observed, MinLevel: domain.R1}},
+		Sim:     &sandbox.Result{Diff: sandbox.FileDiff{Changes: []sandbox.Change{{Path: "work/data/a", Kind: sandbox.Modified}}}}}
+	asked := useVerified(t, safe)
+	useAI(t, fakeAI{reply: proposalReply}, nil)
+	answer(t, "1\n")
+	code, out, errOut := runSS("guard", "--", "mytool --wipe data")
+	if code != 0 || out != "mytool --keep data\n" || *asked != "mytool --keep data" ||
+		!strings.Contains(errOut, "Safer options") || !strings.Contains(errOut, "Checked in the sandbox") || !strings.Contains(errOut, "Keeps the files.") {
+		t.Errorf("%d %q %q", code, out, errOut)
+	}
+}
+
+func TestGuardShowsNoSaferCommandThatIsRiskierOrUnproven(t *testing.T) {
+	riskier := engine.Analysis{Level: domain.R4, Decision: domain.HardBlock}
+	for name, proposed := range map[string]engine.Analysis{"riskier": riskier, "not observed": {Level: domain.R1, Decision: domain.Allow}} {
+		fakeAnalyze(t, riskyNoAlt())
+		useVerified(t, proposed)
+		useAI(t, fakeAI{reply: proposalReply}, nil)
+		answer(t, "c\n")
+		_, out, errOut := runSS("guard", "--", "mytool --wipe data")
+		if out != "" || strings.Contains(errOut, "Safer options") || strings.Contains(errOut, "Checked in the sandbox") {
+			t.Errorf("%s: %q %q", name, out, errOut)
+		}
+	}
+}
+
+func TestExplainWhyDoesNotAskForASaferCommand(t *testing.T) {
+	fakeAnalyze(t, riskyNoAlt())
+	old := analyzeVerified
+	t.Cleanup(func() { analyzeVerified = old })
+	analyzeVerified = func(context.Context, string, string) engine.Analysis {
+		t.Error("a proposal was checked")
+		return engine.Analysis{}
+	}
+	useAI(t, fakeAI{reply: proposalReply}, nil)
+	runSS("explain", "--why", "mytool --wipe data")
+}
+
+func TestAnalyzeVerifiedLooksAtEvenAHarmlessLineInTheSandbox(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	a := analyzeVerified(context.Background(), "ls", t.TempDir())
+	if a.Line != "ls" || a.Level > domain.R1 {
+		t.Fatalf("%+v", a)
+	}
+	// Either the sandbox ran it and saw the files, or it was unavailable and that is said: never silent.
+	if a.Sim == nil && a.SimNote == "" {
+		t.Error("the line was neither run in the sandbox nor noted as not run")
 	}
 }

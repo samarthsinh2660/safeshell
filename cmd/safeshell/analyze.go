@@ -112,6 +112,16 @@ var loadProtected = func(cwd string) (folders []string, rules []policy.Rule, war
 
 // analyze is replaced in tests.
 var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
+	return analyzeLine(ctx, line, cwd, false)
+}
+
+// analyzeVerified is analyze with the line always run in the sandbox, which a
+// proposed safer command needs before it is offered. It is a test seam: tests replace it.
+var analyzeVerified = func(ctx context.Context, line, cwd string) engine.Analysis {
+	return analyzeLine(ctx, line, cwd, true)
+}
+
+func analyzeLine(ctx context.Context, line, cwd string, verify bool) engine.Analysis {
 	env := callerEnv(ctx)
 	inspectRepo := func(cmds []shellparse.Command) []domain.Effect {
 		if envHas(env, "GIT_DIR", "GIT_WORK_TREE") {
@@ -134,7 +144,7 @@ var analyze = func(ctx context.Context, line, cwd string) engine.Analysis {
 	rules, warning := teamPolicy()
 	hosts, hostWarning := hostLabels()
 	protected, projectRules, protectWarnings := loadProtected(cwd)
-	e := &engine.Engine{Rules: append(rules, projectRules...), Hosts: hosts, Protect: protected, Home: userHome(), Sim: realSandbox{}, Sizer: sizing.Sizer{Dir: overlayfs.DiskBase()}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
+	e := &engine.Engine{Rules: append(rules, projectRules...), Hosts: hosts, Protect: protected, Home: userHome(), Sim: realSandbox{}, Verify: verify, Sizer: sizing.Sizer{Dir: overlayfs.DiskBase()}, Inspectors: []engine.Inspector{procs, inspectDisks, inspectPackages, inspectServices, inspectRepo,
 		tool(effects.InspectDocker), tool(effects.InspectKubectl), tool(effects.InspectDatabases)}}
 	a := e.Analyze(ctx, line, cwd)
 	a.PolicyWarning = strings.TrimSpace(strings.Join(append([]string{warning, hostWarning}, protectWarnings...), " "))

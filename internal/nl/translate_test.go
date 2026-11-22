@@ -2,6 +2,7 @@ package nl
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -261,5 +262,39 @@ func TestHasDecidesWhetherAToolCanRun(t *testing.T) {
 	r, _ = Translate(context.Background(), &fake{reply: `{"command":"nosuchtool-xyz"}`}, "do it", Env{})
 	if r.Command != "" || r.Answer == "" {
 		t.Errorf("unknown program should be advice: %+v", r)
+	}
+}
+
+func TestWrappedCommandIsOfferedAsACommand(t *testing.T) {
+	e := Env{Has: func(w string) bool { return w == "df" || w == "echo" }}
+	for in, want := range map[string]string{
+		"$ df -h":            "df -h",
+		"`df -h`":            "df -h",
+		"```df -h```":        "df -h",
+		"```sh\ndf -h\n```":  "df -h",
+		"```\ndf -h\n```":    "df -h",
+		"  df -h \n":         "df -h",
+		"$ `df -h`":          "df -h",
+		"$EDITOR x":          "$EDITOR x",
+		"echo `date`":        "echo `date`",
+		"$(pwd)/run":         "$(pwd)/run",
+		"echo `a` `b`":       "echo `a` `b`",
+		"`echo a`; echo `b`": "`echo a`; echo `b`",
+		"``":                 "``",
+	} {
+		b, _ := json.Marshal(map[string]string{"command": in})
+		r, err := Translate(context.Background(), &fake{reply: string(b)}, "x", e)
+		got := r.Command
+		if got == "" {
+			got = r.Answer // not runnable: kept as an answer
+		}
+		if err != nil || got != want {
+			t.Errorf("%q: got %q (%v), want %q", in, got, err, want)
+		}
+	}
+	// "# " is never stripped: "# find big files" is a comment, not a command.
+	r, _ := Translate(context.Background(), &fake{reply: `{"command":"# df -h"}`}, "x", e)
+	if r.Command != "" || r.Answer != "# df -h" {
+		t.Errorf("%+v", r)
 	}
 }

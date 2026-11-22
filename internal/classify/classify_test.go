@@ -279,6 +279,38 @@ func TestInlineInterpreterCode(t *testing.T) {
 	}
 }
 
+func TestDockerManagementReadsMatchShortForms(t *testing.T) {
+	for _, tc := range []struct {
+		line string
+		want Level
+	}{
+		{"docker ps", R0}, {"docker container ls", R0}, {"docker container list -a", R0},
+		{"docker container ps", R0}, {"docker container inspect web", R0}, {"docker container logs web", R0},
+		{"docker container top web", R0}, {"docker container port web", R0},
+		{"docker container stats --no-stream", R0}, {"docker container diff web", R0},
+		{"docker image ls", R0}, {"docker image list", R0}, {"docker image inspect nginx", R0}, {"docker image history nginx", R0},
+		{"docker volume ls", R0}, {"docker volume list", R0}, {"docker volume inspect data", R0},
+		{"docker network ls", R0}, {"docker network list", R0}, {"docker network inspect bridge", R0},
+		{"docker context ls", R0}, {"docker context inspect", R0},
+		{"docker system df", R0}, {"docker system info", R0}, {"docker version", R0}, {"docker info", R0},
+		{"docker compose ps", R0}, {"docker compose ls", R0}, {"docker compose config", R0},
+		{"docker compose images", R0}, {"docker compose logs web", R0},
+		{"podman container ls", R0}, {"podman image ls", R0},
+		{"docker --context x container ls", R0}, {"docker -H tcp://x container ls", R0},
+		{"docker container rm web", R2}, {"docker container prune", R2}, {"docker container run nginx", R1},
+		{"docker container exec web ls", R1}, {"docker container stop web", R1}, {"docker container kill web", R1},
+		{"docker image rm nginx", R2}, {"docker image pull nginx", R1}, {"docker image build .", R1},
+		{"docker image tag a b", R1}, {"docker image push a", R1}, {"docker image prune -a", R3},
+		{"docker volume rm data", R3}, {"docker volume create data", R1}, {"docker network rm n", R2},
+		{"docker context use x", R1}, {"docker system prune", R2},
+		{"docker compose up -d", R2}, {"docker compose down", R2}, {"docker compose down -v", R3},
+	} {
+		if got := rate(tc.line).Level; got != tc.want {
+			t.Errorf("%q = %s, want %s", tc.line, got, tc.want)
+		}
+	}
+}
+
 func TestGlobalOptionsDoNotHideTheSubcommand(t *testing.T) {
 	for _, tc := range []struct {
 		line string

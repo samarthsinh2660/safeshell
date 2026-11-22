@@ -272,3 +272,18 @@ func TestTrustHasHelp(t *testing.T) {
 		t.Errorf("%d %q", code, out)
 	}
 }
+
+func TestATrustedLineIsNotHeldUpByAnAIProposal(t *testing.T) {
+	trustHome(t)
+	if err := config.SetTrusted(config.Path(), []policy.Trust{{Line: "rm build/x.o", Dir: "/work"}}); err != nil {
+		t.Fatal(err)
+	}
+	a := r2Sample()
+	a.Verdict.Alternatives = nil // nothing from the rules, so an untrusted line would ask the AI for one
+	fakeAnalyze(t, a)
+	asked := useVerified(t, engine.Analysis{})
+	useAI(t, fakeAI{reply: `{"level":"R2","reason":"Deletes one build file.","command":"rm -i build/x.o","note":"Asks first."}`}, nil)
+	if code, out, _ := runSS("guard", "--cwd", "/work", "--", "rm build/x.o"); code != 0 || out != "rm build/x.o\n" || *asked != "" {
+		t.Errorf("code %d out %q; proposal checked: %q", code, out, *asked)
+	}
+}
