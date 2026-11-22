@@ -101,10 +101,11 @@ The setting is "learn": true in ~/.config/safeshell/config.json.`},
 The assistant works through the task one command at a time, like a helper at your keyboard. Each step is shown and
 checked like a command you typed, and it asks "Run it?" first (say no and the whole task stops). Autorun does not
 apply here, because the assistant reads your files. Risky steps are blocked or asked about as usual.
-After each step the assistant sees what the command printed (passwords and keys are hidden) and picks the next
+After each step the assistant sees what the command printed (obvious passwords and keys are hidden, but it can still read what you let it cat) and picks the next
 command, up to 8 steps. It never sees your editor, only your folder and what its own commands print. Because it
 reads that output, it only works with a local model; nothing leaves your computer. Choose one:  safeshell models
-Commands that would change your shell (cd, export, source) are skipped; each step runs in your current folder.`},
+Enter means no here. Commands that would change your shell (cd, export, source) are skipped; each step runs in
+your current folder. A no, or a block you do not override, ends the task. Ctrl-C stops everything.`},
 	{"autorun", "Let the assistant run safe commands at once", `By default, a command the assistant writes for you waits for "Run it? [Y/n]". Turn autorun on once:
      safeshell autorun on       (off again with  safeshell autorun off;  safeshell autorun status  shows which)
 Then, when you ask in plain English ("move notes.txt into the backup folder", "take me into projects"), an

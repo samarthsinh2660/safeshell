@@ -148,14 +148,16 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, from orig
 		if plainOn() {
 			proceed = ui.ProceedPlain
 		}
-		ok = proceed(in, stderr, !changesShell(line)) // the assistant wrote it, so the person always sees it first
+		// The assistant wrote it, so the person always sees it first. In a task Enter means no: the model has read
+		// files, and a stray Enter typed ahead must never approve a step.
+		ok = proceed(in, stderr, from != fromTask && !changesShell(line))
 	} else {
 		choose := ui.Choose
 		if plainOn() {
 			choose = ui.ChoosePlain
 		}
 		var always bool
-		cmd, ok, always = choose(in, stderr, line, a.Decision, a.Verdict.Alternatives, trustOn && a.CanTrust(cwd))
+		cmd, ok, always = choose(in, stderr, line, a.Decision, a.Verdict.Alternatives, trustOn && from != fromTask && a.CanTrust(cwd))
 		if always && ok {
 			saveTrust(policy.NewTrust(line, cwd), stderr)
 		}

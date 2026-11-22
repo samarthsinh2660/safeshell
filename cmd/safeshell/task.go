@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/samarthsinh2660/safeshell/internal/ai"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
 	"github.com/samarthsinh2660/safeshell/internal/report"
 )
@@ -17,17 +19,30 @@ const (
 	// maxDoSteps is how many commands one task may run before the agent stops.
 	maxDoSteps = 8
 	// maxStepOutput is how much of a command's output is kept for the model.
-	maxStepOutput = 4000
+	maxStepOutput = 2000
 )
 
 // capped keeps the first maxStepOutput bytes written to it and drops the rest.
-type capped struct{ buf bytes.Buffer }
+// A command's two streams are written from two goroutines, so it has a lock.
+type capped struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
 
 func (c *capped) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if room := maxStepOutput - c.buf.Len(); room > 0 {
 		c.buf.Write(p[:min(room, len(p))])
 	}
 	return len(p), nil
+}
+
+// onlyLocal is true for a backend that is itself a local engine. A chain (hybrid
+// mode) falls back to a cloud model when the local one fails, so it does not count.
+func onlyLocal(b ai.Backend) bool {
+	_, chain := b.(ai.Chain)
+	return !chain && strings.HasPrefix(b.Name(), "local:")
 }
 
 // runDo is `safeshell do <task>`: the assistant works through a task one
@@ -49,7 +64,7 @@ func runDo(args []string, stdout, stderr io.Writer, color bool) int {
 		fmt.Fprintln(stderr, "SafeShell AI is off.", aiOffHint)
 		return 1
 	}
-	if !strings.HasPrefix(b.Name(), "local:") {
+	if !onlyLocal(b) {
 		fmt.Fprintln(stderr, "The agent shows the model what your commands print, so it only works with a local model that stays on this computer. Choose one with: safeshell models")
 		return 1
 	}
@@ -104,8 +119,9 @@ func doStep(r nl.Result, cwd string, stdout, stderr io.Writer, color bool) (step
 		step.Output = "not run: the person declined it or it was blocked"
 		return step, true
 	}
+	step.Command = strings.TrimSpace(approved.String()) // the person may have picked a safer replacement
 	var out capped
-	err := runCommand(strings.TrimSpace(approved.String()), cwd, io.MultiWriter(stdout, &out), io.MultiWriter(stderr, &out))
+	err := runCommand(step.Command, cwd, io.MultiWriter(stdout, &out), io.MultiWriter(stderr, &out))
 	step.Output = report.MaskSecrets(out.buf.String())
 	if err != nil {
 		step.Output = "failed (" + err.Error() + ")\n" + step.Output

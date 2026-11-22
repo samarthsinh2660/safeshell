@@ -62,3 +62,15 @@ func TestResultsAreBounded(t *testing.T) {
 		t.Error("no steps, no block")
 	}
 }
+
+func TestResultsStayInsideTheByteBudgetAndKeepTheNewestStep(t *testing.T) {
+	e := env
+	e.Agent = true
+	for i := range 5 {
+		e.Steps = append(e.Steps, Step{Command: fmt.Sprintf("cmd%d", i), Output: strings.Repeat(strings.Repeat("x", 100)+"\n", 60)})
+	}
+	got := e.renderResults()
+	if len(got) > maxResultsBytes+1000 || !strings.Contains(got, "cmd4") || strings.Contains(got, "cmd3") {
+		t.Errorf("the newest steps must fit the budget (len %d):\n%.200s", len(got), got)
+	}
+}

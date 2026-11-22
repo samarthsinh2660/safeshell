@@ -145,8 +145,8 @@ func TestDoReadsARealFileThenStopsWhenTheModelRepeats(t *testing.T) {
 	sh := startBash(t, append(autorunModel(t, `{"command":"cat `+notes+`","note":"reads the notes"}`), homeEnv)...)
 	sh.waitFor(t, "READY>")
 	sh.send("safeshell do read my notes\r")
-	sh.waitFor(t, "Run it? [Y/n]")
-	sh.send("\r") // yes
+	sh.waitFor(t, "Run it? [y/N]")
+	sh.send("y\r")
 	sh.waitFor(t, "buy milk and eggs")
 	sh.waitFor(t, "repeated a command")
 }
@@ -160,7 +160,7 @@ func TestDoAsksBeforeATaskStepThatIsNotSafeAndNoStopsIt(t *testing.T) {
 	sh := startBash(t, append(autorunModel(t, `{"command":"`+script+`","note":"runs the setup"}`), homeEnv)...)
 	sh.waitFor(t, "READY>")
 	sh.send("safeshell do set the project up\r")
-	sh.waitFor(t, "Run it? [Y/n]")
+	sh.waitFor(t, "Run it? [y/N]")
 	sh.send("n\r")
 	sh.waitFor(t, "Nothing was run")
 	if _, err := os.Stat(marker); err == nil {
