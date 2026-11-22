@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 const proposeSystem = `You suggest a safer way to do what a risky shell command does, for a safety tool.
@@ -43,7 +42,7 @@ func Propose(ctx context.Context, b Backend, a Facts) (p Proposal, ok bool, err 
 	if cmd == "" {
 		return p, false, nil
 	}
-	if cmd == strings.TrimSpace(a.Line) || len(cmd) > maxProposal || !utf8.ValidString(cmd) || strings.IndexFunc(cmd, unicode.IsControl) >= 0 {
+	if cmd == strings.TrimSpace(a.Line) || len(cmd) > maxProposal || strings.IndexFunc(cmd, unicode.IsControl) >= 0 {
 		return p, false, errors.New("the model proposed something that is not a single different command")
 	}
 	return Proposal{Command: cmd, Note: Clean(raw.Note, 300, "</data>")}, true, nil

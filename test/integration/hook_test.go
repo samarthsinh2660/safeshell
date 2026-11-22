@@ -411,3 +411,70 @@ func TestFcAndRCannotRunHistoryUnchecked(t *testing.T) {
 		})
 	}
 }
+
+// saferAlternativeSetup makes a folder with one file, a script that deletes the
+// folder (no rule knows it), a script that only adds a line to the file, and one
+// that deletes more than the first.
+func saferAlternativeSetup(t *testing.T) (dir, victim, other string) {
+	t.Helper()
+	dir = t.TempDir()
+	victim, other = filepath.Join(dir, "proj"), filepath.Join(dir, "other")
+	for _, d := range []string{victim, other} {
+		_ = os.MkdirAll(d, 0o755)
+		_ = os.WriteFile(filepath.Join(d, "a.txt"), []byte("x"), 0o644)
+	}
+	scripts := map[string]string{
+		"wipe":      "rm -rf " + victim,
+		"keep":      "echo y >> " + victim + "/a.txt",
+		"wipe-more": "rm -rf " + victim + " " + other,
+	}
+	for name, body := range scripts {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir, victim, other
+}
+
+func TestAIProposedSaferCommandIsOfferedOnlyAfterTheSandboxChecked(t *testing.T) {
+	needSandbox(t)
+	dir, victim, _ := saferAlternativeSetup(t)
+	// One reply answers both the review and the proposal: the review ignores the command.
+	keep := filepath.Join(dir, "keep")
+	sh := startBash(t, fakeModel(t, `{"level":"R3","reason":"Deletes a folder.","command":"`+keep+`","note":"Adds a line instead."}`)...)
+	sh.waitFor(t, "READY>")
+	sh.send(`eval "$(safeshell hook bash)"` + "\r")
+	sh.send(filepath.Join(dir, "wipe") + "\r")
+	sh.waitFor(t, "Checked in the sandbox")
+	sh.waitFor(t, "run a safer option")
+	sh.send("1\r")
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
+		if b, _ := os.ReadFile(filepath.Join(victim, "a.txt")); strings.Contains(string(b), "y") {
+			return
+		}
+	}
+	t.Fatal("the safer command did not run, or the original did")
+}
+
+func TestAIProposedCommandThatDeletesMoreIsNotOffered(t *testing.T) {
+	needSandbox(t)
+	dir, victim, other := saferAlternativeSetup(t)
+	sh := startBash(t, fakeModel(t, `{"level":"R3","reason":"Deletes a folder.","command":"`+filepath.Join(dir, "wipe-more")+`","note":"Does more."}`)...)
+	sh.waitFor(t, "READY>")
+	sh.send(`eval "$(safeshell hook bash)"` + "\r")
+	sh.send(filepath.Join(dir, "wipe") + "\r")
+	sh.waitFor(t, "[c] cancel")
+	sh.send("c\r")
+	sh.waitFor(t, "Nothing was run")
+	sh.mu.Lock()
+	offered := strings.Contains(sh.all.String(), "Checked in the sandbox")
+	sh.mu.Unlock()
+	if offered {
+		t.Error("a riskier proposal was offered")
+	}
+	for _, d := range []string{victim, other} {
+		if _, err := os.Stat(d); err != nil {
+			t.Errorf("%s was removed", d)
+		}
+	}
+}
