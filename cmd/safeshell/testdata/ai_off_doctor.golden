@@ -1,0 +1,12 @@
+
+Local AI (mode off, gpu setting cpu)
+  info     NVIDIA graphics card       none found
+  info     Vulkan loader              <varies>
+  info     engine program             bundled llama.cpp b11429 (downloaded by SafeShell)
+  info     engines it would try       cpu (best first)
+  info     engines installed          none yet (run: safeshell ai setup)
+  info     model                      Qwen2.5-Coder 3B, downloaded: false
+
+AI in use
+  info     AI now                     off (mode off). Type /models to choose a model, or run  safeshell ai setup
+  info     cloud provider             none chosen. To use Claude, GPT or Gemini type /models

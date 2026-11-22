@@ -297,7 +297,7 @@ Anything that would loosen (a level below R1, an `allow`, a folder outside the p
 ## AI (optional, off until you choose)
 
 - **Local, default Qwen2.5-Coder 3B.** SafeShell downloads and manages a pinned, checksum-verified `llama.cpp`
-  server (CUDA, Vulkan or CPU, picked for your machine) and the model. Starts on demand, stops when idle.
+  server (CUDA, Vulkan or CPU, picked for your machine) and the model. Starts on demand and unloads the model after 10 idle minutes; the engine program stays running until you run `safeshell ai stop`.
   A model counts as downloaded only when its checksum matches (a small `.sha256` file is kept next to it).
   Nothing is downloaded until you ask.
   **Offline labs and distro packages:** set `"ai": {"local": {"engine": "system"}}` in
