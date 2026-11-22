@@ -48,6 +48,10 @@ type Config struct {
 	// Protect lists folders (full paths, or starting with ~/) that nothing may
 	// change without being blocked, such as ["~/thesis", "/srv/data"].
 	Protect []string `json:"protect"`
+	// Trusted lists the commands the person chose "always run this here" for:
+	// the exact line and the full path of the folder. Only R2 lines that were
+	// really observed are ever let through; see policy.DecideTrusted.
+	Trusted []policy.Trust `json:"trusted"`
 	// Voice is the speech model (base.en, base or small) and the language it
 	// listens for (auto or a code such as hi); empty means base.en and its default.
 	Voice struct {
@@ -157,6 +161,11 @@ func Load(path string) (Config, error) {
 			return Config{}, fmt.Errorf("protect: %q must be a full path such as \"/srv/data\" or start with ~/ such as \"~/thesis\"", f)
 		}
 	}
+	for i, t := range c.Trusted {
+		if t.Line == "" || !strings.HasPrefix(t.Dir, "/") || t.Dir != filepath.Clean(t.Dir) {
+			return Config{}, fmt.Errorf("trusted entry %d needs a command line and a full folder path such as \"/home/me/app\". Fix it, or run: safeshell trust clear", i+1)
+		}
+	}
 	if p := c.AI.Cloud.Provider; p != "" {
 		if _, ok := providers.Find(p); !ok {
 			return Config{}, errors.New("ai.cloud.provider must be anthropic, openai or gemini, not " + p)
@@ -209,6 +218,12 @@ func SetLearn(path string, on bool) error {
 func SetVoice(path, model, language string) error {
 	v, _ := json.Marshal(map[string]string{"model": model, "language": language})
 	return setKey(path, "voice", v)
+}
+
+// SetTrusted records the trusted commands the same way: only the trusted key changes.
+func SetTrusted(path string, list []policy.Trust) error {
+	v, _ := json.Marshal(list)
+	return setKey(path, "trusted", v)
 }
 
 // setKey changes one top-level key and keeps everything else as it is.

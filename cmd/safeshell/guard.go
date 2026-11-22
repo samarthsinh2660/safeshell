@@ -12,6 +12,7 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/domain"
 	"github.com/samarthsinh2660/safeshell/internal/engine"
 	"github.com/samarthsinh2660/safeshell/internal/nl"
+	"github.com/samarthsinh2660/safeshell/internal/policy"
 	"github.com/samarthsinh2660/safeshell/internal/report"
 	"github.com/samarthsinh2660/safeshell/internal/shellhook"
 	"github.com/samarthsinh2660/safeshell/internal/shellparse"
@@ -108,11 +109,16 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 		return 1 // nothing goes to stdout, so the hook runs nothing
 	}
 	aiReview(&a, stderr)
+	trusted, trustOn := trustSet()
+	a.ApplyTrust(trusted, cwd) // last: the AI can still raise it, and nothing but plain R2 is ever let through
 	printPolicyWarning(stderr, a)
 	printHostNote(stderr, a)
 	if a.Decision != domain.Allow {
 		printAnalysis(stderr, a, cwd, color, true)
 	} else {
+		if a.Trusted {
+			fmt.Fprintln(stderr, "You told SafeShell to always run this command in this folder, so it was not asked about. See or undo that with: safeshell trust list")
+		}
 		learnNote(stderr, a, color)
 	}
 	if a.Team.Block != "" { // the admin's block is final: no "do it anyway" here
@@ -133,7 +139,11 @@ func guardLine(line, cwd string, stdout, stderr io.Writer, color bool, proposed 
 		if plainOn() {
 			choose = ui.ChoosePlain
 		}
-		cmd, ok = choose(in, stderr, line, a.Decision, a.Verdict.Alternatives)
+		var always bool
+		cmd, ok, always = choose(in, stderr, line, a.Decision, a.Verdict.Alternatives, trustOn && a.CanTrust(cwd))
+		if always && ok {
+			saveTrust(policy.NewTrust(line, cwd), stderr)
+		}
 	}
 	record(a, cmd, ok)
 	if ok && cmd == line { // a replacement command has different effects, so the saved files do not apply
@@ -186,6 +196,9 @@ func record(a engine.Analysis, cmd string, ran bool) {
 		return
 	}
 	outcome, run := audit.Outcome(a.Decision, ran, a.Line, cmd)
+	if a.Trusted && outcome == "allowed" {
+		outcome = audit.OutcomeTrusted
+	}
 	e := audit.Entry{Time: time.Now().UTC(), Line: report.MaskSecrets(a.Line), Run: report.MaskSecrets(run), Level: a.Level.String(), Decision: a.Decision.String(), Outcome: outcome}
 	if a.AI != nil {
 		e.AIProvider, e.AIRaised, e.AILevel, e.AIReason = a.AI.Provider, a.AI.Raised, a.AI.Level.String(), report.MaskSecrets(a.AI.Reason)

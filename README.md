@@ -127,6 +127,7 @@ Work as normal. Inside your prompt:
 | `safeshell models list` | print the models your active cloud provider offers (one per line, the one in use marked) |
 | `/help` | guided help (also `safeshell help`) |
 | `safeshell undo` | restore what an approved command changed: it shows which one (latest from this terminal, else this folder), warns about files you edited since, and asks first; `--yes` skips the question. After `apt install` or `systemctl stop/disable/mask` it also shows the reverse command and, on yes, runs it through the usual check (never by itself) |
+| `safeshell trust list` | the commands you chose "always run this here" for at an R2 prompt (answer `a`); `remove N` or `clear` undoes it. See `safeshell help trust` |
 | `safeshell learn on` | learning mode: one line after each command that passes, saying what it does and the safer form (`off` to stop; see `safeshell help learn`) |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
 | Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
@@ -262,9 +263,17 @@ Add `"journal": true` next to `rules` to send every user's audit entries to the 
 
 Add `"strict": true` next to `"rules"` to turn on strict mode for everyone (see above); a rules-free `{"strict": true}` is a valid policy.
 
+Add `"no_trust": true` to turn off "always run this here" for everyone (below). Like strict, it can only be turned on in the policy.
+
 `match` is a command followed by the words that must come next (`apt purge` also matches `sudo apt -y purge nginx`). A rule can `block` with a reason (no "do it anyway"), ask for a `snapshot`, or set a `min_level` of R1 to R4. A rule that tries anything else, such as lowering a level, is rejected with an error. The file must be owned by root and not writable by anyone else (and so must `/etc/safeshell`), or it is ignored with a warning. The file must be readable by everyone. `safeshell doctor` shows which policy is active.
 
 The policy is a guard rail in each person's SafeShell, not access control: people can still pause their own SafeShell (`safeshell deactivate`) or run commands without the hook. To stop a command for real, use file permissions, sudo rules or groups.
+
+## Stop being asked about a safe, repeated command (optional)
+
+A low-risk (R2) command such as `make clean` asks "Run it anyway?" every time. Answer `a` instead of `y` to say "always run this exact command in this folder"; SafeShell saves it as `"trusted": [{"line": "make clean", "dir": "/home/me/app"}]` in `~/.config/safeshell/config.json`. The snapshot is still taken and `safeshell history` shows the outcome `trusted`. `safeshell trust list`, `trust remove N` and `trust clear` undo it.
+
+Trust is narrow on purpose: the same line in the same folder (no patterns), exactly R2, and only when the sandbox really saw the effects. It never covers R3 or R4, a command SafeShell could only estimate, a protected folder, a prod host, a team or project rule, a command the AI rated higher, or an AI agent's commands. Strict mode and `"no_trust": true` in the team policy turn it off; a project's `.safeshell.json` cannot add it. See `safeshell help trust`.
 
 ## Production host labels (optional)
 

@@ -12,7 +12,8 @@ var alts = []domain.Alternative{{Command: "trash proj"}, {Command: "mv proj /tmp
 
 func choose(input string, d domain.Decision) (string, bool) {
 	var out strings.Builder
-	return Choose(bufio.NewReader(strings.NewReader(input)), &out, "rm -rf proj", d, alts)
+	c, ok, _ := Choose(bufio.NewReader(strings.NewReader(input)), &out, "rm -rf proj", d, alts, false)
+	return c, ok
 }
 
 func TestChoose(t *testing.T) {
@@ -72,21 +73,21 @@ func TestChoosePlainAcceptsTheSameAnswersAsChoose(t *testing.T) {
 	for _, d := range []domain.Decision{domain.Confirm, domain.Block, domain.HardBlock} {
 		for _, in := range []string{"", "\n", "y\n", "yes\n", "c\n", "1\n", "2\n", "9\nc\n", "d\nyes\n", "d\nno\n", "zzz\n", HardPhrase + "\n"} {
 			var a, b strings.Builder
-			wantCmd, wantOk := Choose(bufio.NewReader(strings.NewReader(in)), &a, "rm -rf proj", d, alts)
-			gotCmd, gotOk := ChoosePlain(bufio.NewReader(strings.NewReader(in)), &b, "rm -rf proj", d, alts)
+			wantCmd, wantOk, _ := Choose(bufio.NewReader(strings.NewReader(in)), &a, "rm -rf proj", d, alts, false)
+			gotCmd, gotOk, _ := ChoosePlain(bufio.NewReader(strings.NewReader(in)), &b, "rm -rf proj", d, alts, false)
 			if gotCmd != wantCmd || gotOk != wantOk {
 				t.Errorf("%v %q: plain (%q,%v), default (%q,%v)", d, in, gotCmd, gotOk, wantCmd, wantOk)
 			}
 		}
 	}
-	if cmd, ok := ChoosePlain(bufio.NewReader(strings.NewReader("")), &strings.Builder{}, "ls", domain.Allow, nil); cmd != "ls" || !ok {
+	if cmd, ok, _ := ChoosePlain(bufio.NewReader(strings.NewReader("")), &strings.Builder{}, "ls", domain.Allow, nil, false); cmd != "ls" || !ok {
 		t.Error("an allowed command runs")
 	}
 }
 
 func TestChoosePlainSpellsOutTheChoicesAndAsksLast(t *testing.T) {
 	var out strings.Builder
-	ChoosePlain(bufio.NewReader(strings.NewReader("c\n")), &out, "rm -rf proj", domain.Block, alts)
+	ChoosePlain(bufio.NewReader(strings.NewReader("c\n")), &out, "rm -rf proj", domain.Block, alts, false)
 	for _, want := range []string{
 		"Type c to cancel.", "Type 1 to run the safer command: trash proj\n", "Type 2 to run the safer command: mv proj /tmp/x\n",
 		"Type d to run it anyway.", "\nWhat do you want to do? ",
@@ -99,12 +100,12 @@ func TestChoosePlainSpellsOutTheChoicesAndAsksLast(t *testing.T) {
 		t.Errorf("the question is last and there are no brackets: %q", out.String())
 	}
 	out.Reset()
-	ChoosePlain(bufio.NewReader(strings.NewReader("d\nyes\n")), &out, "rm -rf proj", domain.Block, nil)
+	ChoosePlain(bufio.NewReader(strings.NewReader("d\nyes\n")), &out, "rm -rf proj", domain.Block, nil, false)
 	if strings.Contains(out.String(), "safer command") || !strings.HasSuffix(out.String(), "Do you want to run it? ") {
 		t.Errorf("%q", out.String())
 	}
 	out.Reset()
-	ChoosePlain(bufio.NewReader(strings.NewReader("\n")), &out, "rm -rf /", domain.HardBlock, alts)
+	ChoosePlain(bufio.NewReader(strings.NewReader("\n")), &out, "rm -rf /", domain.HardBlock, alts, false)
 	if !strings.Contains(out.String(), "type exactly: "+HardPhrase+"\n") || !strings.HasSuffix(out.String(), "Do you want to run it anyway? ") {
 		t.Errorf("%q", out.String())
 	}
@@ -121,6 +122,42 @@ func TestProceedPlainTakesTheSameAnswers(t *testing.T) {
 			if !strings.HasSuffix(out.String(), "Do you want to run it? ") || strings.ContainsAny(out.String(), "[]") {
 				t.Errorf("%q", out.String())
 			}
+		}
+	}
+}
+
+func TestAlwaysIsOnlyAnAnswerWhenOffered(t *testing.T) {
+	for _, tc := range []struct {
+		name, in      string
+		d             domain.Decision
+		plain, offer  bool
+		wantOk, wantA bool
+		wantText      string
+	}{
+		{"a when offered", "a\n", domain.Confirm, false, true, true, true, "[y/N/a]"},
+		{"always when offered", "ALWAYS\n", domain.Confirm, false, true, true, true, "ask again for this exact command"},
+		{"plain always", "always\n", domain.Confirm, true, true, true, true, "Type always"},
+		{"plain a", "a\n", domain.Confirm, true, true, true, true, "Type always"},
+		{"a not offered cancels", "a\n", domain.Confirm, false, false, false, false, "[y/N] "},
+		{"plain a not offered cancels", "a\n", domain.Confirm, true, false, false, false, "Type yes"},
+		{"yes when offered is once", "y\n", domain.Confirm, false, true, true, false, ""},
+		{"plain yes when offered is once", "yes\n", domain.Confirm, true, true, true, false, ""},
+		{"enter cancels when offered", "\n", domain.Confirm, false, true, false, false, ""},
+		{"a at a block is not an answer", "a\nc\n", domain.Block, false, true, false, false, ""},
+		{"a at a hard block cancels", "a\n", domain.HardBlock, false, true, false, false, ""},
+	} {
+		var out strings.Builder
+		in := bufio.NewReader(strings.NewReader(tc.in))
+		choose := Choose
+		if tc.plain {
+			choose = ChoosePlain
+		}
+		cmd, ok, always := choose(in, &out, "make clean", tc.d, alts, tc.offer)
+		if ok != tc.wantOk || always != tc.wantA || (ok && cmd != "make clean") {
+			t.Errorf("%s: got (%q,%v,%v)", tc.name, cmd, ok, always)
+		}
+		if !strings.Contains(out.String(), tc.wantText) {
+			t.Errorf("%s: prompt %q lacks %q", tc.name, out.String(), tc.wantText)
 		}
 	}
 }

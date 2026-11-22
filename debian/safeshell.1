@@ -134,6 +134,9 @@ Pause checking in every terminal, open and new, and turn it back on. Nothing nee
 .B learn [on|off|status]
 Learning mode, off by default. When on, each command that passes without a warning gets one line saying what it does, its level and the safer form. It only adds output.
 .TP
+.B trust list | remove N | clear
+At the "Run it anyway?" question for a low-risk (R2) command, answering a runs it and saves "always run this exact command in this folder" ("trusted" in config.json). trust list shows what is saved, remove N and clear undo it. Trust covers only the same line in the same folder, only when the sandbox really saw its effects, and never R3 or R4, a protected folder, a prod host, a team or project rule, a higher AI rating or an AI agent's commands. The snapshot is still taken and the audit log records the outcome "trusted". Strict mode and "no_trust": true in the team policy turn it off.
+.TP
 .B install [--ai|--system], uninstall [--system]
 Add or remove the shell hook. Running install again after moving or reinstalling safeshell updates the hook to the new path.
 With \-\-system (run as root, for example with sudo) the hook is installed for every user of the machine, in
@@ -167,7 +170,7 @@ Exit status 0 means allowed (a Claude Code hook is always answered with 0), 2 me
 Print the hook to add to Claude Code's settings.json, or a script that runs one command only when SafeShell allows it. Nothing is edited.
 .TP
 .RB "help [" topic ]
-Short guides: start, safety, english, models, voice, learn, accessibility, pause, strict, agents, undo, policy, audit, hosts, protect, commands, privacy and trouble.
+Short guides: start, safety, english, models, voice, learn, accessibility, pause, strict, agents, undo, policy, audit, hosts, protect, trust, commands, privacy and trouble.
 .TP
 .B version
 Print the version.

@@ -13,7 +13,8 @@ import (
 	"github.com/samarthsinh2660/safeshell/internal/xdg"
 )
 
-// Entry is one decision. Outcome is "allowed", "cancelled", "ran", "agent-allowed",
+// Entry is one decision. Outcome is "allowed", "trusted" (a confirmation the
+// person had earlier answered with "always run this here"), "cancelled", "ran", "agent-allowed",
 // "agent-denied" (a command an AI agent asked about), or
 // "replaced" (a safer option was run instead of the original).
 type Entry struct {
@@ -36,6 +37,7 @@ type Entry struct {
 const (
 	OutcomeChecksOff  = "checks-off"  // SAFESHELL_OFF was used: the line was not checked
 	OutcomeNotChecked = "not-checked" // SafeShell itself failed and the hook let the line through
+	OutcomeTrusted    = "trusted"     // a command the person had chosen to always run in this folder
 )
 
 // IsEvent is true for an entry that records one of those events, not a command.
