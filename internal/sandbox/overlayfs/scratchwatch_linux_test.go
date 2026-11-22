@@ -4,6 +4,7 @@ package overlayfs
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -82,9 +83,19 @@ func TestWatchScratchEndsQuietlyWhenTheRunEnds(t *testing.T) {
 
 func TestStartScratchWatchOnARealFolder(t *testing.T) {
 	end := startScratchWatch(t.TempDir(), func() { t.Error("stopped a run that wrote nothing") })
+	time.Sleep(2 * watchEvery) // long enough for a check
 	limit, stopped := end()
 	if stopped || limit <= 0 {
 		t.Errorf("limit %d stopped %v", limit, stopped)
+	}
+	// A folder that vanishes mid-run is not a reason to stop it.
+	gone := t.TempDir() + "/store"
+	os.Mkdir(gone, 0o700)
+	end = startScratchWatch(gone, func() { t.Error("stopped a run whose folder could not be measured") })
+	os.Remove(gone)
+	time.Sleep(2 * watchEvery)
+	if _, stopped := end(); stopped {
+		t.Error("stopped")
 	}
 	end = startScratchWatch("/definitely/not/here", func() {})
 	if limit, stopped := end(); limit != 0 || stopped {
