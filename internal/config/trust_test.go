@@ -46,16 +46,18 @@ func TestTrustedSurvivesSave(t *testing.T) {
 	}
 }
 
-func TestBadTrustedEntriesAreRefused(t *testing.T) {
-	for name, s := range map[string]string{
-		"no line":         `{"trusted":[{"line":"","dir":"/a"}]}`,
-		"no folder":       `{"trusted":[{"line":"ls"}]}`,
-		"relative folder": `{"trusted":[{"line":"ls","dir":"app"}]}`,
-		"unclean folder":  `{"trusted":[{"line":"ls","dir":"/a/../b"}]}`,
+// A bad entry never trusts anything, and it does not stop the rest of the
+// settings (or safeshell trust) from loading.
+func TestBadTrustedEntriesAreDroppedNotFatal(t *testing.T) {
+	for name, bad := range map[string]string{
+		"no line":         `{"line":"","dir":"/a"}`,
+		"no folder":       `{"line":"ls"}`,
+		"relative folder": `{"line":"ls","dir":"app"}`,
+		"unclean folder":  `{"line":"ls","dir":"/a/../b"}`,
 	} {
-		_, err := Load(write(t, s))
-		if err == nil || !strings.Contains(err.Error(), "trusted entry 1") || !strings.Contains(err.Error(), "safeshell trust clear") {
-			t.Errorf("%s: %v", name, err)
+		c, err := Load(write(t, `{"trusted":[`+bad+`,{"line":"make clean","dir":"/w"}]}`))
+		if err != nil || !reflect.DeepEqual(c.Trusted, []policy.Trust{{Line: "make clean", Dir: "/w"}}) {
+			t.Errorf("%s: %+v %v", name, c.Trusted, err)
 		}
 	}
 }

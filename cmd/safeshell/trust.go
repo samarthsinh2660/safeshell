@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/samarthsinh2660/safeshell/internal/config"
 	"github.com/samarthsinh2660/safeshell/internal/policy"
@@ -29,6 +30,10 @@ func trustSet() (set []policy.Trust, on bool) {
 
 // saveTrust adds t to the settings; a failure is said, and the command still runs this once.
 func saveTrust(t policy.Trust, stderr io.Writer) {
+	if !strings.HasPrefix(t.Dir, "/") { // the folder is unknown (or relative), so "this folder" means nothing
+		fmt.Fprintln(stderr, "SafeShell could not tell which folder this is, so it will ask again next time.")
+		return
+	}
 	c, err := config.Load(config.Path())
 	if err == nil {
 		for _, old := range c.Trusted {

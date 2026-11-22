@@ -253,8 +253,16 @@ func TestTrustCommandSaysWhenTheSettingsCannotBeUsedOrSaved(t *testing.T) {
 	p := trustHome(t)
 	os.MkdirAll(filepath.Dir(p), 0o700)
 	os.WriteFile(p, []byte(`{"trusted":[{"line":"ls","dir":"app"}]}`), 0o600)
-	if code, _, errOut := runSS("trust", "list"); code != 1 || !strings.Contains(errOut, "safeshell trust clear") {
-		t.Errorf("%d %q", code, errOut)
+	// A bad entry is ignored, so the command that removes entries still works.
+	if code, out, errOut := runSS("trust", "list"); code != 0 || strings.Contains(out, "app") {
+		t.Errorf("%d %q %q", code, out, errOut)
+	}
+	if code, _, errOut := runSS("trust", "clear"); code != 0 {
+		t.Errorf("clear: %d %q", code, errOut)
+	}
+	os.WriteFile(p, []byte(`{"trusted":[`), 0o600) // a file that is not JSON is still an error, with the next step
+	if code, _, errOut := runSS("trust", "list"); code != 1 || errOut == "" {
+		t.Errorf("damaged: %d %q", code, errOut)
 	}
 	os.WriteFile(p, []byte(`{"trusted":[{"line":"ls","dir":"/app"}]}`), 0o600)
 	if os.Getuid() == 0 {
@@ -285,5 +293,14 @@ func TestATrustedLineIsNotHeldUpByAnAIProposal(t *testing.T) {
 	useAI(t, fakeAI{reply: `{"level":"R2","reason":"Deletes one build file.","command":"rm -i build/x.o","note":"Asks first."}`}, nil)
 	if code, out, _ := runSS("guard", "--cwd", "/work", "--", "rm build/x.o"); code != 0 || out != "rm build/x.o\n" || *asked != "" {
 		t.Errorf("code %d out %q; proposal checked: %q", code, out, *asked)
+	}
+}
+
+func TestTrustIsNotSavedWithoutAFullFolderPath(t *testing.T) {
+	trustHome(t)
+	var errOut strings.Builder
+	saveTrust(policy.NewTrust("rm build/x.o", ""), &errOut)
+	if got := trustedNow(t); len(got) != 0 || !strings.Contains(errOut.String(), "ask again") {
+		t.Errorf("%+v %q", got, errOut.String())
 	}
 }

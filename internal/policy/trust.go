@@ -19,8 +19,12 @@ type Trust struct {
 // typed apart from spaces at either end, and the folder is cleaned, so the
 // match stays exact: no patterns, no other folder, no other line.
 func NewTrust(line, cwd string) Trust {
-	return Trust{Line: strings.TrimSpace(line), Dir: path.Clean(cwd)}
+	return Trust{Line: trimLine(line), Dir: path.Clean(cwd)}
 }
+
+// trimLine drops the spaces, tabs and newlines the shell ignores at the ends of a line,
+// and nothing else: a Unicode space is part of the last word, so it is a different line.
+func trimLine(line string) string { return strings.Trim(line, " \t\n") }
 
 // TrustCase is what trust is asked about: the line, the folder, how it was
 // rated and how that is known.
@@ -59,7 +63,7 @@ func DecideTrusted(d domain.Decision, c TrustCase) domain.Decision {
 	if d != domain.Confirm || !c.Eligible() {
 		return d
 	}
-	line, cwd := strings.TrimSpace(c.Line), path.Clean(c.Cwd)
+	line, cwd := trimLine(c.Line), path.Clean(c.Cwd)
 	for _, t := range c.Set {
 		if t.Line == line && t.Dir == cwd {
 			return domain.Allow
