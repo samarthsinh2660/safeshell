@@ -59,3 +59,13 @@ func TestTrustOnlyTurnsAPlainObservedR2ConfirmIntoAllow(t *testing.T) {
 		}
 	}
 }
+
+func TestAUnicodeSpaceAtTheEndMakesADifferentLine(t *testing.T) {
+	if got := NewTrust("rm build/x.o\u00a0", "/w").Line; got != "rm build/x.o\u00a0" {
+		t.Errorf("%q: a no-break space is part of the last word", got)
+	}
+	// DecideTrusted trims the line the same way NewTrust does.
+	if NewTrust("rm build/x.o\u00a0", "/w") == NewTrust("rm build/x.o", "/w") {
+		t.Error("a line ending in a no-break space is the same as the trusted line")
+	}
+}

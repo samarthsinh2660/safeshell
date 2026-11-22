@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -161,11 +162,12 @@ func Load(path string) (Config, error) {
 			return Config{}, fmt.Errorf("protect: %q must be a full path such as \"/srv/data\" or start with ~/ such as \"~/thesis\"", f)
 		}
 	}
-	for i, t := range c.Trusted {
-		if t.Line == "" || !strings.HasPrefix(t.Dir, "/") || t.Dir != filepath.Clean(t.Dir) {
-			return Config{}, fmt.Errorf("trusted entry %d needs a command line and a full folder path such as \"/home/me/app\". Fix it, or run: safeshell trust clear", i+1)
-		}
-	}
+	// A trusted entry without a command or a full folder path is dropped, not an error:
+	// trust is only a convenience, so a bad entry just means SafeShell asks again, and
+	// the rest of the settings (and safeshell trust itself) keep working.
+	c.Trusted = slices.DeleteFunc(c.Trusted, func(t policy.Trust) bool {
+		return t.Line == "" || !strings.HasPrefix(t.Dir, "/") || t.Dir != filepath.Clean(t.Dir)
+	})
 	if p := c.AI.Cloud.Provider; p != "" {
 		if _, ok := providers.Find(p); !ok {
 			return Config{}, errors.New("ai.cloud.provider must be anthropic, openai or gemini, not " + p)
