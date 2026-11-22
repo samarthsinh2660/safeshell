@@ -16,10 +16,15 @@ func TestDiskStoreIsPrivateAndSweepsLeftovers(t *testing.T) {
 	if DiskBase() != filepath.Join(cache, "safeshell", "sandbox") {
 		t.Fatalf("base %s", DiskBase())
 	}
-	left := filepath.Join(DiskBase(), "ss-sim-2147483647-old") // its owner pid is gone
+	left := filepath.Join(DiskBase(), "ss-sim-2147483647-old") // its owner is gone: nobody holds its lock
 	if err := os.MkdirAll(filepath.Join(left, "layers"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	l, err := lockFolder(left)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
 	if err := os.Chmod(DiskBase(), 0o755); err != nil {
 		t.Fatal(err)
 	}

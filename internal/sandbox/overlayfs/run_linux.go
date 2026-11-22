@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -49,12 +48,24 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	if err != nil {
 		return sandbox.Result{}, err
 	}
+	lock, err := lockFolder(scratch)
+	if err != nil {
+		cleanup(scratch)
+		return sandbox.Result{}, err
+	}
+	defer lock.Close() // runs after cleanup: the folder stays locked until it is gone
 	defer cleanup(scratch)
 	store := scratch
 	if spec.UpperOnDisk {
 		if store, err = diskStore(os.Getuid(), time.Now()); err != nil {
 			return sandbox.Result{}, err
 		}
+		storeLock, err := lockFolder(store)
+		if err != nil {
+			cleanup(store)
+			return sandbox.Result{}, err
+		}
+		defer storeLock.Close()
 		defer cleanup(store)
 	}
 
@@ -104,11 +115,18 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	netChild.Close()
 	attempts := make(chan []sandbox.NetAttempt, 1)
 	go func() { attempts <- superviseNetwork(netParent, cmd.Process.Pid) }()
+	endWatch := func() (int64, bool) { return 0, false }
+	if spec.UpperOnDisk {
+		// init is PID 1 of its namespace, so killing it ends everything inside.
+		endWatch = startScratchWatch(store, func() { _ = cmd.Process.Kill() })
+	}
 	_ = cmd.Wait() // init's own status is not used; it reports on fd 3
 	res := sandbox.Result{
 		Stdout: stdout.String(), Stderr: stderr.String(), Duration: time.Since(start),
 		Truncated: stdout.cut || stderr.cut,
 	}
+
+	limit, stopped := endWatch()
 
 	select {
 	case res.Net = <-attempts:
@@ -119,6 +137,8 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		res.TimedOut, res.ExitCode = true, -1
+	case stopped:
+		res.ScratchFull, res.ExitCode = true, -1
 	case !gotOutcome:
 		return res, fmt.Errorf("sandbox ended without a result: %s", firstLine(res.Stderr))
 	case out.Error != "":
@@ -127,9 +147,12 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 		res.ExitCode = out.Exit
 	}
 	res.Warnings = markWritable(out.Warnings)
+	if stopped {
+		res.Warnings = append(res.Warnings, scratchStoppedWarning(limit))
+	}
 	res.RootAsks = parseRootAsks(readCapped(filepath.Join(scratch, "asks", "root")))
 
-	for _, l := range toDiff(layers, out.Layers, res.TimedOut, store) {
+	for _, l := range toDiff(layers, out.Layers, res.TimedOut || res.ScratchFull, store) {
 		d, err := Diff(l.Upper, l.Mount, Options{})
 		if err != nil {
 			return res, fmt.Errorf("read changes of %s: %w", l.Mount, err)
@@ -145,13 +168,13 @@ func Run(ctx context.Context, spec sandbox.Spec) (sandbox.Result, error) {
 }
 
 // toDiff is what to compare after a run: the layers the child reported, or,
-// when it was killed before reporting, the planned ones plus the extra layers
+// when it was killed (timeout or full scratch area) before reporting, the planned ones plus the extra layers
 // it noted in the scratch folder.
-func toDiff(planned, reported []Layer, timedOut bool, scratch string) []Layer {
+func toDiff(planned, reported []Layer, killed bool, scratch string) []Layer {
 	switch {
 	case len(reported) > 0:
 		return reported
-	case timedOut:
+	case killed:
 		return append(planned, dynLayers(scratch)...)
 	}
 	return planned
@@ -195,18 +218,17 @@ func cleanup(root string) {
 	_ = os.RemoveAll(root)
 }
 
-// legacyAge is how old a scratch folder without an owner pid in its name must be
-// before it counts as left behind (older versions named folders ss-sim-<random>).
+// legacyAge is how old a scratch folder without a lock file must be before it
+// counts as left behind (older versions did not lock their folders).
 const legacyAge = time.Hour
 
 // sweepStale removes scratch folders in base that an earlier run left behind
-// (for example after Ctrl-C): ours, and with an owner process that is gone. It
+// (for example after Ctrl-C): ours, and not locked by a running SafeShell. It
 // never follows symlinks and ignores anything not owned by the current user.
 func sweepStale(base string, uid int, now time.Time) {
 	entries, _ := os.ReadDir(base)
 	for _, e := range entries {
-		rest, ok := strings.CutPrefix(e.Name(), "ss-sim-")
-		if !ok || !e.IsDir() { // a symlink is not a directory here
+		if !strings.HasPrefix(e.Name(), "ss-sim-") || !e.IsDir() { // a symlink is not a directory here
 			continue
 		}
 		p := filepath.Join(base, e.Name())
@@ -214,21 +236,15 @@ func sweepStale(base string, uid int, now time.Time) {
 		if err != nil || int(fi.Sys().(*syscall.Stat_t).Uid) != uid {
 			continue
 		}
-		if stale(rest, fi.ModTime(), now) {
+		// The lock is held while the folder is removed, then dropped.
+		f, locked := tryLock(p)
+		if locked || (f == nil && now.Sub(fi.ModTime()) > legacyAge) {
 			cleanup(p)
 		}
-	}
-}
-
-// stale says whether a folder named ss-sim-<rest> was left behind: its owner
-// pid is gone, or, for the old naming without a pid, it is older than legacyAge.
-func stale(rest string, modified, now time.Time) bool {
-	if pid, _, found := strings.Cut(rest, "-"); found {
-		if n, err := strconv.Atoi(pid); err == nil && n > 0 {
-			return syscall.Kill(n, 0) == syscall.ESRCH // EPERM means it is running as someone else
+		if f != nil {
+			f.Close()
 		}
 	}
-	return now.Sub(modified) > legacyAge
 }
 
 func firstLine(s string) string {

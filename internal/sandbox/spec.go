@@ -17,14 +17,17 @@ type Spec struct {
 
 // Result is what the simulation observed.
 type Result struct {
-	ExitCode  int
-	TimedOut  bool
-	Stdout    string
-	Stderr    string
-	Diff      FileDiff
-	Net       []NetAttempt // network operations the command tried; the sandbox has no route out
-	Duration  time.Duration
-	Truncated bool // output was cut at MaxOutput
+	ExitCode int
+	TimedOut bool
+	// ScratchFull says the run was stopped because the command wrote more than
+	// the on-disk scratch area may use, so Diff shows only part of its changes.
+	ScratchFull bool
+	Stdout      string
+	Stderr      string
+	Diff        FileDiff
+	Net         []NetAttempt // network operations the command tried; the sandbox has no route out
+	Duration    time.Duration
+	Truncated   bool // output was cut at MaxOutput
 	// Warnings list parts of the filesystem that could not be mirrored; they
 	// are empty inside the sandbox, so commands touching them behave differently.
 	Warnings []Warning
