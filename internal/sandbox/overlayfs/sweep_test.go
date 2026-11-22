@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 )
@@ -21,9 +20,22 @@ func TestSweepStaleRemovesOnlyOurAbandonedFolders(t *testing.T) {
 		os.Chmod(filepath.Join(p, "work"), 0o000) // overlay work directories are mode 000
 		return p
 	}
-	dead := deadPid(t)
-	gone := mk("ss-sim-" + strconv.Itoa(dead) + "-1")
-	alive := mk("ss-sim-" + strconv.Itoa(os.Getpid()) + "-1")
+	// The pid in a name means nothing: only the lock decides, so a folder named
+	// for a dead pid is kept while locked, and one named for ours is removed
+	// once its lock is free (as when the owner lives in another PID namespace).
+	dead := 1 << 30
+	gone := mk("ss-sim-" + strconv.Itoa(os.Getpid()) + "-1")
+	held := mk("ss-sim-" + strconv.Itoa(dead) + "-1")
+	unlocked, err := lockFolder(gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlocked.Close()
+	owner, err := lockFolder(held) // a second open file description, like another process
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer owner.Close()
 	oldLegacy := mk("ss-sim-123456")
 	newLegacy := mk("ss-sim-654321")
 	badPid := mk("ss-sim-x-1")
@@ -39,7 +51,7 @@ func TestSweepStaleRemovesOnlyOurAbandonedFolders(t *testing.T) {
 
 	sweepStale(base, os.Getuid(), now)
 
-	for p, wantGone := range map[string]bool{gone: true, oldLegacy: true, alive: false, newLegacy: false, badPid: false, other: false, file: false} {
+	for p, wantGone := range map[string]bool{gone: true, oldLegacy: true, held: false, newLegacy: false, badPid: false, other: false, file: false} {
 		if _, err := os.Lstat(p); (err != nil) != wantGone {
 			t.Errorf("%s: gone=%v, want %v", filepath.Base(p), err != nil, wantGone)
 		}
@@ -66,17 +78,40 @@ func TestSweepStaleSkipsFoldersOfOtherUsers(t *testing.T) {
 	}
 }
 
-// deadPid is a pid no process can have: one above the kernel's pid_max. The next
-// free pid would race with other test processes starting in parallel.
-func deadPid(t *testing.T) int {
-	t.Helper()
-	b, err := os.ReadFile("/proc/sys/kernel/pid_max")
-	if err != nil {
-		t.Skip("no /proc/sys/kernel/pid_max")
+func TestSweepStaleKeepsAFreshFolderWithoutALockFile(t *testing.T) {
+	base := t.TempDir()
+	p := filepath.Join(base, "ss-sim-1-1") // a run that has made its folder but not yet locked it
+	os.Mkdir(p, 0o755)
+	sweepStale(base, os.Getuid(), time.Now())
+	if _, err := os.Lstat(p); err != nil {
+		t.Error("a folder that is not yet locked was removed")
 	}
-	max, err := strconv.Atoi(strings.TrimSpace(string(b)))
+}
+
+func TestLockFolderIsExclusiveUntilClosed(t *testing.T) {
+	dir := t.TempDir()
+	a, err := lockFolder(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return max + 1
+	if _, err := lockFolder(dir); err == nil {
+		t.Error("a second lock on a locked folder succeeded")
+	}
+	if f, locked := tryLock(dir); locked {
+		t.Error("tryLock took a held lock")
+	} else {
+		f.Close()
+	}
+	a.Close()
+	f, locked := tryLock(dir)
+	if !locked {
+		t.Fatal("tryLock could not take a free lock")
+	}
+	f.Close()
+	if _, err := lockFolder(filepath.Join(dir, "missing")); err == nil {
+		t.Error("locking a folder that is not there succeeded")
+	}
+	if f, locked := tryLock(filepath.Join(dir, "missing")); f != nil || locked {
+		t.Error("tryLock found a lock file in a missing folder")
+	}
 }
