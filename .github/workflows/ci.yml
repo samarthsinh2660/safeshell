@@ -140,6 +140,12 @@ jobs:
           # The kernel makes /dev/zfs root-only; udev opens it up a moment later, and the zfs
           # command refuses an ordinary user until then. Wait for udev, and show the result.
           sudo udevadm settle
+          for i in $(seq 20); do [ -r /dev/zfs ] && [ -w /dev/zfs ] && break; sleep 1; done
+          if ! { [ -r /dev/zfs ] && [ -w /dev/zfs ]; }; then
+            # OpenZFS's own udev rule makes /dev/zfs 0666; on some runners udev never gets to it.
+            echo "::warning::udev did not open /dev/zfs to users; setting the mode its udev rule sets (0666)"
+            sudo chmod 0666 /dev/zfs
+          fi
           ls -l /dev/zfs
           truncate -s 1G "$RUNNER_TEMP/zfs.img"
           sudo zpool create -m /mnt/zfspool sspool "$RUNNER_TEMP/zfs.img"
