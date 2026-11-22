@@ -131,6 +131,7 @@ Work as normal. Inside your prompt:
 | `safeshell learn on` | learning mode: one line after each command that passes, saying what it does and the safer form (`off` to stop; see `safeshell help learn`) |
 | `show the 5 largest files here` | have the AI propose a command, which is then checked like any other |
 | `safeshell autorun on` | let the assistant run a few everyday file commands (`cd ls pwd cat head tail wc du df grep mv cp mkdir touch`, rated R0/R1, writing only to visible places inside your home folder) at once, without "Run it?"; everything else, including scripts, `make`, `git` and `ssh`, still asks or is blocked; off by default (see `safeshell help autorun`) |
+| `safeshell do "<task>"` | the assistant does a task one command at a time (up to 8): each command is shown, checked like one you typed, and asks "Run it?" before it runs (Enter means no; autorun does not apply here); it sees what each command printed (obvious secrets hidden) to pick the next one, so it needs a local model; `cd`/`export` steps are skipped (see `safeshell help do`) |
 | Ctrl-X Ctrl-V | speak a request; the words appear on the line to read, edit and run as usual |
 
 ### Turn off / on

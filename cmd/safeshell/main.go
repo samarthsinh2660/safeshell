@@ -54,6 +54,7 @@ Usage:
                                             --why shows which rule and evidence set the level (no AI needed)
   safeshell ask <what you want in English>
                                             AI proposes a command; it is checked like any other
+  safeshell do <a task in English>          the assistant works through a task one command at a time; each is checked and asks you first
   safeshell models [list]                   choose the AI model (menu), or list the models your cloud key offers
   safeshell ai setup|status|stop|bench [--injection]
                                             download the built-in model (once) / show AI state / stop it / measure it (--injection: planted-text test)
@@ -142,6 +143,8 @@ func run(args []string, stdout, stderr io.Writer, color bool) int {
 		return runAI(args[1:], stdout, stderr)
 	case "voice":
 		return runVoice(args[1:], stdout, stderr, color)
+	case "do":
+		return runDo(args[1:], stdout, stderr, color)
 	case "ask":
 		return runAsk(args[1:], stdout, stderr, color)
 	case "deactivate", "activate":
