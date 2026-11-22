@@ -205,6 +205,9 @@ func TranslateWith(ctx context.Context, b ai.Backend, request string, clarificat
 			r.Answer += "  (" + r.Note + ")"
 		}
 	}
+	if safer, note := reviewBeforeRun(r.Command); note != "" { // never propose running a download unread
+		r.Command, r.Note = safer, note
+	}
 	return r, nil
 }
 

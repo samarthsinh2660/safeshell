@@ -66,13 +66,27 @@ func TestLeftoverScratchFolderOfAFinishedRunIsSweptAtTheNextRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	dead := max + 1
-	stale := filepath.Join(scratchBase(), "ss-sim-"+strconv.Itoa(dead)+"-leftover")
-	if err := os.Mkdir(stale, 0o700); err != nil {
+	// A run that died leaves its lock file, no longer held; an older SafeShell left
+	// none, and such a folder is swept once it is over an hour old.
+	crashed := filepath.Join(scratchBase(), "ss-sim-"+strconv.Itoa(dead)+"-crashed")
+	legacy := filepath.Join(scratchBase(), "ss-sim-"+strconv.Itoa(dead)+"-legacy")
+	for _, d := range []string{crashed, legacy} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(d)
+	}
+	if err := os.WriteFile(filepath.Join(crashed, ".lock"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	defer os.RemoveAll(stale)
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(legacy, old, old); err != nil {
+		t.Fatal(err)
+	}
 	simulate(t, "true")
-	if _, err := os.Stat(stale); err == nil {
-		t.Error("a folder left by a process that is gone was not removed")
+	for _, d := range []string{crashed, legacy} {
+		if _, err := os.Stat(d); err == nil {
+			t.Errorf("%s: a folder left by a run that is gone was not removed", filepath.Base(d))
+		}
 	}
 }

@@ -175,8 +175,13 @@ func (a *Analysis) simulate(ctx context.Context, sim Simulator, sizer Sizer, cmd
 		a.Effects = append(a.Effects, a.estimated("the sandbox run failed, so file changes could not be observed"))
 		return
 	}
-	a.Sim = &res
-	a.Effects = append(a.Effects, report.FileEffect(res.Diff))
+	if incomplete := sandbox.Incomplete(res); incomplete == "" {
+		a.Sim = &res
+		a.Effects = append(a.Effects, report.FileEffect(res.Diff))
+	} else { // no result is kept, so the snapshot falls back to the named files
+		a.SimNote = "not simulated: " + incomplete
+		a.Effects = append(a.Effects, a.estimated(incomplete))
+	}
 	if ne, ok := report.NetEffect(res.Net); ok {
 		a.Effects = append(a.Effects, ne)
 	}
