@@ -123,6 +123,9 @@ func doStep(r nl.Result, cwd string, stdout, stderr io.Writer, color bool) (step
 	var out capped
 	err := runCommand(step.Command, cwd, io.MultiWriter(stdout, &out), io.MultiWriter(stderr, &out))
 	step.Output = report.MaskSecrets(out.buf.String())
+	if err == nil && strings.TrimSpace(step.Output) == "" { // silence is success: say so, or the model runs it again
+		step.Output = "done: the command ran and printed nothing"
+	}
 	if err != nil {
 		step.Output = "failed (" + err.Error() + ")\n" + step.Output
 	}

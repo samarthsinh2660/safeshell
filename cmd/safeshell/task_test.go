@@ -280,3 +280,11 @@ func TestCappedSurvivesACommandWritingToBothStreams(t *testing.T) {
 		t.Errorf("%q", out.buf.String())
 	}
 }
+
+func TestDoTellsTheModelWhenASuccessfulStepPrintedNothing(t *testing.T) {
+	sai := &stepAI{name: "local:test", replies: []string{cmdReply("cat notes.txt > summary.txt"), `{"command":"","answer":"done"}`}}
+	fakeRun(t, "", nil)
+	if code, _ := doWith(t, sai, domain.R0, "y\n"); code != 0 || !strings.Contains(sai.prompts[1], "done: the command ran and printed nothing") {
+		t.Errorf("%d\n%s", code, sai.prompts[1])
+	}
+}
